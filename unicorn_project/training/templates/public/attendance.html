@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block content %}
+<h2><i class="bi bi-clipboard-check"></i> Sign Attendance</h2>
+<p>Course: <strong>{{ booking_day.booking.course_reference }}</strong> — Day {{ booking_day.day_no }} ({{ booking_day.day_date }})</p>
+<form method="post" class="card p-3">{% csrf_token %}
+{{ form.as_p }}
+<button class="btn btn-primary"><i class="bi bi-check2"></i> Sign in</button>
+</form>{% endblock %}

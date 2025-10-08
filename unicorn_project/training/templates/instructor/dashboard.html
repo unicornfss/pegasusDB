@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% block content %}
+<h2><i class="bi bi-person-badge"></i> Instructor Dashboard</h2>
+<table class="table table-sm"><thead><tr><th>Ref</th><th>Date</th><th>Course</th><th>Business</th><th>Location</th><th></th></tr></thead><tbody>
+{% for b in bookings %}
+<tr><td>{{ b.course_reference }}</td><td>{{ b.course_date }} {{ b.start_time }}</td><td>{{ b.course_type.code }}</td><td>{{ b.business.name }}</td><td>{{ b.training_location.name }}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'instructor_booking_detail' b.id %}">View</a></td></tr>
+{% empty %}<tr><td colspan="6">No assigned bookings.</td></tr>{% endfor %}
+</tbody></table>
+{% endblock %}

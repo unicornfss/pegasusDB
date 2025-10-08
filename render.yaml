@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: unicorn-django-starter
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate --noinput
+    startCommand: |
+      gunicorn unicorn_project.wsgi:application --log-file - --preload
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: DJANGO_ALLOWED_HOSTS
+        value: "unicorn-django-starter.onrender.com,localhost,127.0.0.1"

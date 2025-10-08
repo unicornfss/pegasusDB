@@ -1,0 +1,4 @@
+# Copy to .env and fill in real values for local dev
+DJANGO_SECRET_KEY=dev-change-me
+GOOGLE_MAPS_API_KEY=YOUR_BROWSER_PLACES_KEY_HERE
+DJANGO_DEBUG=True

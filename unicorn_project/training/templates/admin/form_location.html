@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">{{ title }}</h3>
+
+<form method="post" class="mb-4">
+  {% csrf_token %}
+  {% if form.non_field_errors %}
+  <div class="alert alert-danger">
+    {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+  </div>
+  {% endif %}
+
+  {{ form.business }} {# hidden #}
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Location name *</label>
+      {{ form.name }}
+      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Address</label>
+      {{ form.address_line }}
+      {% for err in form.address_line.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Town</label>
+      {{ form.town }}
+      {% for err in form.town.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Postcode</label>
+      {{ form.postcode }}
+      {% for err in form.postcode.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-12"><hr></div>
+
+    <div class="col-md-6">
+      <label class="form-label">Copy contact from another location</label>
+      <select id="copy-source" class="form-select">
+        <option value="">— Select existing contact —</option>
+        {% for l in other_locations %}
+          <option
+            value="{{ l.id }}"
+            data-name="{{ l.contact_name|default_if_none:''|escape }}"
+            data-phone="{{ l.telephone|default_if_none:''|escape }}"
+            data-email="{{ l.email|default_if_none:''|escape }}"
+          >
+            {{ l.name }}{% if l.town %} — {{ l.town }}{% endif %}{% if l.contact_name %} ({{ l.contact_name }}){% else %} (no contact set){% endif %}
+          </option>
+        {% endfor %}
+      </select>
+      <div class="form-text">Choosing one will prefill the contact fields below. You can still edit them.</div>
+    </div>
+
+    <div class="col-md-6"></div>
+
+    <div class="col-md-4">
+      <label class="form-label">Contact name</label>
+      {{ form.contact_name }}
+      {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Telephone</label>
+      {{ form.telephone }}
+      {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Email</label>
+      {{ form.email }}
+      {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="mt-3 d-flex gap-2">
+    <a href="{{ back_url }}" class="btn btn-outline-secondary">Back</a>
+    <button class="btn btn-primary" type="submit" name="save_continue" value="1">Save and continue editing</button>
+    <button class="btn btn-success" type="submit" name="save_return" value="1">Save and return</button>
+  </div>
+</form>
+
+<script>
+  (function () {
+    const sel = document.getElementById('copy-source');
+    if (!sel) return;
+    const byName = (n) => document.querySelector(`[name="${n}"]`);
+    function applyFromOption(opt) {
+      if (!opt || !opt.dataset) return;
+      const nm = byName('contact_name');
+      const ph = byName('telephone');
+      const em = byName('email');
+      if (nm) nm.value = opt.dataset.name || '';
+      if (ph) ph.value = opt.dataset.phone || '';
+      if (em) em.value = opt.dataset.email || '';
+    }
+    sel.addEventListener('change', function () {
+      const opt = this.options[this.selectedIndex];
+      applyFromOption(opt);
+    }, false);
+  })();
+</script>
+{% endblock %}

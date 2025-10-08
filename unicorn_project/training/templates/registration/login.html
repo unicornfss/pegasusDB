@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <h2 class="mb-3">Sign in</h2>
+    {% if form.errors %}<div class="alert alert-danger">Invalid username or password.</div>{% endif %}
+    <form method="post" class="card p-3">{% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="id_username">Username</label>
+        <input class="form-control" type="text" name="username" autofocus required id="id_username">
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="id_password">Password</label>
+        <input class="form-control" type="password" name="password" required id="id_password">
+      </div>
+      <button class="btn btn-primary">Sign in</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Admin · Unicorn{% endblock %}
+
+{% block sidebar %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <img src="{% static 'img/logo.png' %}" height="36" alt="">
+  <strong>Unicorn</strong>
+</div>
+
+<div class="text-muted small mb-3" id="clock"></div>
+
+<nav class="nav flex-column gap-1">
+
+  <a class="nav-link" href="{% url 'app_admin_dashboard' %}">
+    <i class="bi bi-house"></i> Home
+  </a>
+
+  <button class="nav-link nav-toggle" data-bs-toggle="collapse" data-bs-target="#navBusinesses" aria-expanded="true">
+    <i class="bi bi-buildings"></i> Businesses
+    <i class="bi bi-caret-down ms-auto small"></i>
+  </button>
+  <div id="navBusinesses" class="collapse show ms-3">
+    <a class="nav-link sub" href="{% url 'admin_business_list' %}">
+      <i class="bi bi-list-ul"></i> View / edit / add
+    </a>
+  </div>
+
+  <button class="nav-link nav-toggle" data-bs-toggle="collapse" data-bs-target="#navCourses" aria-expanded="true">
+    <i class="bi bi-journal-bookmark"></i> Courses
+    <i class="bi bi-caret-down ms-auto small"></i>
+  </button>
+  <div id="navCourses" class="collapse show ms-3">
+    <a class="nav-link sub" href="{% url 'admin_course_list' %}">
+      <i class="bi bi-list-ul"></i> View / edit / add
+    </a>
+  </div>
+
+  <button class="nav-link nav-toggle" data-bs-toggle="collapse" data-bs-target="#navPeople" aria-expanded="true">
+    <i class="bi bi-people"></i> Personnel
+    <i class="bi bi-caret-down ms-auto small"></i>
+  </button>
+  <div id="navPeople" class="collapse show ms-3">
+    <a class="nav-link sub" href="{% url 'admin_instructor_list' %}">
+      <i class="bi bi-list-ul"></i> View / edit / add
+    </a>
+  </div>
+
+  <form method="post" action="{% url 'logout' %}" class="mt-2">
+    {% csrf_token %}
+    <button class="nav-link btn btn-link p-0 text-start">
+      <i class="bi bi-box-arrow-right"></i> Logout
+    </button>
+  </form>
+</nav>
+{% endblock %}

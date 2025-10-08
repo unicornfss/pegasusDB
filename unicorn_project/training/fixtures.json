@@ -1,0 +1,190 @@
+[
+  {
+    "model": "training.business",
+    "pk": "036420eb-a9e0-405a-b479-f93d09e2d82f",
+    "fields": {
+      "name": "Acme Ltd",
+      "address_line": "12 King St",
+      "town": "Bristol",
+      "postcode": "BS1 2AB",
+      "contact_name": "Sam Drew",
+      "telephone": "0117 1234567",
+      "email": "office@acme.test"
+    }
+  },
+  {
+    "model": "training.business",
+    "pk": "a984a85e-9a3c-4fec-903a-8ec8e08232c8",
+    "fields": {
+      "name": "Northstar Plc",
+      "address_line": "7 Mill Lane",
+      "town": "Leeds",
+      "postcode": "LS1 4CD",
+      "contact_name": "Alex Ford",
+      "telephone": "0113 7654321",
+      "email": "hello@northstar.test"
+    }
+  },
+  {
+    "model": "training.traininglocation",
+    "pk": "00936d40-3237-4d28-a1ec-4ea28aaaacc6",
+    "fields": {
+      "business": "036420eb-a9e0-405a-b479-f93d09e2d82f",
+      "name": "Acme HQ",
+      "address_line": "12 King St",
+      "town": "Bristol",
+      "postcode": "BS1 2AB",
+      "contact_name": "Sam Drew",
+      "telephone": "0117 1234567",
+      "email": "office@acme.test"
+    }
+  },
+  {
+    "model": "training.traininglocation",
+    "pk": "bb2d848e-2982-407e-8ede-573e712fc17a",
+    "fields": {
+      "business": "a984a85e-9a3c-4fec-903a-8ec8e08232c8",
+      "name": "Northstar Training",
+      "address_line": "7 Mill Lane",
+      "town": "Leeds",
+      "postcode": "LS1 4CD",
+      "contact_name": "Alex Ford",
+      "telephone": "0113 7654321",
+      "email": "training@northstar.test"
+    }
+  },
+  {
+    "model": "training.coursetype",
+    "pk": "09543558-30df-47f5-94c7-c5ca420a00ab",
+    "fields": {
+      "name": "First Aid at Work",
+      "code": "FAW1",
+      "duration_days": "1.0",
+      "default_course_fee": "150.00",
+      "default_instructor_fee": "100.00",
+      "has_written_exam": false,
+      "has_online_exam": false
+    }
+  },
+  {
+    "model": "training.coursetype",
+    "pk": "ea8004cc-3683-4ce8-acc9-1ebae8fc9dfd",
+    "fields": {
+      "name": "Manual Handling",
+      "code": "MANH",
+      "duration_days": "0.5",
+      "default_course_fee": "75.00",
+      "default_instructor_fee": "50.00",
+      "has_written_exam": false,
+      "has_online_exam": false
+    }
+  },
+  {
+    "model": "training.instructor",
+    "pk": "cdbbb4af-76e1-467b-971e-edb0004cc31a",
+    "fields": {
+      "user": null,
+      "name": "Jane Trainer",
+      "address_line": "5 Oak Road",
+      "town": "Bristol",
+      "postcode": "BS5 1AB",
+      "telephone": "07123 456789",
+      "email": "jane.trainer@example.com",
+      "bank_sort_code": "11-22-33",
+      "bank_account_number": "12345678",
+      "name_on_account": "J Trainer"
+    }
+  },
+  {
+    "model": "training.instructor",
+    "pk": "aaafb7a3-44af-4c87-9721-be1e0b8aa56c",
+    "fields": {
+      "user": null,
+      "name": "John Coach",
+      "address_line": "9 Stone St",
+      "town": "Leeds",
+      "postcode": "LS9 2ZZ",
+      "telephone": "07987 654321",
+      "email": "john.coach@example.com",
+      "bank_sort_code": "22-33-44",
+      "bank_account_number": "87654321",
+      "name_on_account": "J Coach"
+    }
+  },
+  {
+    "model": "training.booking",
+    "pk": "2b3e57ee-a0f0-4285-a535-568da7aed21d",
+    "fields": {
+      "business": "036420eb-a9e0-405a-b479-f93d09e2d82f",
+      "training_location": "00936d40-3237-4d28-a1ec-4ea28aaaacc6",
+      "course_type": "09543558-30df-47f5-94c7-c5ca420a00ab",
+      "instructor": "cdbbb4af-76e1-467b-971e-edb0004cc31a",
+      "course_duration_days": "1.0",
+      "course_reference": "FAW1-ABC123",
+      "course_date": "2025-10-15",
+      "start_time": "09:30:00",
+      "course_fee": "150.00",
+      "instructor_fee": "100.00",
+      "notes": ""
+    }
+  },
+  {
+    "model": "training.booking",
+    "pk": "8f3c5a5a-1314-4998-8651-5c5793e3861e",
+    "fields": {
+      "business": "a984a85e-9a3c-4fec-903a-8ec8e08232c8",
+      "training_location": "bb2d848e-2982-407e-8ede-573e712fc17a",
+      "course_type": "ea8004cc-3683-4ce8-acc9-1ebae8fc9dfd",
+      "instructor": "cdbbb4af-76e1-467b-971e-edb0004cc31a",
+      "course_duration_days": "0.5",
+      "course_reference": "MANH-ZYX987",
+      "course_date": "2025-10-18",
+      "start_time": "09:30:00",
+      "course_fee": "75.00",
+      "instructor_fee": "50.00",
+      "notes": ""
+    }
+  },
+  {
+    "model": "training.bookingday",
+    "pk": "fcf85637-e85b-4979-8a2e-40b739f2275c",
+    "fields": {
+      "booking": "2b3e57ee-a0f0-4285-a535-568da7aed21d",
+      "day_no": 1,
+      "day_date": "2025-10-15",
+      "start_time": "09:30:00"
+    }
+  },
+  {
+    "model": "training.bookingday",
+    "pk": "d5fb5d78-6ce4-4a5e-b4a4-e10fa384861d",
+    "fields": {
+      "booking": "8f3c5a5a-1314-4998-8651-5c5793e3861e",
+      "day_no": 1,
+      "day_date": "2025-10-18",
+      "start_time": "09:30:00"
+    }
+  },
+  {
+    "model": "training.attendance",
+    "pk": "4ee507d2-1cd2-4646-9c64-d117ab41ba00",
+    "fields": {
+      "booking_day": "fcf85637-e85b-4979-8a2e-40b739f2275c",
+      "delegate_name": "Alice Example",
+      "delegate_email": "alice@example.com",
+      "result": "Pass",
+      "notes": ""
+    }
+  },
+  {
+    "model": "training.attendance",
+    "pk": "2e53828a-a10c-4a05-a353-a8ed74869a5f",
+    "fields": {
+      "booking_day": "d5fb5d78-6ce4-4a5e-b4a4-e10fa384861d",
+      "delegate_name": "Bob Sample",
+      "delegate_email": "bob@example.com",
+      "result": "Pass",
+      "notes": ""
+    }
+  }
+]

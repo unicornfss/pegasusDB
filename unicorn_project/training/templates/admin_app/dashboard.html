@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% block content %}
+<h2><i class="bi bi-speedometer"></i> Admin Dashboard</h2>
+<p class="text-muted">Recent bookings</p>
+<table class="table table-sm"><thead><tr><th>Ref</th><th>Date</th><th>Course</th><th>Business</th><th>Location</th><th>Instructor</th><th></th></tr></thead><tbody>
+{% for b in bookings %}
+<tr><td>{{ b.course_reference }}</td><td>{{ b.course_date }} {{ b.start_time }}</td><td>{{ b.course_type.code }}</td><td>{{ b.business.name }}</td><td>{{ b.training_location.name }}</td><td>{{ b.instructor.name }}</td><td><a class="btn btn-sm btn-outline-primary" href="{% url 'app_admin_booking_detail' b.id %}">Open</a></td></tr>
+{% empty %}<tr><td colspan="7">No bookings</td></tr>{% endfor %}
+</tbody></table>
+<a class="btn btn-primary" href="{% url 'app_admin_booking_new' %}"><i class="bi bi-plus-circle"></i> New Booking</a>
+{% endblock %}

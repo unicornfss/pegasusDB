@@ -1,0 +1,4 @@
+{% extends "admin/base.html" %}{% load static %}
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/admin.css' %}">{% endblock %}
+{% block branding %}<div id="site-name" style="display:flex;align-items:center;gap:.5rem;">
+<img src="{% static 'img/logo.png' %}" alt="" style="height:24px;"> Unicorn Fire &amp; Safety — Admin</div>{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Instructors{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <h3 class="m-0">Instructors</h3>
+  <a class="btn btn-primary" href="{% url 'admin_instructor_new' %}">
+    <i class="bi bi-person-plus"></i> New instructor
+  </a>
+</div>
+
+<table class="table table-sm align-middle">
+  <thead><tr>
+    <th>Name</th><th>User</th><th>Email</th><th>Phone</th><th></th>
+  </tr></thead>
+  <tbody>
+  {% for i in instructors %}
+    <tr>
+      <td>{{ i.name }}</td>
+      <td>{% if i.user %}{{ i.user.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+      <td>{{ i.email|default:"—" }}</td>
+      <td>{{ i.telephone|default:"—" }}</td>
+      <td class="text-end">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin_instructor_edit' i.pk %}">
+          <i class="bi bi-pencil-square"></i> Edit
+        </a>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

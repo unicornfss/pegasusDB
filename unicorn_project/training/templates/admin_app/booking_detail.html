@@ -1,0 +1,6 @@
+{% extends "base.html" %}{% block content %}
+<h2><i class="bi bi-journal-text"></i> Booking {{ booking.course_reference }}</h2>
+<p><strong>{{ booking.course_type.name }}</strong> — {{ booking.business.name }} @ {{ booking.training_location.name }}</p>
+<h4>Days</h4>
+<ul>{% for d in days %}<li>Day {{ d.day_no }} — {{ d.day_date }} — <a href="{% url 'public_attendance' d.id %}">Public sign-in</a></li>{% endfor %}</ul>
+{% endblock %}
