@@ -3,9 +3,18 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib import messages
-from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay
+from django.shortcuts import redirect
+from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile
 from .forms import AttendanceForm, BookingForm, InstructorForm, InstructorProfileForm
 from datetime import timedelta
+
+def _must_change_password_gate(request):
+    if not request.user.is_authenticated:
+        return None
+    prof = getattr(request.user, "staff_profile", None)
+    if prof and prof.must_change_password and request.path != "/accounts/password_change/":
+        return redirect("password_change")
+    return None
 
 def ensure_groups():
     Group.objects.get_or_create(name='admin')

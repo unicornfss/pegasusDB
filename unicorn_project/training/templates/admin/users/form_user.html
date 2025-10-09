@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
+
 {% block content %}
 <h3 class="mb-3">{{ title }}</h3>
 
-<form method="post">
+<form method="post" class="mb-4">
   {% csrf_token %}
   {% if form.non_field_errors %}
     <div class="alert alert-danger">
@@ -23,8 +24,8 @@
       {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
     <div class="col-md-4">
-      <label class="form-label">Active?</label><br>
-      {{ form.is_active }}
+      <label class="form-label">Active</label>
+      <div>{{ form.is_active }}</div>
       {% for err in form.is_active.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
 
@@ -44,12 +45,18 @@
       </div>
     {% endif %}
 
+    <div class="col-md-4">
+      <label class="form-label">Must change password at next login</label>
+      <div>{{ form.must_change_password }}</div>
+      {% for err in form.must_change_password.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
     <div class="col-12">
-      <label class="form-label">Groups (roles)</label>
+      <label class="form-label">Groups / Roles</label>
       <div class="border rounded p-2">
         {{ form.groups }}
       </div>
-      <div class="form-text">Only group membership is editable here. Permissions are not exposed.</div>
+      <div class="form-text">Tick “admin” and/or “instructor”.</div>
       {% for err in form.groups.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
   </div>

@@ -60,15 +60,20 @@
         {% endif %}
 
         {% if user.is_authenticated %}
+          <a class="leaf" href="{% url 'password_change' %}">
+            <i class="bi bi-key"></i> Change password
+          </a>
+
           <form method="post" action="{% url 'logout' %}" class="d-inline m-0 p-0">
             {% csrf_token %}
             <button type="submit" class="leaf btn btn-link p-0 text-start">
               <i class="bi bi-box-arrow-right"></i> Logout
             </button>
           </form>
-
         {% else %}
-          <a class="leaf" href="{% url 'login' %}"><i class="bi bi-box-arrow-in-right"></i> Login</a>
+          <a class="leaf" href="{% url 'login' %}">
+            <i class="bi bi-box-arrow-in-right"></i> Login
+          </a>
         {% endif %}
       </nav>
     </aside>

@@ -109,3 +109,15 @@ def sync_business_training_location(sender, instance: Business, created, **kwarg
         loc.save()
     else:
         TrainingLocation.objects.filter(business=instance, name=instance.name).delete()
+
+class StaffProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="staff_profile")
+    must_change_password = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Profile({self.user.username})"
+
+@receiver(post_save, sender=User)
+def ensure_staff_profile(sender, instance, created, **kwargs):
+    if created:
+        StaffProfile.objects.get_or_create(user=instance)
