@@ -23,9 +23,20 @@ class BookingForm(forms.ModelForm):
                   'course_date','start_time','course_fee','instructor_fee','course_reference']
 
 class BusinessForm(forms.ModelForm):
+    address_line = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            "id": "id_address_line",
+            "type": "text",
+            "inputmode": "text",
+            "autocomplete": "off",
+            # critically: NO pattern attribute here
+        })
+    )
     class Meta:
         model = Business
-        fields = ['name','address_line','town','postcode','contact_name','telephone','email','add_as_training_location']
+        fields = ["name", "address_line", "town", "postcode", "contact_name", "telephone", "email"]
+
 
 class CourseTypeForm(forms.ModelForm):
     class Meta:
