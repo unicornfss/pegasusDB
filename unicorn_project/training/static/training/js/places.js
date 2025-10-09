@@ -1,64 +1,87 @@
-// unicorn_project/training/static/training/js/places.js
+(function () {
+  const DEBUG = false;
+  const log = (...args) => { if (DEBUG) console.log("[places]", ...args); };
 
-(function(){
-  function log(){ try { console.log.apply(console, ['[places]', ...arguments]); } catch(e){} }
-
-  function extractAddressComponents(place){
-    const get = (type, want='long_name') => {
-      const c = place.address_components?.find(x => x.types.includes(type));
-      return c ? c[want] : '';
-    };
-    const streetNumber = get('street_number');
-    const route        = get('route');
-    const postalTown   = get('postal_town');
-    const locality     = get('locality');
-    const town         = postalTown || locality;
-    const postcode     = get('postal_code');
-
-    let street = [streetNumber, route].filter(Boolean).join(' ');
-    if (!street && place.name && route) street = `${place.name} ${route}`;
-    return { street, town, postcode };
+  function waitFor(cond, cb, tries = 40, interval = 250) {
+    if (cond()) return cb();
+    if (tries <= 0) return log("Timeout waiting for condition");
+    setTimeout(() => waitFor(cond, cb, tries - 1, interval), interval);
   }
 
-  function attachAutocompleteTo(addressInput) {
-    if (!addressInput) return;
-    const townInput = document.querySelector('#id_town');
-    const postInput = document.querySelector('#id_postcode');
+  function attachAutocompleteTo(input) {
+    if (!input) return;
+    const want = ["address_components", "formatted_address", "name"];
+    const ac = new google.maps.places.Autocomplete(input, {
+      fields: want,
+      types: ["address"],
+      componentRestrictions: { country: "gb" }, // adjust as needed
+    });
+    ac.addListener("place_changed", () => {
+      const place = ac.getPlace();
+      if (!place) return;
 
-    function bind() {
-      if (!(window.google && google.maps && google.maps.places)) {
-        // wait for Google to be ready
-        return setTimeout(bind, 150);
-      }
-      const ac = new google.maps.places.Autocomplete(addressInput, {
-        fields: ['address_components','formatted_address','name'],
-        types: ['address'],
-        componentRestrictions: { country: 'gb' }
-      });
-      ac.addListener('place_changed', function(){
-        const place = ac.getPlace();
-        const { street, town, postcode } = extractAddressComponents(place);
-        if (street)   addressInput.value = street;
-        if (town && townInput)     townInput.value = town;
-        if (postcode && postInput) postInput.value = postcode;
-      });
-      log('Autocomplete attached to', addressInput);
+      const get = (type, part = "long_name") => {
+        const c = (place.address_components || []).find(x => x.types.includes(type));
+        return c ? c[part] : "";
+      };
+      const streetNumber = get("street_number");
+      const route = get("route");
+      const town = get("postal_town") || get("locality");
+      const postcode = get("postal_code");
+
+      const street =
+        [streetNumber, route].filter(Boolean).join(" ") ||
+        (place.name && route ? `${place.name} ${route}` : input.value);
+
+      // Find sibling fields by id or name:
+      const form = input.form || document;
+      const byId = id => form.querySelector(`#${id}`);
+      const byName = name => form.querySelector(`[name="${name}"]`);
+
+      const streetEl   = byId("id_address_line") || byName("address_line");
+      const townEl     = byId("id_town")         || byName("town");
+      const postcodeEl = byId("id_postcode")     || byName("postcode");
+
+      if (streetEl)   streetEl.value = street || streetEl.value;
+      if (townEl)     townEl.value = town || townEl.value;
+      if (postcodeEl) postcodeEl.value = postcode || postcodeEl.value;
+    });
+  }
+
+  function init() {
+    // Hit the most common field ids/names you’re using in Business, Location, Instructor forms
+    const candidates = [
+      "#id_address_line",
+      "input[name='address_line']",
+      // add more selectors here if any form uses a different name/id
+    ];
+    const inputs = candidates
+      .map(sel => Array.from(document.querySelectorAll(sel)))
+      .flat()
+      .filter(Boolean);
+
+    if (!inputs.length) {
+      log("No address inputs found");
+      return;
     }
-    bind();
+    inputs.forEach(attachAutocompleteTo);
+    log("Autocomplete attached to", inputs.length, "input(s)");
   }
 
-  function initOnPage() {
-    // Any form that has address_line/town/postcode with standard Django ids
-    const addr = document.querySelector('#id_address_line');
-    if (addr) attachAutocompleteTo(addr);
-  }
+  // Run when Maps is ready, or when the script tag finished loading
+  document.addEventListener("gmaps:ready", () => {
+    if (!(window.google && google.maps && google.maps.places)) {
+      return waitFor(() => (window.google && google.maps && google.maps.places), init);
+    }
+    init();
+  });
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initOnPage);
+  // Also run on DOM ready if Google script was already loaded/cached
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.google && google.maps && google.maps.places) init();
+    });
   } else {
-    initOnPage();
+    if (window.google && google.maps && google.maps.places) init();
   }
-
-  // also react when Google script finishes
-  document.addEventListener('gmaps:ready', initOnPage);
 })();

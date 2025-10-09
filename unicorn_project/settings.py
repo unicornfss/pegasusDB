@@ -8,6 +8,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 from dotenv import load_dotenv
 load_dotenv(BASE_DIR / ".env")
 
+# --- Third-party / feature flags ------------------------------
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+
 # --- Core -----------------------------------------------------
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-key-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
@@ -58,6 +61,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                 "unicorn_project.training.context_processors.globals",
                 "unicorn_project.training.context_processors.role_context",
             ],
         },
@@ -96,9 +100,6 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # --- Auth redirects -------------------------------------------
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
-
-# --- Third-party / feature flags ------------------------------
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 # Render/Proxy headers (safe to leave on)
 RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")

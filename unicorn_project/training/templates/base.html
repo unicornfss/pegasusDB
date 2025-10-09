@@ -95,11 +95,10 @@
   <script src="{% static 'training/js/places.js' %}"></script>
 
   {% if GOOGLE_MAPS_API_KEY %}
-    <!-- Load Google Maps Places and dispatch a custom event when ready -->
-    <script async defer
-      src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places"
-      onload="document.dispatchEvent(new Event('gmaps:ready'))">
-    </script>
+  <script async defer
+    src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places"
+    onload="document.dispatchEvent(new Event('gmaps:ready'))">
+  </script>
   {% else %}
     <!-- GOOGLE_MAPS_API_KEY not set; autocomplete disabled -->
   {% endif %}
