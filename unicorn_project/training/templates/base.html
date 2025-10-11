@@ -17,7 +17,7 @@
   <div class="d-flex">
     <aside class="sidebar p-3 border-end">
       <div class="d-flex align-items-center gap-2 mb-3">
-        <img src="{% static 'training/img/logo.png' %}" height="36" alt="">
+        <img src="{% static 'training/img/logo.png' %}" height="125" alt="">
         <strong>Unicorn</strong>
       </div>
 
@@ -41,6 +41,18 @@
             </ul>
           </details>
 
+          <!-- Bookings -->
+          <details class="branch" open>
+            <summary><i class="bi bi-calendar2-check"></i> Bookings</summary>
+            <ul>
+              <li>
+                <a class="leaf" href="{% url 'admin_booking_list' %}">
+                  <i class="bi bi-columns"></i> View / edit / add
+                </a>
+              </li>
+            </ul>
+          </details>
+
           <details class="branch" open>
             <summary><i class="bi bi-people"></i> Personnel</summary>
             <ul>
@@ -50,8 +62,9 @@
           </details>
         {% endif %}
 
+
         {% if is_instructor %}
-          <a class="leaf" href="{% url 'instructor_dashboard' %}"><i class="bi bi-person-badge"></i> Instructor</a>
+          <a class="nav-link" href="{% url 'instructor_bookings' %}"><i class="bi bi-calendar-event"></i> My bookings</a> 
           <a class="leaf" href="{% url 'instructor_profile' %}"><i class="bi bi-person-gear"></i> My Profile</a>
         {% endif %}
 

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-3 d-flex align-items-center gap-2">
+  {{ title }}
+  <a href="{{ create_url }}" class="btn btn-primary btn-sm ms-auto">
+    <i class="bi bi-plus-lg"></i> Add
+  </a>
+</h3>
+
+<form method="get" class="card p-3 mb-3">
+  <div class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label">Search</label>
+      <input type="text" name="q" value="{{ filter_initial.q }}" class="form-control" placeholder="Ref, business, course…">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Status</label>
+      <select name="status" class="form-select">
+        {% for val,label in status_choices %}
+          <option value="{{ val }}" {% if filter_initial.status == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Business</label>
+      <select name="business" class="form-select">
+        <option value="">All businesses</option>
+        {% for b in businesses %}
+          <option value="{{ b.id }}" {% if filter_initial.business == b.id|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Course type</label>
+      <select name="course_type" class="form-select">
+        <option value="">All courses</option>
+        {% for c in course_types %}
+          <option value="{{ c.id }}" {% if filter_initial.course_type == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Instructor</label>
+      <select name="instructor" class="form-select">
+        <option value="">All instructors</option>
+        {% for i in instructors %}
+          <option value="{{ i.id }}" {% if filter_initial.instructor == i.id|stringformat:"s" %}selected{% endif %}>{{ i.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">From</label>
+      <input type="date" name="date_from" value="{{ filter_initial.date_from }}" class="form-control">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">To</label>
+      <input type="date" name="date_to" value="{{ filter_initial.date_to }}" class="form-control">
+    </div>
+    <div class="col-md-12 d-flex gap-2 mt-2">
+      <button class="btn btn-primary"><i class="bi bi-search"></i> Apply</button>
+      <a class="btn btn-secondary" href="{% url 'admin_booking_list' %}"><i class="bi bi-x-circle"></i> Clear</a>
+    </div>
+  </div>
+</form>
+
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead>
+      <tr>
+        {% for h in headers %}
+          <th>
+            <a href="{{ h.url }}" class="text-decoration-none">
+              {{ h.title }}
+              {% if h.active %}
+                {% if h.dir == 'asc' %}
+                  <i class="bi bi-caret-up-fill"></i>
+                {% else %}
+                  <i class="bi bi-caret-down-fill"></i>
+                {% endif %}
+              {% endif %}
+            </a>
+          </th>
+        {% endfor %}
+        <th style="width:70px;"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr>
+          <td>{{ row.date }}</td>
+          <td>{{ row.course }}</td>
+          <td>{{ row.business }}</td>
+          <td>
+            <span class="{{ row.status.cls }}" {% if row.status.style %}style="{{ row.status.style }}"{% endif %}>
+              {{ row.status.label }}
+            </span>
+          </td>
+          <td>{{ row.instructor }}</td>
+          <td>{{ row.ref }}</td>
+          <td class="text-end">
+            <a class="btn btn-light btn-sm" href="{{ row.edit_url }}" title="Edit"><i class="bi bi-pencil"></i></a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="{{ headers|length|add:'1' }}" class="text-muted">No bookings found.</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Simple pagination -->
+{% if page_info %}
+  <div class="d-flex justify-content-between align-items-center">
+    <div class="text-muted small">{{ page_info }}</div>
+    <div class="btn-group">
+      {% if page_prev_url %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ page_prev_url }}">← Previous</a>
+      {% endif %}
+      {% if page_next_url %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ page_next_url }}">Next →</a>
+      {% endif %}
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

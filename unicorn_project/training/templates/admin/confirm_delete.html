@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ title|default:"Confirm delete" }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">{{ title|default:"Confirm delete" }}</h3>
+
+<div class="alert alert-warning">
+  {{ confirm_lead|default:"Are you sure you want to delete this item:" }}
+  {% if object %}<strong>{{ object }}</strong>{% endif %}
+</div>
+
+<form method="post" class="d-flex gap-2">
+  {% csrf_token %}
+  <button class="btn btn-danger" type="submit">Yes, delete</button>
+  <a class="btn btn-secondary" href="{{ back_url|default:'javascript:history.back()' }}">Cancel</a>
+</form>
+{% endblock %}

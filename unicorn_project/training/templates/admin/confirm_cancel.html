@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h3 class="mb-3">{{ title }}</h3>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="text-muted small">Course reference</div>
+        <div class="fw-semibold">{{ booking.course_reference }}</div>
+      </div>
+      <div class="col-md-6">
+        <div class="text-muted small">Course type</div>
+        <div class="fw-semibold">{{ booking.course_type.name }}</div>
+      </div>
+      <div class="col-md-6">
+        <div class="text-muted small">Business</div>
+        <div class="fw-semibold">{{ booking.business.name }}</div>
+      </div>
+      <div class="col-md-6">
+        <div class="text-muted small">Location</div>
+        <div class="fw-semibold">
+          {{ booking.training_location.name }}
+          {% if booking.training_location.town %} — {{ booking.training_location.town }}{% endif %}
+        </div>
+      </div>
+    </div>
+    <hr>
+    <div class="text-muted small mb-1">Course days</div>
+    <ul class="mb-0">
+      {% for d in booking.days.all|dictsort:"date" %}
+        <li>{{ d.date }}{% if d.start_time %}, {{ d.start_time|time:"H:i" }}{% endif %}</li>
+      {% empty %}
+        <li>{{ booking.course_date }}{% if booking.start_time %}, {{ booking.start_time|time:"H:i" }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+
+<div class="alert alert-warning">
+  Cancelling will keep the booking in the system (for history) but mark it as <strong>Cancelled</strong>.
+</div>
+
+<form method="post" class="card p-3">
+  {% csrf_token %}
+  <label class="form-label">Reason (optional)</label>
+  <textarea name="reason" rows="3" class="form-control" placeholder="Why is this cancelled?"></textarea>
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-warning" type="submit">
+      <i class="bi bi-slash-circle"></i> Confirm cancel
+    </button>
+    <a class="btn btn-secondary" href="{{ back_url }}">Back</a>
+  </div>
+</form>
+{% endblock %}

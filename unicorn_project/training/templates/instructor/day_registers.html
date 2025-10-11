@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-2">{{ title }}</h3>
+<p class="text-muted">
+  {{ day.booking.course_type.name }} — {{ day.date|date:"j M Y" }}
+</p>
+
+<div class="d-flex gap-2 mb-2">
+  <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_new' day.pk %}">
+    <i class="bi bi-person-plus"></i> Add delegate
+  </a>
+  <a class="btn btn-outline-secondary btn-sm" href="{% url 'instructor_day_registers_pdf' day.pk %}">
+    <i class="bi bi-file-earmark-pdf"></i> Export PDF
+  </a>
+</div>
+
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th style="width:22%">Name</th>
+        <th style="width:14%">Date of birth</th>
+        <th style="width:18%">Job title</th>
+        <th style="width:32%">Notes</th>
+        <th class="d-none d-lg-table-cell" style="width:8%">Employee ID</th>
+        <th style="width:6%" class="text-center">Health</th>
+        <th style="width:10%" class="text-end">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r.obj.name }}</td>
+          <td>{{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}</td>
+          <td>{{ r.obj.job_title|default:"—" }}</td>
+
+          {# Notes (more important than Emp ID); truncate for neat rows #}
+          <td class="text-muted">
+            {% if r.obj.notes %}
+              {{ r.obj.notes|truncatechars:140 }}
+            {% else %}
+              —
+            {% endif %}
+          </td>
+
+          <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
+
+          <td class="text-center">
+            <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">{{ r.health_symbol }}</span>
+          </td>
+          <td class="text-end">
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_edit' r.obj.pk %}">
+              Edit
+            </a>
+
+            <!-- DELETE (POST + confirm) -->
+            <form method="post"
+                  action="{% url 'instructor_delegate_delete' r.obj.pk %}"
+                  class="d-inline js-delete-form">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                Delete
+              </button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="text-muted">No delegates yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-2 small">
+  <strong>Key:</strong>
+  {% for sym, cls, text in legend %}
+    <span class="badge {{ cls }}">{{ sym }}</span> {{ text }}{% if not forloop.last %} &middot; {% endif %}
+  {% endfor %}
+</div>
+
+<a class="btn btn-secondary mt-3" href="{{ back_url }}"><i class="bi bi-arrow-left"></i> Back to booking</a>
+
+<script>
+  // Ask for confirmation before any delete POST
+  document.querySelectorAll('.js-delete-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      if (!confirm('Delete this delegate? This cannot be undone.')) {
+        e.preventDefault();
+      }
+    });
+  });
+</script>
+{% endblock %}

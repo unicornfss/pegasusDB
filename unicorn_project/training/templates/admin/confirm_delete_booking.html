@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Delete booking{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">Delete booking</h3>
+
+<div class="alert alert-danger">
+  <strong>This will permanently delete the booking and all its related data (days, attendance).</strong><br>
+  Are you sure you want to do this? In most cases you should <a href="{{ cancel_url }}">cancel the booking</a> instead so the history remains.
+</div>
+
+<div class="card mb-3">
+  <div class="card-body">
+    <dl class="row mb-0">
+      <dt class="col-sm-3">Reference</dt>
+      <dd class="col-sm-9">{{ booking.course_reference }}</dd>
+
+      <dt class="col-sm-3">Course</dt>
+      <dd class="col-sm-9">{{ booking.course_type.name }}</dd>
+
+      <dt class="col-sm-3">Business</dt>
+      <dd class="col-sm-9">{{ booking.business.name }}</dd>
+
+      <dt class="col-sm-3">Location</dt>
+      <dd class="col-sm-9">{{ booking.training_location.name }}</dd>
+
+      <dt class="col-sm-3">Start</dt>
+      <dd class="col-sm-9">{{ booking.course_date }} {{ booking.start_time|default:"" }}</dd>
+
+      <dt class="col-sm-3">Status</dt>
+      <dd class="col-sm-9">{{ booking.get_status_display|default:booking.status }}</dd>
+    </dl>
+  </div>
+</div>
+
+<form method="post" class="d-flex gap-2">
+  {% csrf_token %}
+  <button class="btn btn-danger"><i class="bi bi-trash"></i> Yes, delete</button>
+  <a class="btn btn-secondary" href="{{ back_url }}">Cancel</a>
+</form>
+{% endblock %}

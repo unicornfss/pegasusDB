@@ -44,6 +44,7 @@ MIDDLEWARE = [
     'unicorn_project.training.middleware.MustChangePasswordMiddleware',
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+     'unicorn_project.training.middleware.AdminGateMiddleware',
 ]
 
 ROOT_URLCONF = "unicorn_project.urls"
@@ -62,12 +63,14 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-                 "unicorn_project.training.context_processors.globals",
+                "unicorn_project.training.context_processors.globals",
                 "unicorn_project.training.context_processors.role_context",
             ],
         },
     },
 ]
+
+
 
 WSGI_APPLICATION = "unicorn_project.wsgi.application"
 
@@ -100,7 +103,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- Auth redirects -------------------------------------------
 LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = "/"
+LOGIN_REDIRECT_URL = "/post-login/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # Render/Proxy headers (safe to leave on)

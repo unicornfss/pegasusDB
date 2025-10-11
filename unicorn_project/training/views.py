@@ -1,12 +1,49 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
+from django.db.models import Q
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib import messages
-from django.shortcuts import redirect
-from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile
-from .forms import AttendanceForm, BookingForm, InstructorForm, InstructorProfileForm
-from datetime import timedelta
+from django.shortcuts import redirect, render
+from django.urls import reverse
+from django.utils import timezone
+from django.views.decorators.http import require_GET
+from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile, DelegateRegister
+from .forms import  BookingForm, InstructorForm, InstructorProfileForm, DelegateRegisterForm
+from datetime import timedelta, datetime
+
+# --- helpers --------------------------------------------------
+
+def is_instructor_user(user):
+    return user.is_authenticated and (
+        user.groups.filter(name__iexact="instructor").exists()
+        or hasattr(user, "instructor")
+    )
+
+def get_instructor_for_user(user):
+    """
+    Resolve the Instructor profile for this user.
+    If you allow multiple mappings, adjust here; otherwise one-to-one.
+    """
+    try:
+        if hasattr(user, "instructor") and user.instructor:
+            return user.instructor
+    except Instructor.DoesNotExist:
+        pass
+    # fallback: name/email match, if you’ve used that pattern in your data
+    return Instructor.objects.filter(user=user).first()
+
+# --- home redirect --------------------------------------------
+
+def home(request):
+    if request.user.is_authenticated:
+        if request.user.is_superuser or request.user.groups.filter(name__iexact="admin").exists():
+            return redirect("app_admin_dashboard")
+        if is_instructor_user(request.user):
+            return redirect("instructor_bookings")
+    return render(request, "home.html")
+
+
 
 def _must_change_password_gate(request):
     if not request.user.is_authenticated:
@@ -15,6 +52,26 @@ def _must_change_password_gate(request):
     if prof and prof.must_change_password and request.path != "/accounts/password_change/":
         return redirect("password_change")
     return None
+
+def _parse_yyyy_mm_dd(s: str):
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except Exception:
+        return None
+
+def _instructors_for_date(course: CourseType, day_date):
+    """
+    Return instructors who are delivering *this* course on the given date,
+    by traversing Booking -> BookingDay(date=day_date).
+    """
+    if not (course and day_date):
+        return Instructor.objects.none()
+    return (
+        Instructor.objects
+        .filter(bookings__course_type=course, bookings__days__date=day_date)
+        .distinct()
+        .order_by("name")
+    )
 
 def ensure_groups():
     Group.objects.get_or_create(name='admin')
@@ -28,6 +85,95 @@ def roles_for(user):
         if user.groups.filter(name='instructor').exists(): r.append('instructor')
         if user.is_superuser: r.append('superuser')
     return r
+
+@require_GET
+def public_delegate_instructors_api(request):
+    """
+    JSON:  /register/instructors?ct=EFAAW&date=2025-10-21
+    Returns [{id, name}, ...] for the instructor select.
+    """
+    code = (request.GET.get("ct") or request.GET.get("code") or "").strip()
+    date_str = (request.GET.get("date") or request.GET.get("d") or "").strip()
+    day_date = _parse_yyyy_mm_dd(date_str) or timezone.localdate()
+
+    course = CourseType.objects.filter(code__iexact=code).first()
+    qs = _instructors_for_date(course, day_date) if course else Instructor.objects.none()
+    data = [{"id": i.id, "name": i.name} for i in qs]
+    return JsonResponse({"instructors": data})
+
+def public_delegate_register(request):
+    """
+    Public delegate register page.
+    - Optional ?ct=<COURSE_CODE> to preselect a course
+    - Optional ?date=YYYY-MM-DD to preselect the date
+    - Instructor list is restricted to instructors who have a booking
+      for the selected course and date.
+    """
+    # 1) Resolve course from ?ct=<code> or posted course_id
+    course = None
+    ct_code = (request.GET.get("ct") or "").strip()
+    if ct_code:
+        course = CourseType.objects.filter(code__iexact=ct_code).first()
+
+    # For the dropdown when no QR is used
+    course_types = CourseType.objects.order_by("name")
+
+    # 2) Initial date (from querystring if present)
+    initial = {}
+    if request.GET.get("date"):
+        initial["date"] = request.GET["date"]
+
+    form = DelegateRegisterForm(request.POST or None, initial=initial)
+
+    # 3) Build instructors list (depends on course + date)
+    instructors = []
+    bound_date = form.data.get("date") if form.is_bound else initial.get("date")
+    if course and bound_date:
+        instructors = (
+            Instructor.objects
+            .filter(
+                bookings__course_type=course,       # NOTE plural 'bookings__'
+                bookings__days__date=bound_date
+            )
+            .distinct()
+            .order_by("name")
+        )
+
+    if request.method == "POST" and form.is_valid():
+        # Save delegate and attach to matching BookingDay if we can find one
+        delegate = form.save(commit=False)
+
+        # The form has an FK 'instructor' field; use it and also try to attach a BookingDay
+        inst = delegate.instructor
+        bd = None
+        if course and inst and form.cleaned_data.get("date"):
+            bd = (
+                BookingDay.objects
+                .filter(
+                    booking__course_type=course,
+                    booking__instructor=inst,
+                    date=form.cleaned_data["date"],
+                )
+                .first()
+            )
+        delegate.booking_day = bd
+        delegate.save()
+
+        messages.success(request, "Thank you — you’re on the register.")
+        # Redirect to the same page (keeps ?ct=... to stay on the same course)
+        return redirect(request.get_full_path())
+
+    # 4) Render (make sure we point at the correct template path)
+    return render(
+        request,
+        "public/delegate_register.html",   # <— correct location
+        {
+            "form": form,
+            "course": course,
+            "course_types": course_types,
+            "instructors": instructors,
+        },
+    )
 
 @login_required
 def switch_role(request, role):
@@ -79,22 +225,63 @@ def app_admin_booking_detail(request, pk):
 # Instructor app
 @login_required
 def instructor_dashboard(request):
-    if not (request.user.is_superuser or request.user.groups.filter(name='instructor').exists()):
-        return HttpResponseForbidden()
-    instr = Instructor.objects.filter(user=request.user).first()
-    bookings = Booking.objects.filter(instructor=instr).select_related('business','training_location','course_type') if instr else []
-    return render(request,'instructor/dashboard.html',{'bookings':bookings})
+    if is_instructor_user(request.user):
+        return redirect("instructor_bookings")
+    return redirect("home")
+
+# helper for human label + bootstrap class
+_STATUS_MAP = {
+    "scheduled":        ("Scheduled", "badge bg-info text-dark"),
+    "in_progress":      ("In progress", "badge bg-dark"),
+    "awaiting_closure": ("Awaiting instructor closure", "badge", "background-color:#6f42c1;color:#fff"),
+    "completed":        ("Completed", "badge bg-success"),
+    "cancelled":        ("Cancelled", "badge bg-warning text-dark"),
+}
 
 @login_required
-def instructor_booking_detail(request, pk):
-    if not (request.user.is_superuser or request.user.groups.filter(name='instructor').exists()):
-        return HttpResponseForbidden()
-    instr = Instructor.objects.filter(user=request.user).first()
-    b = get_object_or_404(Booking, pk=pk)
-    if not request.user.is_superuser and (not instr or b.instructor_id != instr.id):
-        return HttpResponseForbidden()
-    days = b.days.order_by('day_no')
-    return render(request,'instructor/booking_detail.html',{'booking':b,'days':days})
+def instructor_bookings(request):
+    """
+    Landing page for instructors: upcoming courses for the logged-in instructor.
+    """
+    today = timezone.localdate()
+
+    # Find the instructor record for this user
+    inst = Instructor.objects.filter(user=request.user).first()
+    if not inst:
+        # No instructor linked — show an empty page with a friendly message
+        return render(request, "instructor/bookings.html", {
+            "title": "My bookings",
+            "rows": [],
+            "empty_reason": "Your account isn’t linked to an instructor profile yet.",
+        })
+
+    qs = (Booking.objects
+          .select_related("course_type", "business", "training_location")
+          .filter(instructor=inst, course_date__gte=today)
+          .order_by("course_date", "start_time"))
+
+    rows = []
+    for b in qs:
+        # ----- NEW: precompute label & badge style so template is simple
+        label, cls, *opt_style = _STATUS_MAP.get(b.status or "", ("", "badge bg-secondary"))
+        rows.append({
+            "id":           b.id,
+            "date":         b.course_date,
+            "start":        b.start_time.strftime("%H:%M") if b.start_time else "",
+            "course":       b.course_type.name if b.course_type else "",
+            "business":     b.business.name if b.business else "",
+            "location":     b.training_location.name if b.training_location else "",
+            "ref":          b.course_reference or "",
+            "status_label": label,
+            "status_cls":   cls,
+            "status_style": opt_style[0] if opt_style else "",
+        })
+
+    return render(request, "instructor/bookings.html", {
+        "title": "My bookings",
+        "rows": rows,
+        "empty_reason": "" if rows else "You have no upcoming bookings.",
+    })
 
 @login_required
 def instructor_profile(request):
@@ -179,3 +366,63 @@ def instructor_bookings(request):
         'bookings': bookings,
         'instructor': instructor,
     })
+
+@login_required
+def instructor_booking_detail(request, pk):
+    """
+    Detail page for a single booking, visible only to its assigned instructor.
+    """
+    inst = _get_instructor_for_user(request.user)
+    if not inst:
+        return HttpResponseForbidden("Not an instructor account.")
+
+    booking = get_object_or_404(
+        Booking.objects.select_related("business", "training_location", "course_type", "instructor"),
+        pk=pk,
+    )
+    if booking.instructor_id != inst.id:
+        return HttpResponseForbidden("This booking is not assigned to you.")
+
+    # Convenient status label
+    status_labels = dict(getattr(Booking, "STATUS_CHOICES", []))
+    status_label = status_labels.get(booking.status, booking.status)
+
+    # Include the course days
+    days = booking.days.all().order_by("date")
+
+    return render(request, "instructor/booking_detail.html", {
+        "title": "Booking details",
+        "booking": booking,
+        "status_label": status_label,
+        "days": days,
+        "today": timezone.localdate(),
+    })
+
+def _user_is_instructor(user) -> bool:
+    # Safe check: user linked to Instructor?
+    try:
+        return hasattr(user, "instructor") and user.instructor is not None
+    except Instructor.DoesNotExist:
+        return False
+
+@login_required
+def post_login_router(request):
+    user = request.user
+
+    # 1) Admin/staff ALWAYS go to admin dashboard
+    if user.is_superuser or user.is_staff:
+        return redirect("app_admin_dashboard")
+
+    # 2) Respect explicit role choice in session (but admin already took precedence)
+    role = request.session.get("role")
+    if role == "admin":
+        return redirect("app_admin_dashboard")
+    if role == "instructor" and _user_is_instructor(user):
+        return redirect("instructor_bookings")
+
+    # 3) Sensible defaults
+    if _user_is_instructor(user):
+        return redirect("instructor_bookings")
+
+    # If neither admin nor instructor, drop them at admin (or your public home)
+    return redirect("app_admin_dashboard")

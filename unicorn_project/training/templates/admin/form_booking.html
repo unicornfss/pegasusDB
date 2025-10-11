@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+
+<h3 class="mb-2">{{ title }}</h3>
+
+{% if booking %}
+  {% with st=booking.status %}
+    {% if st == "scheduled" %}
+      <span class="badge bg-info text-dark mb-3">Scheduled</span>
+    {% elif st == "in_progress" %}
+      <span class="badge bg-dark mb-3">In progress</span>
+    {% elif st == "awaiting_closure" %}
+      <span class="badge mb-3" style="background-color:#6f42c1;color:#fff">Awaiting instructor closure</span>
+    {% elif st == "completed" %}
+      <span class="badge bg-success mb-3">Completed</span>
+    {% elif st == "cancelled" %}
+      <span class="badge bg-warning text-dark mb-3">Cancelled</span>
+    {% else %}
+      <span class="badge bg-secondary mb-3">{{ booking.get_status_display|default:booking.status }}</span>
+    {% endif %}
+  {% endwith %}
+{% endif %}
+
+<form method="post" class="card p-3">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">
+      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Business *</label>
+      {{ form.business }}
+      {% for err in form.business.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Training location *</label>
+      {{ form.training_location }}
+      {% for err in form.training_location.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      <div id="loc-address-text" class="form-text mt-1"></div>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Course type *</label>
+      <select name="{{ form.course_type.html_name }}" id="{{ form.course_type.id_for_label }}" class="form-select">
+        <option value="">— Select a course type —</option>
+        {% for ct in form.fields.course_type.queryset %}
+          <option value="{{ ct.pk }}"
+            {% if form.is_bound and form.data.course_type == ct.pk|stringformat:"s" %}
+              selected
+            {% elif not form.is_bound and form.instance and form.instance.course_type_id == ct.pk %}
+              selected
+            {% elif not form.is_bound and form.initial.course_type == ct.pk|stringformat:"s" %}
+              selected
+            {% endif %}
+            data-duration="{{ ct.duration_days }}"
+            data-course-fee="{{ ct.default_course_fee }}"
+            data-instructor-fee="{{ ct.default_instructor_fee }}"
+            data-code="{{ ct.code|default_if_none:'' }}"
+          >{{ ct.name }}</option>
+        {% endfor %}
+      </select>
+      {% for err in form.course_type.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Instructor</label>
+      {{ form.instructor }}
+      {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Course date *</label>
+      {{ form.course_date }}
+      {% for err in form.course_date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Start time *</label>
+      {{ form.start_time }}
+      {% for err in form.start_time.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Course reference</label>
+      {{ form.course_reference }}
+      {% for err in form.course_reference.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Course fee</label>
+      {{ form.course_fee }}
+      {% for err in form.course_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Instructor fee</label>
+      {{ form.instructor_fee }}
+      {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-4">
+      <label class="form-label">Contact name</label>
+      {{ form.contact_name }}
+      {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Telephone</label>
+      {{ form.telephone }}
+      {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">Email</label>
+      {{ form.email }}
+      {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-12">
+      <label class="form-label">Comments</label>
+      {{ form.comments }}
+      {% for err in form.comments.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <hr class="my-3">
+  <h5 class="mb-2">Course days</h5>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th style="width:110px">Day #</th>
+          <th style="width:220px">Date</th>
+          <th style="width:160px">Start</th>
+          <th style="width:160px">End</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="booking-days"></tbody>
+    </table>
+  </div>
+
+  <input type="hidden" name="booking_days" id="booking-days-json">
+
+  {% if booking %}
+    <hr class="my-3">
+    <h5 class="mb-2">Registers for each day</h5>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th style="width:220px">Date</th>
+            <th style="width:160px" class="text-center">Delegates</th>
+            <th style="width:160px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if day_rows %}
+            {% for d in day_rows %}
+              <tr>
+                <td>{{ d.date }}</td>
+                <td class="text-center">
+                  <span class="badge bg-secondary">{{ d.n }}</span>
+                </td>
+                <td class="text-end">
+                  <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_booking_day_registers' d.id %}">
+                    <i class="bi bi-people"></i> View / edit
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            {% for d in booking.days.all|dictsort:"date" %}
+              <tr>
+                <td>{{ d.date }}</td>
+                <td class="text-center"><span class="badge bg-secondary">—</span></td>
+                <td class="text-end">
+                  <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_booking_day_registers' d.id %}">
+                    <i class="bi bi-people"></i> View / edit
+                  </a>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td colspan="3" class="text-muted">No days yet.</td></tr>
+            {% endfor %}
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+
+  <div class="mt-3 d-flex gap-2 flex-wrap">
+    <button class="btn btn-primary" name="save_continue" value="1">
+      <i class="bi bi-check2"></i> Save and continue editing
+    </button>
+
+    <button class="btn btn-success" name="save_return" value="1">
+      <i class="bi bi-check2-circle"></i> Save and return
+    </button>
+
+    <a class="btn btn-secondary" href="{{ back_url }}">
+      <i class="bi bi-x-circle"></i> Discard changes and go back
+    </a>
+
+    {% if booking %}
+      {% if booking.status == 'cancelled' %}
+        <a class="btn btn-warning" href="{% url 'admin_booking_reinstate' booking.id %}">
+          <i class="bi bi-arrow-counterclockwise"></i> Reinstate
+        </a>
+      {% else %}
+        <a class="btn btn-outline-danger" href="{% url 'admin_booking_cancel' booking.id %}">
+          <i class="bi bi-slash-circle"></i> Cancel booking
+        </a>
+      {% endif %}
+    {% endif %}
+
+    {% if delete_url %}
+      <a class="btn btn-outline-danger" href="{{ delete_url }}">
+        <i class="bi bi-trash"></i> Delete
+      </a>
+    {% endif %}
+  </div>
+</form>
+
+<script>
+  /* ---- Data from view (safe defaults) ---- */
+  const LOCATIONS     = {{ location_map_json|default:"{}"|safe }};
+  const EXISTING_DAYS = {{ booking_days_initial_json|default:"[]"|safe }};
+
+  /* ---- Small utilities ---- */
+  const byName = (n) => document.querySelector(`[name="${n}"]`);
+  const pad2   = (n) => String(n).padStart(2,'0');
+  const toISO  = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+  const parseTime = (s) => s && /^\d{2}:\d{2}/.test(s) ? s.slice(0,5) : "";
+
+  /* ---- Location helpers ---- */
+  function clearContacts(){ const n=byName('contact_name'), p=byName('telephone'), e=byName('email'); if(n)n.value=''; if(p)p.value=''; if(e)e.value=''; }
+  function clearAddress(){ const h=document.getElementById('loc-address-text'); if(!h) return; h.textContent=''; }
+  function fillContactsFromRecord(rec){
+    const n=byName('contact_name'), p=byName('telephone'), e=byName('email');
+    if(!n||!p||!e) return;
+    n.value = rec.contact_name || rec.contactName || rec.contact || '';
+    p.value = rec.telephone || rec.phone || '';
+    e.value = rec.email || '';
+  }
+  function setAddress(rec){
+    const h=document.getElementById('loc-address-text'); if(!h) return;
+    const line = rec.name || rec.address_line || rec.address || '';
+    const town = rec.town || rec.city || '';
+    const post = rec.postcode || rec.post_code || '';
+    h.textContent = [line,town,post].filter(Boolean).join(', ');
+  }
+  function onLocationChange(){
+    const sel = byName('training_location');
+    if (!sel || !sel.value) { clearContacts(); clearAddress(); return; }
+    const rec = LOCATIONS[sel.value];
+    if (!rec) { clearContacts(); clearAddress(); return; }
+    fillContactsFromRecord(rec); setAddress(rec);
+  }
+  function rebuildLocationOptions() {
+    const bizSel = byName('business'), locSel = byName('training_location');
+    if (!bizSel || !locSel) return;
+
+    const bizId = String(bizSel.value || '');
+    const prev  = String(locSel.value || '');
+
+    locSel.innerHTML = '';
+    const blank = document.createElement('option'); blank.value=''; blank.textContent='— Select a training location —';
+    locSel.appendChild(blank);
+
+    const items = Object.entries(LOCATIONS).filter(([id,x]) => String(x.business_id) === bizId);
+    for (const [id,x] of items) {
+      const o = document.createElement('option');
+      o.value = String(id);
+      o.textContent = (x.name || x.address_line || ('Location '+id));
+      locSel.appendChild(o);
+    }
+
+    const real = Array.from(locSel.options).filter(o => o.value);
+    if (prev && Array.from(locSel.options).some(o => o.value === prev)) {
+      locSel.value = prev; onLocationChange(); return;
+    }
+    if (real.length === 0) { locSel.value=''; clearContacts(); clearAddress(); return; }
+    if (real.length === 1) { const rec=LOCATIONS[real[0].value]; if(rec){fillContactsFromRecord(rec); setAddress(rec);} locSel.value=''; return; }
+    locSel.value = real[0].value; onLocationChange();
+  }
+
+  /* ---- Days table helpers ---- */
+  const $tbody = () => document.getElementById('booking-days');
+
+  function addHoursToHHMM(hhmm, hoursFloat){
+    if (!hhmm) return "";
+    const [h, m] = hhmm.split(":").map(Number);
+    const base = new Date(2000,0,1,h,m,0,0);
+    const ms = Math.round(hoursFloat * 60 * 60 * 1000);
+    const end = new Date(base.getTime() + ms);
+    return `${String(end.getHours()).padStart(2,"0")}:${String(end.getMinutes()).padStart(2,"0")}`;
+  }
+
+  // ----- NEW: duration logic (supports 0.5, 1.5, etc.)
+  function getCourseSelect() {
+    let el = document.getElementById("id_course_type");
+    if (el) return el;
+    el = document.querySelector('select[name="course_type"]');
+    return el || null;
+  }
+
+  function getTotalDurationDays() {
+    const sel = getCourseSelect();
+    if (!sel) return 0;
+    const opt = sel.options[sel.selectedIndex];
+    const v = parseFloat(opt?.dataset?.duration || "0");
+    return isNaN(v) ? 0 : v;
+  }
+
+  // 7h for whole days; 3.5h for fractional last day (0.5)
+  function durHoursForIndex(i, rows) {
+    const total = getTotalDurationDays();     // e.g. 0.5, 1, 1.5, 2
+    const whole = Math.floor(total);
+    const frac  = total - whole;
+
+    if (rows === 1) return (total > 0 && total < 1) ? 3.5 : 7.0;
+    if (i <= whole) return 7.0;
+    if (frac > 0 && i === whole + 1) return 3.5;
+    return 7.0;
+  }
+
+  function buildRows(count){
+    const tb = $tbody(); if (!tb) return;
+    tb.innerHTML = '';
+    for (let i = 1; i <= count; i++) {
+      const tr = document.createElement('tr');
+      tr.dataset.index = i;
+
+      const dateI = document.createElement('input');
+      dateI.type = 'date';
+      dateI.className = 'form-control form-control-sm';
+      dateI.id = `day-${i}-date`;
+
+      const stI = document.createElement('input');
+      stI.type = 'time';
+      stI.className = 'form-control form-control-sm';
+      stI.id = `day-${i}-start`;
+
+      const enI = document.createElement('input');
+      enI.type = 'time';
+      enI.className = 'form-control form-control-sm';
+      enI.id = `day-${i}-end`;
+
+      if (i === 1) { dateI.readOnly = true; stI.readOnly = true; dateI.title="Controlled by Course date above"; stI.title="Controlled by Start time above"; }
+
+      const noteI = document.createElement('input');
+      noteI.type = 'text';
+      noteI.className = 'form-control form-control-sm';
+      noteI.placeholder = '(optional)';
+
+      const td0 = document.createElement('td'); td0.textContent = `Day ${i}`;
+      const td1 = document.createElement('td'); td1.appendChild(dateI);
+      const td2 = document.createElement('td'); td2.appendChild(stI);
+      const td3 = document.createElement('td'); td3.appendChild(enI);
+      const td4 = document.createElement('td'); td4.appendChild(noteI);
+
+      tr.append(td0, td1, td2, td3, td4);
+      tb.appendChild(tr);
+    }
+  }
+
+  function buildFromExisting(days){
+    const tb=$tbody(); if(!tb) return; tb.innerHTML="";
+    days.forEach((d, idx)=>{
+      const i = idx+1;
+      const tr=document.createElement('tr'); tr.dataset.index=i;
+
+      const dateI=document.createElement('input'); dateI.type='date'; dateI.className='form-control form-control-sm'; dateI.id=`day-${i}-date`; dateI.value=d.day_date||"";
+      const stI  =document.createElement('input'); stI.type  ='time'; stI.className  ='form-control form-control-sm'; stI.id =`day-${i}-start`; stI.value=d.start_time||"";
+      const enI  =document.createElement('input'); enI.type  ='time'; enI.className  ='form-control form-control-sm'; enI.id =`day-${i}-end`;   enI.value=d.end_time||"";
+
+      if (i === 1) { dateI.readOnly = true; stI.readOnly = true; dateI.title="Controlled by Course date above"; stI.title="Controlled by Start time above"; }
+
+      const noteI=document.createElement('input'); noteI.type='text'; noteI.className='form-control form-control-sm'; noteI.placeholder='(optional)';
+
+      const td0=document.createElement('td'); td0.textContent=`Day ${i}`;
+      const td1=document.createElement('td'); td1.appendChild(dateI);
+      const td2=document.createElement('td'); td2.appendChild(stI);
+      const td3=document.createElement('td'); td3.appendChild(enI);
+      const td4=document.createElement('td'); td4.appendChild(noteI);
+      tr.append(td0,td1,td2,td3,td4);
+      tb.appendChild(tr);
+    });
+  }
+
+  function populateFromHeader(){
+    const tb=$tbody(); if(!tb) return; const rows=tb.children.length; if(!rows) return;
+    const baseStr = byName('course_date')?.value || '';
+    const startStr= parseTime(byName('start_time')?.value || '');
+    if(!baseStr) return;
+
+    const [Y,M,D] = baseStr.split('-').map(n=>parseInt(n,10));
+    const base = new Date(Y, M-1, D);
+
+    for(let i=1;i<=rows;i++){
+      const d = new Date(base); d.setDate(base.getDate()+(i-1));
+      const dEl=document.getElementById(`day-${i}-date`);
+      const sEl=document.getElementById(`day-${i}-start`);
+      const eEl=document.getElementById(`day-${i}-end`);
+
+      if (i === 1) { if (dEl) dEl.value = toISO(d); if (sEl) sEl.value = startStr; }
+      else { if(dEl && !dEl.value) dEl.value = toISO(d); if(sEl && !sEl.dataset.userEdited) sEl.value = startStr; }
+
+      const durHours = durHoursForIndex(i, rows);
+      const srcStart = sEl?.value || startStr || "";
+      if (eEl && !eEl.dataset.userEdited) eEl.value = addHoursToHHMM(srcStart, durHours);
+    }
+  }
+
+  document.addEventListener('input', (e)=>{
+    if (e.target && /^day-\d+-start$/.test(e.target.id)) {
+      const i = parseInt(e.target.id.match(/^day-(\d+)-start$/)[1], 10);
+      const rows = $tbody()?.children.length || 1;
+      if (i > 1) e.target.dataset.userEdited="1";
+      const end = document.getElementById(`day-${i}-end`);
+      if (end && !end.dataset.userEdited) {
+        const durHours = durHoursForIndex(i, rows);
+        end.value = addHoursToHHMM(e.target.value, durHours);
+      }
+    }
+    if (e.target && /^day-\d+-end$/.test(e.target.id)) {
+      e.target.dataset.userEdited="1";
+    }
+  });
+
+  function serializeDays(){
+    const tb=$tbody(); if(!tb) return;
+    const rows=Array.from(tb.children);
+    const payload = rows.map((tr, idx)=>({
+      day_index: idx+1,
+      day_date:  document.getElementById(`day-${idx+1}-date`)?.value || '',
+      start_time:document.getElementById(`day-${idx+1}-start`)?.value || '',
+      end_time:  document.getElementById(`day-${idx+1}-end`)?.value || ''
+    }));
+    const hid=document.getElementById('booking-days-json'); if(hid) hid.value=JSON.stringify(payload);
+  }
+
+  /* ---- Fees + reference helpers ---- */
+  function getCTInfo(){
+    const sel = getCourseSelect();
+    if (!sel) return null;
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return null;
+    const durationRaw   = parseFloat(opt.dataset.duration || '0');
+    const courseFeeRaw  = parseFloat(opt.dataset.courseFee || '0');
+    const instrFeeRaw   = parseFloat(opt.dataset.instructorFee || '0');
+    return {
+      duration: isNaN(durationRaw) ? 0 : Math.ceil(durationRaw), // used only for row count
+      courseFee: isNaN(courseFeeRaw) ? 0 : courseFeeRaw,
+      instructorFee: isNaN(instrFeeRaw) ? 0 : instrFeeRaw,
+      code: (opt.dataset.code || '').toUpperCase()
+    };
+  }
+
+  function applyCourseFeesFromType(force=false){
+    const info = getCTInfo(); if(!info) return;
+    const cf=byName('course_fee'), inf=byName('instructor_fee');
+    if (cf  && (force || cf.value.trim()===""))  cf.value  = info.courseFee || '';
+    if (inf && (force || inf.value.trim()==="")) inf.value = info.instructorFee || '';
+  }
+
+  function maybeGenerateReference(force=false){
+    const info=getCTInfo(), ref=byName('course_reference');
+    if(!info || !ref) return;
+    if (!force && ref.value.trim()!=="") return;
+    const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const rand = Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+    const code = info.code || 'COURSE';
+    ref.value = `${code}-${rand}`;
+  }
+
+  function handleCourseChanged(){
+    rebuildDaysUI();
+    populateFromHeader();
+    applyCourseFeesFromType(true);
+    maybeGenerateReference(true);
+  }
+
+  function rebuildDaysUI(){
+    if (Array.isArray(EXISTING_DAYS) && EXISTING_DAYS.length > 0) {
+      buildFromExisting(EXISTING_DAYS);
+      const d1 = EXISTING_DAYS[0];
+      const topDate = byName('course_date');
+      const topStart = byName('start_time');
+      if (d1) {
+        if (topDate  && !topDate.value  && d1.day_date)    topDate.value  = d1.day_date;
+        if (topStart && !topStart.value && d1.start_time)  topStart.value = d1.start_time;
+      }
+      populateFromHeader();
+      return;
+    }
+    const total = getTotalDurationDays();
+    const n = Math.max(0, Math.ceil(total));
+    const tb = $tbody(); if (!tb) return;
+    tb.innerHTML = '';
+    if (n > 0) buildRows(n);
+    populateFromHeader();
+    applyCourseFeesFromType();
+    maybeGenerateReference();
+  }
+
+  /* ---- Global listeners ---- */
+  document.addEventListener('change', (e) => {
+    if (e.target.name === 'business')           rebuildLocationOptions();
+    if (e.target.name === 'training_location')  onLocationChange();
+    if (e.target.name === 'course_type')        handleCourseChanged();
+    if (e.target.name === 'course_date')        populateFromHeader();
+    if (e.target.name === 'start_time')         populateFromHeader();
+  });
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const locSel = byName('training_location'); if(locSel) locSel.setAttribute('autocomplete','off');
+    rebuildLocationOptions();
+    onLocationChange();
+
+    const courseSel = getCourseSelect();
+    if (courseSel) courseSel.addEventListener('change', handleCourseChanged);
+
+    // Run once on load (important for edit/autofill cases)
+    handleCourseChanged();
+
+    const form=document.querySelector('form');
+    if(form) form.addEventListener('submit', serializeDays);
+  });
+</script>
+
+{% endblock %}

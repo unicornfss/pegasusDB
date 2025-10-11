@@ -1,0 +1,12 @@
+If your CourseType.duration_days doesn't allow 0.5, change it to:
+from decimal import Decimal
+from django.core.validators import MinValueValidator, MaxValueValidator
+
+duration_days = models.DecimalField(
+    max_digits=3, decimal_places=1,
+    validators=[MinValueValidator(Decimal("0.5")), MaxValueValidator(Decimal("5.0"))],
+    default=Decimal("1.0"),
+)
+Then run:
+  python manage.py makemigrations
+  python manage.py migrate

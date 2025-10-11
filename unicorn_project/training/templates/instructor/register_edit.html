@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Edit delegate{% endblock %}
+
+{% block content %}
+<h3 class="mb-2">Edit delegate</h3>
+
+<!-- Top context (read-only) -->
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-3">
+      <div class="col-md-6">
+        <div class="text-muted small">Course</div>
+        <div>{{ day.booking.course_type.name }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Date</div>
+        <div>{{ day.date|date:"j M Y" }}</div>
+      </div>
+      <div class="col-md-3">
+        <div class="text-muted small">Instructor</div>
+        <div>{{ day.booking.instructor.name }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<form method="post" class="card p-3">
+  {% csrf_token %}
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">
+      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+    </div>
+  {% endif %}
+
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Name</label>
+      {{ form.name }}
+      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Date of birth</label>
+      {{ form.date_of_birth }}
+      {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Job title</label>
+      {{ form.job_title }}
+      {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Employee ID (optional)</label>
+      {{ form.employee_id }}
+      {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <!-- Hidden instructor (enforced server-side) -->
+    {{ form.instructor }}
+
+    <!-- Health declaration -->
+    <div class="col-12">
+      <label class="form-label">Health declaration</label>
+      <div class="vstack gap-2">
+        {% for rb in form.health_status %}
+          <label class="form-check d-flex align-items-start gap-2">
+            {{ rb.tag }}
+            <span>{{ rb.choice_label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      {% for err in form.health_status.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+  </div>
+
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-check2"></i> Save</button>
+    <a class="btn btn-secondary" href="{% url 'instructor_day_registers' day.pk %}">
+      <i class="bi bi-x-circle"></i> Cancel
+    </a>
+  </div>
+</form>
+{% endblock %}

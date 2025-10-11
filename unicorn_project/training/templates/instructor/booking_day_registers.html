@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-2">{{ title }}</h3>
+
+<div class="mb-3 small text-muted">
+  {% if booking and booking.course_type %}<div><strong>Course:</strong> {{ booking.course_type.name }}</div>{% endif %}
+  <div><strong>Date:</strong> {{ day.date }}</div>
+  {% if booking and booking.instructor %}<div><strong>Instructor:</strong> {{ booking.instructor.name }}</div>{% endif %}
+  {% if booking and booking.training_location %}<div><strong>Location:</strong> {{ booking.training_location.name }}</div>{% endif %}
+</div>
+
+<form method="post" class="card p-3">
+  {% csrf_token %}
+
+  {% if messages %}
+    {% for m in messages %}
+      <div class="alert alert-{{ m.tags|default:'info' }}">{{ m }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {{ formset.non_form_errors }}
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th style="width:28%">Full name</th>
+          <th style="width:18%">Date of birth</th>
+          <th style="width:24%">Job title</th>
+          <th style="width:18%">Employee ID</th>
+          <th style="width:12%" class="text-end">Delete</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for form in formset.forms %}
+          <tr>
+            <td>
+              {{ form.full_name }}
+              {% for e in form.full_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+              {{ form.id }} {# keep the hidden id field #}
+            </td>
+            <td>
+              {{ form.date_of_birth }}
+              {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </td>
+            <td>
+              {{ form.job_title }}
+              {% for e in form.job_title.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </td>
+            <td>
+              {{ form.employee_id }}
+              {% for e in form.employee_id.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </td>
+            <td class="text-end">
+              {% if formset.can_delete %}
+                <div class="form-check d-inline-block">
+                  {{ form.DELETE }} <label class="form-check-label">Delete</label>
+                </div>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {{ formset.management_form }}
+
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-check2"></i> Save changes</button>
+    <a class="btn btn-secondary" href="{{ back_url }}"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</form>
+{% endblock %}

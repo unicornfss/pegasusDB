@@ -1,6 +1,141 @@
-{% extends "base.html" %}{% block content %}
-<h2><i class="bi bi-journal-medical"></i> {{ booking.course_reference }}</h2>
-<p><strong>{{ booking.course_type.name }}</strong> — {{ booking.business.name }} @ {{ booking.training_location.name }}</p>
-<h4>Days</h4>
-<ul>{% for d in days %}<li>Day {{ d.day_no }} — {{ d.day_date }} — <a href="{% url 'public_attendance' d.id %}">View register / public sign-in</a></li>{% endfor %}</ul>
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-2 d-flex align-items-center gap-2">
+  {{ booking.course_type.name }}
+  {% if booking.course_reference %}
+    <span class="badge bg-light text-dark border">Ref: {{ booking.course_reference }}</span>
+  {% endif %}
+</h3>
+
+
+{% with st=booking.status %}
+  {% if st == "scheduled" %}
+    <span class="badge bg-info text-dark mb-3">Scheduled</span>
+  {% elif st == "in_progress" %}
+    <span class="badge bg-dark mb-3">In progress</span>
+  {% elif st == "awaiting_closure" %}
+    <span class="badge mb-3" style="background-color:#6f42c1;color:#fff">Awaiting instructor closure</span>
+  {% elif st == "completed" %}
+    <span class="badge bg-success mb-3">Completed</span>
+  {% elif st == "cancelled" %}
+    <span class="badge bg-warning text-dark mb-3">Cancelled</span>
+  {% else %}
+    <span class="badge bg-secondary mb-3">{{ booking.get_status_display|default:booking.status }}</span>
+  {% endif %}
+{% endwith %}
+
+<div class="card mb-3">
+  <div class="card-body">
+    <div class="row g-4">
+
+      {# LEFT COLUMN ------------------------------------------------------- #}
+      <div class="col-lg-4">
+        <div class="mb-3">
+          <div class="text-muted small">Business</div>
+          <div>{{ booking.business.name }}</div>
+        </div>
+
+        <div>
+          <div class="text-muted small">Location</div>
+          <div>
+            {{ booking.training_location.name|default:"(TBC)" }}<br>
+            {% if booking.training_location %}
+              {{ booking.training_location.address_line }}<br>
+              {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
+              {# Google Maps link built from the address #}
+              {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
+                <a class="small" target="_blank" rel="noopener"
+                   href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
+                  View in Google Maps
+                </a>
+              {% endwith %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# MIDDLE COLUMN ----------------------------------------------------- #}
+      <div class="col-lg-4">
+        <div class="mb-3">
+          <div class="text-muted small">Instructor</div>
+          <div>{{ booking.instructor.name }}</div>
+        </div>
+
+        <div class="mb-3">
+          <div class="text-muted small">Location contact</div>
+          {% if booking.training_location %}
+            <div>
+              {{ booking.training_location.contact_name|default:"—" }}<br>
+              {% if booking.training_location.telephone %}
+                <a href="tel:{{ booking.training_location.telephone }}">
+                  {{ booking.training_location.telephone }}
+                </a><br>
+              {% endif %}
+              {% if booking.training_location.email %}
+                <a href="mailto:{{ booking.training_location.email }}">
+                  {{ booking.training_location.email }}
+                </a>
+              {% endif %}
+            </div>
+          {% else %}
+            <div>—</div>
+          {% endif %}
+        </div>      
+      </div>
+
+      {# RIGHT COLUMN (NOTES) ---------------------------------------------- #}
+      <div class="col-lg-4">
+        <form method="post" class="h-100 d-flex flex-column">
+          {% csrf_token %}
+          <div class="mb-2 text-muted small">Course notes</div>
+          {{ notes_form.booking_notes }}
+          {% for err in notes_form.booking_notes.errors %}
+            <div class="text-danger small">{{ err }}</div>
+          {% endfor %}
+          <div class="mt-2">
+            <button class="btn btn-primary btn-sm">
+              <i class="bi bi-check2"></i> Save notes
+            </button>
+          </div>
+        </form>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<h5 class="mb-2">Course days</h5>
+<div class="table-responsive">
+  <table class="table table-sm align-middle">
+    <thead>
+      <tr>
+        <th style="width:120px">Date</th>
+        <th style="width:120px">Start</th>
+        <th style="width:120px" class="text-center">Delegates</th>
+        <th style="width:160px" class="text-end">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in day_rows %}
+        <tr>
+          <td>{{ d.date }}</td>
+          <td>{% if d.start_time %}{{ d.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
+          <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
+          <td class="text-end">
+            <a class="btn btn-outline-primary btn-sm" href="{{ d.edit_url }}">
+              <i class="bi bi-people"></i> View / edit
+            </a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="text-muted">No days created for this booking.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
 {% endblock %}

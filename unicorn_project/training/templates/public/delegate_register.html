@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">Delegate register</h3>
+
+{% for m in messages %}
+  <div class="alert alert-{{ m.tags|default:'info' }}">{{ m }}</div>
+{% endfor %}
+
+<form method="post" class="card p-3">
+  {% csrf_token %}
+
+  <div class="row g-3">
+
+    {% if course %}
+      <div class="col-12">
+        <label class="form-label">Course</label>
+        <div class="form-control-plaintext fw-semibold">
+          {{ course.name }} ({{ course.code }})
+        </div>
+        <input type="hidden" name="course_id" value="{{ course.id }}">
+        <!-- Let JS know the code when preselected -->
+        <input type="hidden" name="course_code" value="{{ course.code }}">
+      </div>
+    {% else %}
+      <div class="col-md-6">
+        <label class="form-label">Course</label>
+        <select name="course_id" id="courseSelect" class="form-select" required>
+          <option value="">— Select course —</option>
+          {% for c in course_types %}
+            <option value="{{ c.id }}" data-code="{{ c.code }}">{{ c.name }} ({{ c.code }})</option>
+          {% endfor %}
+        </select>
+        <div class="form-text">Tip: scanning a course-specific QR will auto-select this.</div>
+      </div>
+    {% endif %}
+
+    <div class="col-md-6">
+      <label class="form-label">Name</label>
+      {{ form.name }}
+      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Date of birth</label>
+      {{ form.date_of_birth }}
+      {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Job title</label>
+      {{ form.job_title }}
+      {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Employee ID (optional)</label>
+      {{ form.employee_id }}
+      {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Date</label>
+      {{ form.date }}
+      {% for err in form.date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Instructor</label>
+      <select name="instructor" class="form-select" {% if not course %}disabled{% endif %}>
+        <option value="">— Select instructor —</option>
+        {% if course %}
+          {% for i in instructors %}
+            <option value="{{ i.id }}">{{ i.name }}</option>
+          {% endfor %}
+        {% endif %}
+      </select>
+    </div>
+
+    <!-- HEALTH DECLARATION -->
+    <div class="col-12">
+  <label class="form-label">Health declaration</label>
+
+  <div class="vstack gap-2">
+    {# Render each radio explicitly #}
+    {% for rb in form.health_status %}
+      <label class="form-check d-flex align-items-start gap-2">
+        {{ rb.tag }}
+        <span>{{ rb.choice_label }}</span>
+      </label>
+    {% endfor %}
+  </div>
+
+  {# Show validation errors for this field #}
+  {% for err in form.health_status.errors %}
+    <div class="text-danger small">{{ err }}</div>
+  {% endfor %}
+
+  <div class="form-text">
+    This helps the instructor make reasonable adjustments where needed.
+  </div>
+</div>
+
+
+  </div>
+
+  <button class="btn btn-primary mt-3">Submit</button>
+</form>
+
+<!-- Keep this script: date or course change refreshes instructors -->
+<script>
+  // If the user picks a course without a QR, reload to lock it via ?ct=<CODE>
+  const courseSelect = document.getElementById('courseSelect');
+  if (courseSelect) {
+    courseSelect.addEventListener('change', function(){
+      const opt = this.selectedOptions[0];
+      if (opt && opt.dataset.code){
+        const params = new URLSearchParams(window.location.search);
+        params.set('ct', opt.dataset.code);
+        // also keep current date choice (if any)
+        const dateEl = document.querySelector('input[name="date"]');
+        if (dateEl && dateEl.value) params.set('date', dateEl.value);
+        window.location.search = params.toString();
+      }
+    });
+  }
+
+  (function(){
+    const dateInput  = document.querySelector('input[name="date"]');
+    const instSelect = document.querySelector('select[name="instructor"]');
+
+    function currentCourseCode() {
+      const hidden = document.querySelector('input[name="course_code"]');
+      if (hidden && hidden.value) return hidden.value.trim();
+      const sel = document.querySelector('select[name="course_id"]');
+      if (sel && sel.options && sel.selectedIndex >= 0) {
+        const opt = sel.options[sel.selectedIndex];
+        return (opt.dataset && opt.dataset.code) ? opt.dataset.code.trim() : "";
+      }
+      return "";
+    }
+
+    async function refreshInstructors() {
+      const code = currentCourseCode();
+      const date = dateInput ? dateInput.value : "";
+      if (!instSelect || !code || !date) return;
+
+      const url = new URL("{% url 'public_delegate_instructors_api' %}", window.location.origin);
+      url.searchParams.set("ct", code);
+      url.searchParams.set("date", date);
+
+      try {
+        const res = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
+        const data = await res.json();
+
+        // enable select if it was disabled (no-QR path)
+        instSelect.removeAttribute('disabled');
+
+        // rebuild options
+        instSelect.innerHTML = "";
+        const blank = document.createElement("option");
+        blank.value = "";
+        blank.textContent = "— Select instructor —";
+        instSelect.appendChild(blank);
+
+        (data.instructors || []).forEach(i => {
+          const o = document.createElement("option");
+          o.value = String(i.id);
+          o.textContent = i.name;
+          instSelect.appendChild(o);
+        });
+      } catch (e) {
+        console.error("Failed to load instructors", e);
+      }
+    }
+
+    if (dateInput) dateInput.addEventListener("change", refreshInstructors);
+    if (courseSelect) courseSelect.addEventListener("change", refreshInstructors);
+
+    // initial load
+    refreshInstructors();
+  })();
+</script>
+{% endblock %}

@@ -1,27 +1,69 @@
+from decimal import Decimal as D
+from django import forms
 from django.contrib import admin
-from . import models
-@admin.register(models.Business)
-class BusinessAdmin(admin.ModelAdmin):
-    list_display=('name','town','postcode','contact_name','telephone','email')
-@admin.register(models.TrainingLocation)
-class TrainingLocationAdmin(admin.ModelAdmin):
-    list_display=('name','business','town','postcode')
-    list_filter=('business',)
-@admin.register(models.CourseType)
-class CourseTypeAdmin(admin.ModelAdmin):
-    list_display=('name','code','duration_days','default_course_fee','default_instructor_fee','has_written_exam','has_online_exam')
-@admin.register(models.Instructor)
-class InstructorAdmin(admin.ModelAdmin):
-    list_display=('name','email','telephone','user')
+from .models import (
+    Business, TrainingLocation, CourseType,
+    Instructor, Booking, BookingDay, Attendance
+)
+
+class CourseTypeAdminForm(forms.ModelForm):
+    D_CHOICES = [(D("0.5"), "0.5"), (D("1.0"), "1"), (D("2.0"), "2"),
+                 (D("3.0"), "3"), (D("4.0"), "4"), (D("5.0"), "5")]
+    duration_days = forms.ChoiceField(choices=D_CHOICES, label="Duration (days)")
+    def clean_duration_days(self):
+        return D(str(self.cleaned_data["duration_days"]))
+    class Meta:
+        model = CourseType
+        fields = "__all__"
+
 class BookingDayInline(admin.TabularInline):
-    model=models.BookingDay
-    extra=0
-@admin.register(models.Booking)
+    model = BookingDay
+    extra = 0
+    fields = ("date", "start_time", "day_code")
+    readonly_fields = ("day_code",)
+    ordering = ("date",)
+
+@admin.register(CourseType)
+class CourseTypeAdmin(admin.ModelAdmin):
+    form = CourseTypeAdminForm
+    list_display = (
+        "name", "code", "duration_days",
+        "default_course_fee", "default_instructor_fee",
+        "has_exam",
+    )
+    search_fields = ("name", "code")
+
+@admin.register(Business)
+class BusinessAdmin(admin.ModelAdmin):
+    list_display  = ("name", "town", "postcode")
+    search_fields = ("name", "town", "postcode")
+
+@admin.register(TrainingLocation)
+class TrainingLocationAdmin(admin.ModelAdmin):
+    list_display  = ("name", "business", "town", "postcode")
+    list_filter   = ("business",)
+    search_fields = ("name", "business__name", "town", "postcode")
+
+@admin.register(Instructor)
+class InstructorAdmin(admin.ModelAdmin):
+    list_display  = ("name", "email", "user")
+    search_fields = ("name", "email", "user__username")
+
+@admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
-    list_display=('course_reference','course_type','business','training_location','instructor','course_date','start_time')
-    list_filter=('business','course_type','instructor')
-    inlines=[BookingDayInline]
-@admin.register(models.Attendance)
+    list_display  = ("course_date", "course_type", "business", "training_location", "course_reference")
+    list_filter   = ("course_type", "business")
+    search_fields = ("course_reference", "business__name", "training_location__name", "course_type__name")
+    inlines = [BookingDayInline]
+
+@admin.register(BookingDay)
+class BookingDayAdmin(admin.ModelAdmin):
+    list_display  = ("booking", "date", "start_time", "day_code")
+    list_filter   = ("date",)
+    search_fields = ("day_code", "booking__course_reference")
+
+@admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
-    list_display=('delegate_name','delegate_email','booking_day','result','signed_at')
-# superuser-only gate is handled by default (only staff can access admin; mark superuser for full access)
+    list_display  = ("booking_day", "delegate_name", "signed_at")
+    list_filter   = ("booking_day__date",)
+    search_fields = ("delegate_name", "booking_day__day_code")
