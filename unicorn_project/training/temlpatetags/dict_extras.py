@@ -39,3 +39,14 @@ def param_replace(request, **kwargs):
         else:
             params[k] = v
     return params.urlencode()
+
+def split_name(full_name):
+    """
+    Returns (first, last). Very simple split: first token = first; rest = last.
+    """
+    if not full_name:
+        return ("","")
+    parts = str(full_name).strip().split()
+    if len(parts) == 1:
+        return (parts[0], "")
+    return (parts[0], " ".join(parts[1:]))

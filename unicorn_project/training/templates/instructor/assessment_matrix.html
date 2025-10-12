@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% load static dict_extras name_split %}
+
+{% block content %}
+<h3 class="mb-3">Assessments — {{ booking.course_type.name }} <small class="text-muted">Ref: {{ booking.course_reference }}</small></h3>
+
+<form method="post" action="{% url 'instructor_assessment_save' booking.id %}" id="matrix-form">
+  {% csrf_token %}
+
+  <div class="matrix-wrap">
+    <table class="matrix-table" id="assessment-matrix" aria-describedby="assessment help">
+      <thead>
+        <tr>
+          <!-- sticky top-left corner -->
+          <th class="sticky corner">Competency</th>
+
+          {% for d in delegates %}
+            <th class="sticky top rotate" data-col="{{ forloop.counter0 }}">
+              {% with parts=d.name|split_name %}
+                <div class="name-rotator">
+                  <span class="first">{{ parts.0 }}</span>
+                  <span class="last">{{ parts.1 }}</span>
+                </div>
+              {% endwith %}
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for comp in competencies %}
+          <tr>
+            <!-- sticky first column -->
+            <th class="sticky left comp-cell">
+              <div class="comp-code">{{ comp.code|default:forloop.counter }}</div>
+              <div class="comp-name">{{ comp.name }}</div>
+            </th>
+
+            {% for d in delegates %}
+              {% with key=(d.id, comp.id) a=existing.d|get_item:key %}
+              <td class="cell" data-col="{{ forloop.counter0 }}">
+                <!-- hidden value that is actually submitted -->
+                <input type="hidden"
+                       name="level_{{ d.id }}_{{ comp.id }}"
+                       value="{% if a and a.level %}{{ a.level }}{% else %}na{% endif %}"
+                       class="level-input" />
+                <!-- checkbox toggles that hidden value to 'c' / 'na' -->
+                <input type="checkbox"
+                       class="lv-chk"
+                       {% if a and a.level in 'c,e' %}checked{% endif %}
+                       aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
+              </td>
+              {% endwith %}
+            {% endfor %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="{{ delegates|length|add:1 }}">No competencies or delegates found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-primary"><i class="bi bi-save"></i> Save</button>
+    <a class="btn btn-outline-secondary" href="{% url 'instructor_booking_detail' booking.id %}">Back</a>
+  </div>
+</form>
+
+<p id="assessment" class="visually-hidden">
+  Tick a box when the delegate is competent for that competency. A column turns green when all boxes are ticked.
+</p>
+
+<style>
+/* --- layout & scrolling --- */
+.matrix-wrap{
+  max-height: 70vh;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: .5rem;
+  background: #fff;
+}
+
+/* Use a table to get native sticky headers/columns */
+.matrix-table{
+  border-collapse: separate; /* needed for sticky */
+  width: 100%;
+  table-layout: fixed;
+  font-size: 0.95rem;
+}
+
+/* Dimensions */
+.matrix-table th,
+.matrix-table td{
+  border-bottom: 1px solid #eee;
+  border-right: 1px solid #f3f3f3;
+  padding: .5rem;
+  text-align: center;
+  vertical-align: middle;
+  min-width: 56px;
+}
+
+/* Sticky positions */
+.sticky{
+  position: sticky;
+  background: #fff;
+  z-index: 2;
+}
+.sticky.top{ top: 0; z-index: 5; }
+.sticky.left{ left: 0; text-align: left; z-index: 4; }
+.sticky.corner{ top:0; left:0; z-index: 6; }
+
+/* Competency first column */
+.comp-cell{ width: 320px; }
+.comp-code{ font-weight: 600; color: #6c757d; }
+.comp-name{ font-size: .95rem; }
+
+/* Header name rotation (vertical, two lines) */
+.rotate{
+  height: 180px; /* enough room for rotated label */
+  min-width: 56px;
+  padding: 0 .25rem;
+}
+.name-rotator{
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .25rem;
+  transform: rotate(-90deg); /* vertical */
+  white-space: nowrap;
+}
+.name-rotator .first{ font-weight: 600; }
+.name-rotator .last{ color: #6c757d; }
+
+/* Checkbox cell */
+.cell{ position: relative; }
+.cell .lv-chk{
+  width: 18px; height: 18px;
+}
+
+/* Column complete highlight */
+.col-complete{
+  background: #f2fbf4; /* light green */
+}
+th.col-complete{ background: #e9f8ee; }
+
+/* Improve sticky edges visibility */
+thead tr th.sticky{ box-shadow: 0 2px 0 rgba(0,0,0,0.03); }
+tbody th.sticky.left{ box-shadow: 2px 0 0 rgba(0,0,0,0.03); }
+</style>
+
+<script>
+(function(){
+  const table = document.getElementById('assessment-matrix');
+  if(!table) return;
+
+  // Tap every checkbox to keep hidden input level in sync
+  table.querySelectorAll('td.cell').forEach(td => {
+    const chk = td.querySelector('.lv-chk');
+    const hidden = td.querySelector('.level-input');
+    const setVal = () => { hidden.value = chk.checked ? 'c' : 'na'; };
+    chk.addEventListener('change', () => {
+      setVal();
+      updateColumnState(td.dataset.col);
+    });
+    setVal();
+  });
+
+  function updateAllColumns(){
+    const cols = Array.from(table.querySelectorAll('thead th.top')).map(th => th.dataset.col);
+    cols.forEach(updateColumnState);
+  }
+
+  function updateColumnState(colIndex){
+    const selector = `td.cell[data-col="${colIndex}"]`;
+    const cells = table.querySelectorAll(selector);
+    if(!cells.length) return;
+
+    let allChecked = true;
+    cells.forEach(td => {
+      const chk = td.querySelector('.lv-chk');
+      if(!chk.checked){ allChecked = false; }
+      // clear previous color; it will be re-applied via column header/td classes
+      td.classList.remove('col-complete');
+    });
+
+    const header = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
+    if(allChecked){
+      header.classList.add('col-complete');
+      cells.forEach(td => td.classList.add('col-complete'));
+    }else{
+      header.classList.remove('col-complete');
+    }
+  }
+
+  // Initial pass + after form submission attempt (no ajax here)
+  updateAllColumns();
+
+  // Optional: make header/first-col keyboard-friendly
+  table.addEventListener('keydown', (e) => {
+    if(e.key !== ' ' && e.key !== 'Enter') return;
+    const active = document.activeElement;
+    if(active && active.classList.contains('lv-chk')){
+      active.checked = !active.checked;
+      active.dispatchEvent(new Event('change'));
+      e.preventDefault();
+    }
+  });
+})();
+</script>
+{% endblock %}
