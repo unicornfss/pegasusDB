@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Max
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed
 from django.shortcuts import redirect, render, get_object_or_404
@@ -15,9 +15,8 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 
-from .models import Instructor, Booking, BookingDay, DelegateRegister
-from .forms import DelegateRegisterInstructorForm, BookingNotesForm
-
+from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency
+from .forms import DelegateRegisterInstructorForm, BookingNotesForm 
 
 buffer = io.BytesIO()
 c = canvas.Canvas(buffer, pagesize=landscape(A4))
@@ -131,6 +130,54 @@ def _get_user_instructor(user):
         return None
     return Instructor.objects.filter(user=user).first()
 
+def _assessment_context(booking, user):
+    # permissions: staff or assigned instructor
+    if not (user.is_staff or (booking.instructor and getattr(booking.instructor, "user_id", None) == user.id)):
+        raise PermissionError("Not your booking.")
+
+    # --- Delegates: ALL days for this booking (no final-day restriction) ---
+    delegates = list(
+        DelegateRegister.objects
+        .filter(booking_day__booking=booking)
+        .order_by("name", "id")
+    )
+
+    # --- Competencies: all for this course type (no is_active filter) ---
+    competencies = list(
+        CourseCompetency.objects
+        .filter(course_type=booking.course_type)
+        .order_by("sort_order", "name", "id")
+    )
+
+    # --- Existing assessments: (register_id, competency_id) -> object ---
+    existing = {}
+    if delegates and competencies:
+        try:
+            from .models import CompetencyAssessment  # lazy import
+            qs = (
+                CompetencyAssessment.objects
+                .filter(register__in=delegates, course_competency__in=competencies)
+                .select_related("register", "course_competency")
+            )
+            for a in qs:
+                existing[(a.register_id, a.course_competency_id)] = a
+        except Exception:
+            existing = {}
+
+    # Levels (fallback if enum not present)
+    try:
+        from .models import AssessmentLevel
+        levels = AssessmentLevel.choices
+    except Exception:
+        levels = (("na", "Not assessed"), ("c", "Competent"))
+
+    return {
+        "delegates": delegates,
+        "competencies": competencies,
+        "existing": existing,
+        "levels": levels,
+    }
+
 @login_required
 def instructor_booking_detail(request, pk):
     """Instructor course detail with per-day delegate counts and an edit link."""
@@ -173,14 +220,24 @@ def instructor_booking_detail(request, pk):
             "edit_url": redirect("instructor_day_registers", pk=d.id).url,
         })
 
-    return render(request, "instructor/booking_detail.html", {
+    ctx = {
         "title": booking.course_type.name,
         "booking": booking,
         "day_rows": day_rows,
         "back_url": redirect("instructor_bookings").url,
-        "notes_form": notes_form,   # <-- make sure this is present
+        "notes_form": notes_form,
         "has_exam": getattr(booking.course_type, "has_exam", False),
-    })
+    }
+
+    # Add assessment matrix data for the tab
+    try:
+        ctx.update(_assessment_context(booking, request.user))
+    except PermissionError:
+        ctx.update({"delegates": [], "competencies": [], "existing": {}, "levels": []})
+
+    return render(request, "instructor/booking_detail.html", ctx)
+
+
 
 
 
@@ -376,11 +433,16 @@ def instructor_delegate_delete(request, pk: int):
 @login_required
 def instructor_day_registers_pdf(request, pk: int):
     """
-    Generate a simple PDF for a day's register (delegates list), in LANDSCAPE.
+    Register PDF for a single day, in LANDSCAPE, with:
+    - Header: Business, Course reference, Instructor, This day’s date
+    - Footer on every page with Unicorn contact details
+    - Health declaration column (full text per row)
     """
     instr = getattr(request.user, "instructor", None)
     day = get_object_or_404(
-        BookingDay.objects.select_related("booking__course_type", "booking__business", "booking__instructor"),
+        BookingDay.objects.select_related(
+            "booking__course_type", "booking__business", "booking__instructor"
+        ),
         pk=pk
     )
     if not instr or day.booking.instructor_id != instr.id:
@@ -393,75 +455,562 @@ def instructor_day_registers_pdf(request, pk: int):
         .only("name", "date_of_birth", "job_title", "employee_id", "health_status", "notes")
     )
 
-    buffer = io.BytesIO()
+    # --- PDF setup ---
+    import io, textwrap
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
 
-    # --- LANDSCAPE here ---
+    buf = io.BytesIO()
     pagesize = landscape(A4)
-    c = canvas.Canvas(buffer, pagesize=pagesize)
+    c = canvas.Canvas(buf, pagesize=pagesize)
     W, H = pagesize
 
-    # Margins and helpers
-    left = 20 * mm
-    right = W - 20 * mm
-    top = H - 20 * mm
-    line_h = 7 * mm
+    left   = 15*mm
+    right  = W - 15*mm
+    top    = H - 15*mm
+    bottom = 15*mm
 
-    def draw_line(x1, y1, x2, y2):
-        c.line(x1, y1, x2, y2)
+    # Footer (each page)
+    FOOTER_TEXT = "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ: info@unicornsafety.co.uk: 01743 360211"
+    def draw_footer():
+        c.saveState()
+        try:
+            c.setFont("Helvetica", 8)
+            c.setFillGray(0.35)
+            c.drawString(left, bottom - 6*mm, FOOTER_TEXT)
+            c.setFillGray(0)
+        finally:
+            c.restoreState()
 
-    def draw_page_header(cont=False):
-        y = top
+    # Helpers
+    def fmt_date(d):
+        # Windows-safe date like '21 Oct 2025'
+        return f"{d.day} {d.strftime('%b %Y')}"
+
+    # Column layout (mm -> points via units)
+    # Name | DOB | Job title | Emp ID | Health declaration
+    col_name   = 62*mm
+    col_dob    = 24*mm
+    col_job    = 46*mm
+    col_emp    = 22*mm
+    col_health = (right - left) - (col_name + col_dob + col_job + col_emp)
+
+    row_min_h   = 12*mm          # minimum row height
+    line_gap    = 4              # points between wrapped lines
+    body_fs     = 9
+    small_fs    = 8
+
+    def wrap_to_width(text, font="Helvetica", size=9, max_width=col_health-4*mm):
+        if not text:
+            return [""]
+        # quick word-wrap using textwrap; then ensure width via a second pass
+        c.setFont(font, size)
+        # rough char estimate to seed wrap width
+        approx_chars = max(12, int(max_width / (size * 0.5)))
+        lines = []
+        for para in str(text).splitlines():
+            for chunk in textwrap.wrap(para, width=approx_chars):
+                # final hard trim if still too wide
+                while c.stringWidth(chunk, font, size) > max_width and len(chunk) > 1:
+                    chunk = chunk[:-1]
+                lines.append(chunk)
+        return lines or [""]
+
+    # Header block
+    y = top
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(left, y, f"{day.booking.course_type.name} — Daily Register")
+    y -= 6*mm
+    c.setFont("Helvetica", 10)
+    c.drawString(left, y, f"Business: {day.booking.business.name}")
+    y -= 5*mm
+    c.drawString(left, y, f"Course reference: {day.booking.course_reference or '—'}")
+    y -= 5*mm
+    c.drawString(left, y, f"Instructor: {day.booking.instructor.name if day.booking.instructor else '—'}")
+    y -= 5*mm
+    c.drawString(left, y, f"Date: {fmt_date(day.date)}")
+    y -= 8*mm
+
+    def draw_header_row():
+        nonlocal y
+        # Header band
+        c.setFillGray(0.95)
+        c.rect(left, y-10*mm, (right-left), 10*mm, stroke=0, fill=1)
+        c.setFillGray(0)
+        c.setFont("Helvetica-Bold", 9)
+        x = left
+        def cell(w, label):
+            c.rect(x, y-10*mm, w, 10*mm, stroke=1, fill=0)
+            c.drawCentredString(x + w/2, y-10*mm + 3.5*mm, label)
+        cell(col_name,   "Name")
+        x += col_name
+        cell(col_dob,    "DOB")
+        x += col_dob
+        cell(col_job,    "Job title")
+        x += col_job
+        cell(col_emp,    "Emp. ID")
+        x += col_emp
+        cell(col_health, "Health declaration")
+        y -= 10*mm
+        c.setFont("Helvetica", body_fs)
+
+    def new_page(continued=False):
+        nonlocal y
+        # footer + new page
+        draw_footer()
+        c.showPage()
+        y = H - 15*mm
+        # repeat header block
         c.setFont("Helvetica-Bold", 14)
-        title = f"{day.booking.course_type.name} — Register"
-        if cont:
+        title = f"{day.booking.course_type.name} — Daily Register"
+        if continued:
             title += " (cont.)"
         c.drawString(left, y, title)
-        y -= 10 * mm
+        y -= 6*mm
         c.setFont("Helvetica", 10)
-        c.drawString(left, y, f"Date: {day.date.strftime('%d %b %Y')}")
-        y -= 5 * mm
         c.drawString(left, y, f"Business: {day.booking.business.name}")
-        y -= 5 * mm
-        c.drawString(left, y, f"Instructor: {day.booking.instructor.name}")
-        y -= 8 * mm
-        draw_line(left, y, right, y)
-        y -= 5 * mm
-        # Column headers
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(left, y, "Name")
-        c.drawString(left + 60*mm, y, "DOB")
-        c.drawString(left + 85*mm, y, "Job title")
-        c.drawString(left + 135*mm, y, "Emp. ID")
-        y -= 5 * mm
-        draw_line(left, y, right, y)
-        y -= 3 * mm
-        c.setFont("Helvetica", 10)
-        return y
+        y -= 5*mm
+        c.drawString(left, y, f"Course reference: {day.booking.course_reference or '—'}")
+        y -= 5*mm
+        c.drawString(left, y, f"Instructor: {day.booking.instructor.name if day.booking.instructor else '—'}")
+        y -= 5*mm
+        c.drawString(left, y, f"Date: {fmt_date(day.date)}")
+        y -= 8*mm
+        draw_header_row()
 
-    y = draw_page_header(cont=False)
+    # first header row
+    draw_header_row()
 
-    for r in regs:
-        # If near bottom, new page + header again
-        if y < 30 * mm:
-            c.showPage()
-            y = draw_page_header(cont=True)
+    # Rows
+    for idx, r in enumerate(regs, start=1):
+        # compute wrapped lines for health declaration
+        health_text = r.get_health_status_display() if hasattr(r, "get_health_status_display") else ""
+        health_lines = wrap_to_width(health_text, size=body_fs, max_width=col_health - 4*mm)
+        # job title might need a tiny wrap too
+        job_lines = wrap_to_width(r.job_title or "", size=body_fs, max_width=col_job - 4*mm)
+        line_height = body_fs + line_gap
+        needed_h = max(row_min_h, (max(len(health_lines), len(job_lines)) * line_height) + 6)  # + padding
 
-        dob = r.date_of_birth.strftime("%d/%m/%Y") if r.date_of_birth else "—"
-        c.drawString(left, y, r.name or "—")
-        c.drawString(left + 60*mm, y, dob)
-        c.drawString(left + 85*mm, y, (r.job_title or "—")[:40])
-        c.drawString(left + 135*mm, y, r.employee_id or "—")
-        y -= line_h
+        # page break guard
+        if y - needed_h < bottom + 18*mm:
+            new_page(continued=True)
 
-        if r.notes:
-            txt = f"Notes: {r.notes}"
-            c.setFont("Helvetica-Oblique", 9)
-            c.drawString(left + 10*mm, y, txt[:120])  # light wrapping
-            c.setFont("Helvetica", 10)
-            y -= 5 * mm
+        # zebra band
+        if idx % 2 == 0:
+            c.setFillGray(0.90)
+            c.rect(left, y-needed_h, (right-left), needed_h, stroke=0, fill=1)
+            c.setFillGray(0)
 
-    # IMPORTANT: do NOT call c.showPage() here, or you'll get a blank last page.
+        # draw cells & content
+        x = left
+        # Name
+        c.rect(x, y-needed_h, col_name, needed_h, stroke=1, fill=0)
+        c.setFont("Helvetica", body_fs)
+        c.drawString(x + 2*mm, y - needed_h + 3 + line_height*(len(job_lines) > 1 and 0 or 0), r.name or "—")
+        x += col_name
+
+        # DOB
+        c.rect(x, y-needed_h, col_dob, needed_h, stroke=1, fill=0)
+        c.drawString(x + 2*mm, y - needed_h + 3, r.date_of_birth.strftime("%d/%m/%Y") if r.date_of_birth else "—")
+        x += col_dob
+
+        # Job title (wrapped)
+        c.rect(x, y-needed_h, col_job, needed_h, stroke=1, fill=0)
+        yy = y - 4 - body_fs
+        for line in job_lines[:4]:
+            c.drawString(x + 2*mm, yy, line)
+            yy -= line_height
+        x += col_job
+
+        # Employee ID
+        c.rect(x, y-needed_h, col_emp, needed_h, stroke=1, fill=0)
+        c.drawString(x + 2*mm, y - needed_h + 3, r.employee_id or "—")
+        x += col_emp
+
+        # Health declaration (wrapped)
+        c.rect(x, y-needed_h, col_health, needed_h, stroke=1, fill=0)
+        yy = y - 4 - body_fs
+        for line in health_lines[:6]:
+            c.drawString(x + 2*mm, yy, line)
+            yy -= line_height
+
+        y -= needed_h
+
+    # Legend (optional – keep concise)
+    y -= 6*mm
+    c.setFont("Helvetica", small_fs)
+    c.drawString(left, y, "Health declaration text shown as recorded by the delegate on the day.")
+
+    # last-page footer and save
+    draw_footer()
     c.save()
-    buffer.seek(0)
+    buf.seek(0)
     filename = f"register_{day.date.strftime('%Y%m%d')}.pdf"
-    return FileResponse(buffer, as_attachment=True, filename=filename)
+    return FileResponse(buf, as_attachment=True, filename=filename)
+
+
+@login_required
+def instructor_assessment_matrix(request, pk):
+    """
+    Placeholder view for the assessment matrix.
+    Loads the booking and renders the matrix template with empty data.
+    We'll wire delegates/competencies next.
+    """
+    booking = get_object_or_404(Booking, pk=pk)
+
+    # Only assigned instructor or staff can view
+    if not (request.user.is_staff or (booking.instructor and getattr(booking.instructor, "user_id", None) == request.user.id)):
+        return HttpResponseForbidden("You are not assigned to this booking.")
+
+    context = {
+        "booking": booking,
+        "delegates": [],        # TODO: populate from your DelegateRegister(s)
+        "competencies": [],     # TODO: populate from CourseCompetency for booking.course_type
+        "existing": {},         # TODO: map of (register_id, competency_id) -> assessment obj
+    }
+    return render(request, "instructor/assessment_matrix.html", context)
+
+@login_required
+@transaction.atomic
+def instructor_assessment_save(request, pk):
+    booking = get_object_or_404(Booking, pk=pk)
+    instr = getattr(request.user, "instructor", None)
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+        return HttpResponseForbidden("You are not assigned to this booking.")
+
+    if request.method != "POST":
+        return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
+
+    # guard: only registers for this booking; only competencies for this course type
+    delegates = list(DelegateRegister.objects.filter(booking_day__booking=booking).only("id", "outcome"))
+    comps = list(CourseCompetency.objects.filter(course_type=booking.course_type).only("id"))
+    reg_map = {str(r.id): r for r in delegates}
+    comp_ids = [str(c.id) for c in comps]
+
+    # models
+    from .models import CompetencyAssessment, AssessmentLevel, CourseOutcome
+    valid_levels = {c[0] for c in AssessmentLevel.choices}
+    valid_outcomes = {c[0] for c in CourseOutcome.choices}
+
+    created = updated = 0
+
+    # --- Save per-cell levels ---
+    for key, val in request.POST.items():
+        if not key.startswith("level_"):
+            continue
+        try:
+            _, rid, cid = key.split("_", 2)
+        except ValueError:
+            continue
+        if rid not in reg_map or cid not in comp_ids:
+            continue
+
+        level = val if val in valid_levels else "na"
+        obj, was_created = CompetencyAssessment.objects.get_or_create(
+            register_id=reg_map[rid].id,
+            course_competency_id=cid,
+            defaults={"level": level, "assessed_by_id": booking.instructor_id},
+        )
+        if was_created:
+            created += 1
+        else:
+            if obj.level != level or obj.assessed_by_id != booking.instructor_id:
+                obj.level = level
+                obj.assessed_by_id = booking.instructor_id
+                obj.save(update_fields=["level", "assessed_by", "assessed_at"])
+                updated += 1
+
+    # --- Save per-delegate outcome, enforcing PASS if all comps competent ---
+    for rid, reg in reg_map.items():
+        posted_outcome = request.POST.get(f"outcome_{rid}", "pending")
+        if posted_outcome not in valid_outcomes:
+            posted_outcome = "pending"
+
+        all_competent = True
+        for cid in comp_ids:
+            if request.POST.get(f"level_{rid}_{cid}", "na") not in {"c", "e"}:
+                all_competent = False
+                break
+        final_outcome = "pass" if all_competent else posted_outcome
+
+        if getattr(reg, "outcome", None) != final_outcome:
+            reg.outcome = final_outcome
+            reg.save(update_fields=["outcome"])
+
+    messages.success(request, f"Saved {created} new and {updated} updated assessment entr{'y' if (created+updated)==1 else 'ies'}.")
+    return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
+
+@login_required
+def instructor_assessment_pdf(request, pk):
+    """
+    Export the assessment matrix (landscape PDF) with:
+    - Business name, course reference, instructor, full set of course dates
+    - Dynamic header height / font size so rotated names are readable
+    - Darker zebra striping for rows
+    - Footer on every page with Unicorn contact details
+    Blocks export if any delegate outcome is 'pending'.
+    """
+    instr = getattr(request.user, "instructor", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
+        pk=pk
+    )
+    if not instr or booking.instructor_id != instr.id:
+        messages.error(request, "You do not have access to this booking.")
+        return redirect("instructor_bookings")
+
+    # Delegates & competencies
+    delegates = list(
+        DelegateRegister.objects
+        .filter(booking_day__booking=booking)
+        .order_by("name", "id")
+        .only("id", "name", "outcome")
+    )
+    competencies = list(
+        CourseCompetency.objects
+        .filter(course_type=booking.course_type, is_active=True)
+        .order_by("sort_order", "name", "id")
+        .only("id", "name", "code", "sort_order")
+    )
+
+    # Guard: no export if any Pending
+    any_pending = any((d.outcome or "pending") == "pending" for d in delegates)
+    if any_pending:
+        messages.error(request, "Cannot export PDF while any delegate is Pending. Please set each delegate to Pass, Fail, or DNF first.")
+        return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
+
+    # Assessment map
+    from .models import CompetencyAssessment, BookingDay
+    assess_map = {}
+    if delegates and competencies:
+        for rid, cid, lvl in (
+            CompetencyAssessment.objects
+            .filter(register__in=delegates, course_competency__in=competencies)
+            .values_list("register_id", "course_competency_id", "level")
+        ):
+            assess_map[(rid, cid)] = lvl
+
+    # Course dates (all days)
+    day_dates = list(
+        BookingDay.objects.filter(booking=booking).order_by("date").values_list("date", flat=True)
+    )
+
+    # Windows-safe date formatting
+    def format_course_dates(dates):
+        if not dates:
+            return "—"
+        ds = list(dates)
+        def d_full(d): return f"{d.day} {d.strftime('%b %Y')}"
+        def d_mon(d):  return f"{d.day} {d.strftime('%b')}"
+        def d_day(d):  return f"{d.day}"
+        consecutive = len(ds) <= 1 or all((ds[i+1] - ds[i]).days in (0, 1) for i in range(len(ds)-1))
+        if len(ds) >= 2 and consecutive:
+            first, last = ds[0], ds[-1]
+            if first.year == last.year:
+                if first.month == last.month:
+                    return f"{d_day(first)}–{d_full(last)}"
+                return f"{d_mon(first)}–{d_full(last)}"
+            return f"{d_full(first)}–{d_full(last)}"
+        parts = [d_full(d) for d in ds[:6]]
+        if len(ds) > 6:
+            parts.append("…")
+        return ", ".join(parts)
+
+    # --- PDF ---
+    import io
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.units import mm
+
+    buf = io.BytesIO()
+    pagesize = landscape(A4)
+    c = canvas.Canvas(buf, pagesize=pagesize)
+    W, H = pagesize
+
+    left   = 15*mm
+    right  = W - 15*mm
+    top    = H - 15*mm
+    bottom = 15*mm
+
+    # Footer helper (draw on the current page)
+    FOOTER_TEXT = "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ: info@unicornsafety.co.uk: 01743 360211"
+    def draw_footer():
+        c.saveState()
+        try:
+            c.setFont("Helvetica", 8)
+            c.setFillGray(0.35)
+            c.drawString(left, bottom - 6*mm, FOOTER_TEXT)
+            c.setFillGray(0)
+        finally:
+            c.restoreState()
+
+    # Base sizing
+    comp_w = 85*mm
+    ncols  = max(1, len(delegates))
+
+    # Dynamic header height + font for readability
+    if ncols <= 8:
+        header_h = 20*mm
+        name_fs  = 8
+        del_w_min, del_w_max = 18*mm, 28*mm
+    elif ncols <= 12:
+        header_h = 18*mm
+        name_fs  = 7
+        del_w_min, del_w_max = 16*mm, 26*mm
+    else:
+        header_h = 16*mm
+        name_fs  = 6
+        del_w_min, del_w_max = 14*mm, 24*mm
+
+    del_w   = max(del_w_min, (right - left - comp_w) / ncols)
+    del_w   = min(del_w, del_w_max)
+    table_w = comp_w + del_w * ncols
+    row_h   = 7*mm
+    name_max = 18  # chars per line in header (simple trim)
+
+    # Header block (business name above course reference)
+    y = top
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(left, y, f"{booking.course_type.name} — Assessment Matrix")
+    y -= 6*mm
+    c.setFont("Helvetica", 10)
+    c.drawString(left, y, f"Business: {booking.business.name}")
+    y -= 5*mm
+    c.drawString(left, y, f"Course reference: {booking.course_reference or '—'}")
+    y -= 5*mm
+    c.drawString(left, y, f"Instructor: {booking.instructor.name if booking.instructor else '—'}")
+    y -= 5*mm
+    c.drawString(left, y, f"Course dates: {format_course_dates(day_dates)}")
+    y -= 7*mm
+
+    def draw_header_row():
+        """Draw the competency/delegate header row at current y."""
+        nonlocal y
+        # Light fill for entire header band
+        c.setFillGray(0.95)
+        c.rect(left, y - header_h, table_w, header_h, stroke=0, fill=1)
+        c.setFillGray(0)
+
+        c.setFont("Helvetica-Bold", 9)
+        # Competency header cell
+        c.rect(left, y - header_h, comp_w, header_h, stroke=1, fill=0)
+        c.drawCentredString(left + comp_w/2, y - header_h + 4.5*mm, "Competency")
+
+        # Delegate header cells (rotated names)
+        x = left + comp_w
+        for d in delegates:
+            c.rect(x, y - header_h, del_w, header_h, stroke=1, fill=0)
+            c.saveState()
+            try:
+                c.translate(x + del_w/2, y - header_h/2)
+                c.rotate(90)
+                c.setFont("Helvetica-Bold", name_fs)  # bold helps legibility
+                parts = (d.name or "").split()
+                first = (parts[0] if parts else "")[:name_max]
+                last  = (" ".join(parts[1:]) if len(parts) > 1 else "")[:name_max]
+                c.drawCentredString(0, -3.2*mm, first)
+                if last:
+                    c.drawCentredString(0, +3.2*mm, last)
+            finally:
+                c.restoreState()
+            x += del_w
+
+        y -= header_h
+        c.setFont("Helvetica", 9)
+
+    def new_page(continued=False):
+        """End current page with footer, start a new page, redraw header row."""
+        nonlocal y
+        # Finish previous page with footer
+        draw_footer()
+        c.showPage()
+        # New page header
+        y = H - 15*mm
+        c.setFont("Helvetica-Bold", 14)
+        title = f"{booking.course_type.name} — Assessment Matrix"
+        if continued:
+            title += " (cont.)"
+        c.drawString(left, y, title)
+        y -= 6*mm
+        c.setFont("Helvetica", 10)
+        c.drawString(left, y, f"Business: {booking.business.name}")
+        y -= 5*mm
+        c.drawString(left, y, f"Course reference: {booking.course_reference or '—'}")
+        y -= 5*mm
+        c.drawString(left, y, f"Instructor: {booking.instructor.name if booking.instructor else '—'}")
+        y -= 5*mm
+        c.drawString(left, y, f"Course dates: {format_course_dates(day_dates)}")
+        y -= 7*mm
+        draw_header_row()
+
+    # First header
+    draw_header_row()
+
+    # Body with darker zebra striping
+    check_mark = "✔"
+    cross_mark = "—"
+
+    for idx, comp in enumerate(competencies, start=1):
+        if y - row_h < bottom + 25*mm:
+            new_page(continued=True)
+
+        # darker zebra band (behind grid)
+        if idx % 2 == 0:
+            c.setFillGray(0.86)
+            c.rect(left, y - row_h, table_w, row_h, stroke=0, fill=1)
+            c.setFillGray(0)
+
+        # competency name cell
+        c.rect(left, y - row_h, comp_w, row_h, stroke=1, fill=0)
+        c.setFont("Helvetica", 9)
+        c.drawString(left + 2*mm, y - row_h + 2.2*mm, (comp.name or "")[:80])
+
+        # per-delegate cells
+        x = left + comp_w
+        for d in delegates:
+            c.rect(x, y - row_h, del_w, row_h, stroke=1, fill=0)
+            lvl = assess_map.get((d.id, comp.id))
+            ok = (lvl in ("c", "e"))
+            c.setFont("Helvetica-Bold", 10 if ok else 9)
+            c.drawCentredString(x + del_w/2, y - row_h + 2*mm, check_mark if ok else cross_mark)
+            x += del_w
+
+        y -= row_h
+
+    # Outcome row
+    if y - 9*mm < bottom + 15*mm:
+        new_page(continued=True)
+    c.setFont("Helvetica-Bold", 9)
+    c.setFillGray(0.94)
+    c.rect(left, y - 9*mm, table_w, 9*mm, stroke=0, fill=1)
+    c.setFillGray(0)
+    c.rect(left, y - 9*mm, comp_w, 9*mm, stroke=1, fill=0)
+    c.drawString(left + 2*mm, y - 7*mm, "Outcome")
+    x = left + comp_w
+    for d in delegates:
+        c.rect(x, y - 9*mm, del_w, 9*mm, stroke=1, fill=0)
+        status = (d.outcome or "").upper()
+        colour = {
+            "PASS": (0, 130/255, 84/255),
+            "FAIL": (180/255, 0, 0),
+            "DNF":  (170/255, 120/255, 0),
+        }.get(status, (0, 0, 0))
+        c.setFillColorRGB(*colour)
+        c.drawCentredString(x + del_w/2, y - 7*mm, status or "—")
+        c.setFillColorRGB(0, 0, 0)
+        x += del_w
+    y -= 12*mm
+
+    # Legend / footer (last page)
+    c.setFont("Helvetica", 8)
+    c.drawString(left, y, f"Legend: {check_mark} competent / — competency not demonstrated; Outcome colours: Pass (green), Fail (red), DNF (amber).")
+    y -= 6*mm
+    c.drawString(left, y, f"Business: {booking.business.name}")
+
+    # Footer on last page, save
+    draw_footer()
+    c.save()
+    buf.seek(0)
+    filename = f"assessments_{booking.course_reference or booking.pk}.pdf"
+    return FileResponse(buf, as_attachment=True, filename=filename)

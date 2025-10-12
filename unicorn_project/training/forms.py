@@ -472,6 +472,6 @@ class BookingNotesForm(forms.ModelForm):
         fields = ["booking_notes"]
         widgets = {
             "booking_notes": forms.Textarea(
-                attrs={"rows": 4, "placeholder": "Notes about this course (visible to instructors and admin)."}
+                attrs={"rows": 4, "placeholder": "Notes about this course (visible to instructor and admin)."}
             ),
         }

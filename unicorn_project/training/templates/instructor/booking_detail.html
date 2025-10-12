@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load dict_extras %}
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
@@ -180,8 +181,9 @@
 
   <!-- Pane: Assessments (placeholder content for now) -->
   <div class="tab-pane fade" id="assessments-pane" role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
-    <div class="text-muted">Assessments will go here.</div>
+    {% include "instructor/_assessment_matrix_inner.html" %}
   </div>
+
 
   {% if has_exam %}
   <!-- Pane: Exams (only when course type has exams) -->
@@ -198,4 +200,26 @@
 
 
 <a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const hash = window.location.hash;
+  if (!hash) return;
+
+  // Accept either the tab button id (#assessments-tab) or the pane id (#assessments-pane)
+  const tabTrigger = document.querySelector('button[data-bs-target="' + hash + '"]')
+                    || document.querySelector(hash + '[data-bs-toggle="tab"]')
+                    || document.getElementById('assessments-tab');
+
+  if (tabTrigger) {
+    const tab = new bootstrap.Tab(tabTrigger);
+    tab.show();
+    // ensure the content pane is scrolled to top
+    const pane = document.querySelector('#assessments-pane');
+    if (pane) pane.scrollTop = 0;
+  }
+});
+</script>
+
+
 {% endblock %}

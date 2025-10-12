@@ -13,6 +13,14 @@ def get_item(mapping, key):
     except Exception:
         return ""
 
+# Alias so templates can use {{ mydict|get_item:key }} as well.
+@register.filter(name="get_item")
+def get_item_alias(mapping, key):
+    try:
+        return mapping.get(key, "")
+    except Exception:
+        return ""
+
 @register.filter(name="dot")
 def dot(obj, attr):
     """
@@ -40,6 +48,7 @@ def param_replace(request, **kwargs):
             params[k] = v
     return params.urlencode()
 
+@register.filter(name="split_name")
 def split_name(full_name):
     """
     Returns (first, last). Very simple split: first token = first; rest = last.
@@ -50,3 +59,9 @@ def split_name(full_name):
     if len(parts) == 1:
         return (parts[0], "")
     return (parts[0], " ".join(parts[1:]))
+
+@register.filter(name="pair")
+def pair(a, b):
+    """Return a 2-tuple so templates can do: key=d.id|pair:comp.id"""
+    return (a, b)
+

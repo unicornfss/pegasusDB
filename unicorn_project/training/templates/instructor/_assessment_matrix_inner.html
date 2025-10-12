@@ -1,0 +1,357 @@
+{% load dict_extras %}
+
+{% if delegates and competencies %}
+<form method="post" action="{% url 'instructor_assessment_save' booking.id %}" id="matrix-form">
+  {% csrf_token %}
+
+  <div class="matrix-wrap">
+    <table class="matrix-table" id="assessment-matrix" aria-describedby="assessment help">
+      <colgroup>
+        <col class="col-comp">
+        {% for _ in delegates %}<col class="col-delegate">{% endfor %}
+      </colgroup>
+
+      <thead>
+        <tr>
+          <th class="sticky corner">Competency</th>
+          {% for d in delegates %}
+            <th class="sticky top rotate" data-col="{{ forloop.counter0 }}" data-delegate-id="{{ d.id }}">
+              {% with parts=d.name|split_name %}
+                <div class="name-rotator">
+                  <span class="first">{{ parts.0 }}</span>
+                  <span class="last">{{ parts.1 }}</span>
+                </div>
+              {% endwith %}
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for comp in competencies %}
+          <tr class="{% cycle 'row-odd' 'row-even' %}">
+            <th class="sticky left comp-cell">
+              <div class="comp-code">{{ forloop.counter }}</div>
+              <div class="comp-name">{{ comp.name }}</div>
+            </th>
+
+            {% for d in delegates %}
+              {% with key=d.id|pair:comp.id %}
+                {% with a=existing|get_item:key %}
+                <td class="cell" data-col="{{ forloop.counter0 }}">
+                  <input type="hidden"
+                         name="level_{{ d.id }}_{{ comp.id }}"
+                         value="{% if a and a.level %}{{ a.level }}{% else %}na{% endif %}"
+                         class="level-input" />
+                  <input type="checkbox"
+                         class="lv-chk"
+                         {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
+                         aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
+                </td>
+                {% endwith %}
+              {% endwith %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+
+        <!-- Outcome row -->
+        <tr class="outcome-row">
+          <th class="sticky left comp-cell outcome-label">
+            <div class="comp-code">—</div>
+            <div class="comp-name"><strong>Outcome</strong></div>
+          </th>
+
+          {% for d in delegates %}
+            <td class="outcome-cell" data-col="{{ forloop.counter0 }}">
+              <!-- hidden value submitted -->
+              <input type="hidden" name="outcome_{{ d.id }}" class="outcome-input" value="{{ d.outcome|default:'pending' }}" />
+              <!-- visible selector (no 'Pass' option) -->
+              <select class="form-select form-select-sm outcome-select" aria-label="Outcome for {{ d.name }}">
+                <option value="pending" {% if d.outcome == 'pending' or not d.outcome %}selected{% endif %}>Pending</option>
+                <option value="dnf"     {% if d.outcome == 'dnf' %}selected{% endif %}>DNF</option>
+                <option value="fail"    {% if d.outcome == 'fail' %}selected{% endif %}>Fail</option>
+              </select>
+              <!-- shown when auto-pass -->
+              <span class="badge bg-success-subtle text-success-emphasis outcome-badge d-none">Pass</span>
+            </td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-primary btn-sm" type="submit">Save</button>
+
+    <a href="{% url 'instructor_assessment_pdf' booking.id %}"
+       class="btn btn-outline-secondary btn-sm disabled"
+       id="export-pdf-btn"
+       aria-disabled="true"
+       tabindex="-1">
+      Export PDF
+    </a>
+  </div>
+
+</form>
+
+<p id="assessment" class="visually-hidden">
+  Tick a box when the delegate is competent for that competency. A column auto-sets to “Pass” when every box is ticked.
+</p>
+
+<style>
+/* === container === */
+.matrix-wrap {
+  display: inline-block;
+  max-width: 120%;
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--bs-border-color, #dee2e6);
+  border-radius: .5rem;
+  background: #fff;
+}
+
+/* === table === */
+.matrix-table {
+  --delegate-col-width: 110px;   /* adjust if needed */
+  --zebra-even:  #d1deec;        /* darker zebra */
+  --zebra-odd:   #ffffff;
+  --zebra-hover: #c4d4ea;        /* darker hover */
+
+  border-collapse: separate;
+  width: auto;                   /* only as wide as needed */
+  table-layout: fixed;
+  font-size: .9rem;
+  border-spacing: 0;
+}
+
+/* col widths */
+.col-comp { width: 240px; }
+.col-delegate { width: var(--delegate-col-width); }
+
+/* base cells */
+.matrix-table th,
+.matrix-table td {
+  border-bottom: 1px solid #dfe3e7;
+  border-right: 1px solid #edf0f3;
+  padding: .42rem;
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* zebra striping */
+.matrix-table tbody tr.row-odd  { background: var(--zebra-odd); }
+.matrix-table tbody tr.row-even { background: var(--zebra-even); }
+.matrix-table tbody tr:hover    { background: var(--zebra-hover); }
+
+/* Outcome row style */
+.matrix-table tr.outcome-row th.outcome-label {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  background: #fff;
+  box-shadow: 1px 0 0 rgba(0,0,0,.05);
+}
+.matrix-table tr.outcome-row .outcome-cell {
+  background: #f8f9fb;
+  border-top: 2px solid #e3e7ec;
+}
+
+/* Sticky (inherit zebra for left column; header stays white) */
+.sticky { position: sticky; z-index: 2; background: transparent; }
+.sticky.top { top: 0; z-index: 5; background: #fff; }
+.sticky.left { left: 0; text-align: left; z-index: 4; background: inherit; }
+.sticky.corner { top: 0; left: 0; z-index: 6; background: #fff; }
+
+/* first column content */
+.comp-code { font-weight: 600; color: #6c757d; font-size: .85rem; }
+.comp-name { font-size: .9rem; line-height: 1.15; }
+
+/* header names (vertical) */
+.rotate { height: 92px; padding: 0 .15rem; }
+.name-rotator {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .1rem;
+  transform: rotate(-90deg);
+  transform-origin: center;
+  white-space: nowrap;
+}
+.name-rotator .first { font-weight: 600; }
+.name-rotator .last  { color: #6c757d; font-size: .9em; }
+
+/* checkboxes */
+.cell .lv-chk { width: 16px; height: 16px; }
+
+/* === Column outcome overlays ===
+   We overlay colors with a giant inset box-shadow so row zebras still show subtly underneath.
+   We vary shade by odd/even parity:
+   - DNF  : amber (odd lighter, even slightly darker)
+   - FAIL : red   (odd lighter, even slightly darker)
+   - PASS : solid green background (full override)
+   - PENDING: no overlay (just zebra rows)
+*/
+td.cell.dnf.is-odd,      td.outcome-cell.dnf.is-odd,      th.top.dnf.is-odd      { box-shadow: inset 0 0 0 9999px rgba(255, 200, 0, 0.20); }
+td.cell.dnf.is-even,     td.outcome-cell.dnf.is-even,     th.top.dnf.is-even     { box-shadow: inset 0 0 0 9999px rgba(255, 185, 0, 0.28); }
+
+td.cell.fail.is-odd,     td.outcome-cell.fail.is-odd,     th.top.fail.is-odd     { box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.18); }
+td.cell.fail.is-even,    td.outcome-cell.fail.is-even,    th.top.fail.is-even    { box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.28); }
+
+/* PASS: full background override (keeps green consistent) */
+td.cell.pass,            td.outcome-cell.pass             { background: #e6f7ea !important; box-shadow: none !important; }
+th.top.pass                                          { background: #def3e6 !important; box-shadow: none !important; }
+
+/* subtle sticky shadows */
+thead tr th.sticky { box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
+
+/* outcome select / badge */
+.outcome-cell { position: relative; }
+.outcome-badge { display: inline-block; }
+.d-none { display: none !important; }
+</style>
+
+<script>
+(function(){
+  const table = document.getElementById('assessment-matrix');
+  if(!table) return;
+
+  const exportBtn = document.getElementById('export-pdf-btn');
+
+  // Tag column parity once (odd/even) for header, cells, and outcome cells
+  function tagParity(){
+    table.querySelectorAll('thead th.top').forEach(th => {
+      const idx = parseInt(th.dataset.col, 10);
+      th.classList.toggle('is-even', idx % 2 === 0);
+      th.classList.toggle('is-odd',  idx % 2 === 1);
+    });
+    table.querySelectorAll('td.cell, td.outcome-cell').forEach(td => {
+      const idx = parseInt(td.dataset.col, 10);
+      td.classList.toggle('is-even', idx % 2 === 0);
+      td.classList.toggle('is-odd',  idx % 2 === 1);
+    });
+  }
+
+  // Enable/disable export button based on outcomes (no "pending" allowed)
+  function refreshExportState(){
+    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
+    const allDecided = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
+    if (!exportBtn) return;
+    if (allDecided) {
+      exportBtn.classList.remove('disabled');
+      exportBtn.removeAttribute('aria-disabled');
+      exportBtn.removeAttribute('tabindex');
+    } else {
+      exportBtn.classList.add('disabled');
+      exportBtn.setAttribute('aria-disabled','true');
+      exportBtn.setAttribute('tabindex','-1');
+    }
+  }
+
+  // Set visual outcome & hidden input; also handle pass badge/select visibility
+  function applyOutcomeClasses(colIndex, outcome){
+    const header = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
+    const cells  = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
+    const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
+    const outSel = outTd?.querySelector('.outcome-select');
+    const outInp = outTd?.querySelector('.outcome-input');
+    const badge  = outTd?.querySelector('.outcome-badge');
+
+    // Clear previous outcome classes/overlays
+    [header, ...cells, outTd].forEach(el => {
+      if(!el) return;
+      el.classList.remove('dnf','fail','pass');
+      el.style.boxShadow = '';
+    });
+
+    // UI: pass badge vs select
+    if (badge && outSel) {
+      if (outcome === 'pass') {
+        badge.classList.remove('d-none');
+        outSel.classList.add('d-none');
+        outSel.disabled = true;
+      } else {
+        badge.classList.add('d-none');
+        outSel.classList.remove('d-none');
+        outSel.disabled = false;
+        outSel.value = ['pending','dnf','fail'].includes(outcome) ? outcome : 'pending';
+      }
+    }
+
+    if (outInp) outInp.value = outcome;
+
+    // Pending: no overlay at all (keep zebra), but still refresh export state
+    if (outcome === 'pending') { refreshExportState(); return; }
+
+    // Add overlay classes for DNF / FAIL; solid override for PASS
+    if (outcome === 'dnf') {
+      header?.classList.add('dnf');
+      outTd?.classList.add('dnf');
+      cells.forEach(td => td.classList.add('dnf'));
+    } else if (outcome === 'fail') {
+      header?.classList.add('fail');
+      outTd?.classList.add('fail');
+      cells.forEach(td => td.classList.add('fail'));
+    } else if (outcome === 'pass') {
+      header?.classList.add('pass');
+      outTd?.classList.add('pass');
+      cells.forEach(td => td.classList.add('pass'));
+    }
+
+    refreshExportState();
+  }
+
+  // Compute outcome from checkboxes + selector
+  function updateColumnState(colIndex){
+    const cells = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
+    if(!cells.length) return;
+
+    // All checked?
+    let allChecked = true;
+    cells.forEach(td => { if(!td.querySelector('.lv-chk').checked) allChecked = false; });
+
+    const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
+    const outSel = outTd?.querySelector('.outcome-select');
+    const manual = outSel ? outSel.value : 'pending';
+
+    // Rules:
+    // - All checked => PASS (not selectable)
+    // - Else manual DNF / FAIL if chosen
+    // - Else PENDING (no column overlay)
+    const outcome = allChecked ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
+
+    applyOutcomeClasses(colIndex, outcome);
+
+    // also keep hidden level inputs synced
+    cells.forEach(td => {
+      const chk = td.querySelector('.lv-chk');
+      const hidden = td.querySelector('.level-input');
+      if (hidden) hidden.value = chk.checked ? 'c' : 'na';
+    });
+  }
+
+  // Wire checkboxes -> update column
+  table.querySelectorAll('td.cell').forEach(td => {
+    const chk = td.querySelector('.lv-chk');
+    const setVal = () => {
+      const hidden = td.querySelector('.level-input');
+      if (hidden) hidden.value = chk.checked ? 'c' : 'na';
+    };
+    chk.addEventListener('change', () => { setVal(); updateColumnState(td.dataset.col); });
+    setVal();
+  });
+
+  // Wire selects -> update column
+  table.querySelectorAll('td.outcome-cell .outcome-select').forEach(sel => {
+    const colIndex = sel.closest('td.outcome-cell').dataset.col;
+    sel.addEventListener('change', () => updateColumnState(colIndex));
+  });
+
+  // Initial paint
+  tagParity();
+  Array.from(table.querySelectorAll('thead th.top')).forEach(th => updateColumnState(th.dataset.col));
+})();
+</script>
+{% else %}
+  <div class="text-muted">No delegates or competencies found for this booking.</div>
+{% endif %}

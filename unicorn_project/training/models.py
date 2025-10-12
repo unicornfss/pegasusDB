@@ -235,6 +235,12 @@ def sync_business_training_location(sender, instance: Business, created, **kwarg
     else:
         TrainingLocation.objects.filter(business=instance, name=name).delete()
 
+class CourseOutcome(models.TextChoices):
+    PENDING = "pending", "Pending"
+    PASS    = "pass",    "Pass"
+    FAIL    = "fail",    "Fail"
+    DNF     = "dnf",     "Did not finish"
+
 class DelegateRegister(models.Model):
     class HealthStatus(models.TextChoices):
         FIT            = "fit", "I am fit to take part in all the mental and physical aspects of today's course."
@@ -246,12 +252,17 @@ class DelegateRegister(models.Model):
     date_of_birth = models.DateField()
     job_title = models.CharField(max_length=100)
     employee_id = models.CharField(max_length=50, blank=True)
-    date = models.DateField(default=timezone.localdate)  # we will force this to 'today' server-side
+    date = models.DateField(default=timezone.localdate)  # forced to 'today' server-side
     instructor = models.ForeignKey("Instructor", on_delete=models.PROTECT)
     health_status = models.CharField(
         max_length=24,
         choices=HealthStatus.choices,
         default=HealthStatus.FIT,
+    )
+    outcome = models.CharField(
+        max_length=8,
+        choices=CourseOutcome.choices,
+        default=CourseOutcome.PENDING,
     )
     notes = models.TextField(blank=True)
     booking_day = models.ForeignKey("BookingDay", on_delete=models.CASCADE, null=True, blank=True)
@@ -268,7 +279,7 @@ class DelegateRegister(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.date})"
-    
+
     def health_badge_class(self) -> str:
         return {
             self.HealthStatus.FIT: "bg-success",
@@ -306,3 +317,22 @@ class CourseCompetency(models.Model):
 
     def __str__(self):
         return f"{self.course_type.code or self.course_type.name}: {self.name}"
+
+class AssessmentLevel(models.TextChoices):
+    NOT_ASSESSED = "na", "Not assessed"
+    NEEDS_IMPROVEMENT = "ni", "Needs improvement"
+    COMPETENT = "c", "Competent"
+    EXCEEDED = "e", "Exceeded"
+
+class CompetencyAssessment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    register = models.ForeignKey("DelegateRegister", on_delete=models.CASCADE, related_name="assessments")
+    course_competency = models.ForeignKey("CourseCompetency", on_delete=models.PROTECT, related_name="assessments")
+    level = models.CharField(max_length=2, choices=AssessmentLevel.choices, default=AssessmentLevel.NOT_ASSESSED)
+    notes = models.CharField(max_length=255, blank=True)
+    assessed_by = models.ForeignKey("Instructor", on_delete=models.PROTECT)
+    assessed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        unique_together = ("register", "course_competency")
+        ordering = ["register_id", "course_competency_id"]

@@ -20,10 +20,13 @@ urlpatterns = [
     path("app/instructor/", instv.instructor_bookings, name="instructor_dashboard"),
     path("app/instructor/bookings/", instv.instructor_bookings, name="instructor_bookings"),
     path("app/instructor/booking/<uuid:pk>/", instv.instructor_booking_detail, name="instructor_booking_detail"),
+    path("app/instructor/booking/<uuid:pk>/assessment/", instv.instructor_assessment_matrix, name="instructor_assessment_matrix"),
+    path("app/instructor/booking/<uuid:pk>/assessment/save/", instv.instructor_assessment_save, name="instructor_assessment_save"),
     path("app/instructor/day/<int:pk>/registers/", instv.instructor_day_registers, name="instructor_day_registers"),
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
     path("app/instructor/profile/", views.instructor_profile, name="instructor_profile"),
+    path("app/instructor/booking/<uuid:pk>/assessment/pdf/", instv.instructor_assessment_pdf, name="instructor_assessment_pdf"),
 
     # ---------- Public delegate register ----------
     path("register/", views.public_delegate_register, name="public_delegate_register"),
