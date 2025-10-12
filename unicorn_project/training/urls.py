@@ -87,8 +87,15 @@ urlpatterns = [
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
 
     # Instructor: delete a delegate row
-     path("app/instructor/register/<int:pk>/delete/", instv.instructor_delegate_delete, name="instructor_delegate_delete"),
+    path("app/instructor/register/<int:pk>/delete/", instv.instructor_delegate_delete, name="instructor_delegate_delete"),
 
      # Instructor: export day's register to PDF
-     path("app/instructor/day/<int:pk>/registers/pdf/", instv.instructor_day_registers_pdf, name="instructor_day_registers_pdf"),   
+    path("app/instructor/day/<int:pk>/registers/pdf/", instv.instructor_day_registers_pdf, name="instructor_day_registers_pdf"),
+
+     # ---------- Public Feedback ----------
+    path("feedback/", views.public_feedback_form, name="public_feedback_form"),
+    path("feedback/thanks/", views.public_feedback_thanks, name="public_feedback_thanks"),
+    path("feedback/<uuid:pk>/pdf/", views.public_feedback_pdf, name="public_feedback_pdf"),
+    path("feedback/instructors", views.public_feedback_instructors_api, name="public_feedback_instructors_api"),
+
 ]

@@ -1,0 +1,36 @@
+{% comment %}
+Renders 1–5 radio with inline SVG faces. Accessible: each label contains the input.
+{% endcomment %}
+<div class="d-flex gap-2 justify-content-start">
+  {% for group, options, index in widget.optgroups %}
+    {% for option in options %}
+      <label class="form-check-label" style="cursor:pointer;">
+        <input type="radio"
+               name="{{ widget.name }}"
+               value="{{ option.value|stringformat:'s' }}"
+               class="form-check-input me-1"
+               {% if option.selected %}checked{% endif %}
+               {% include "django/forms/widgets/attrs.html" %}>
+        <span class="d-inline-flex align-items-center">
+          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" fill="none"></circle>
+            {% if option.value|add:0 >= 4 %}
+              <!-- happy -->
+              <circle cx="9" cy="10" r="1"></circle><circle cx="15" cy="10" r="1"></circle>
+              <path d="M8 14c1.2 1 2.4 1.5 4 1.5S14.8 15 16 14" stroke="currentColor" fill="none"></path>
+            {% elif option.value|add:0 == 3 %}
+              <!-- neutral -->
+              <circle cx="9" cy="10" r="1"></circle><circle cx="15" cy="10" r="1"></circle>
+              <line x1="8" y1="14" x2="16" y2="14" stroke="currentColor"></line>
+            {% else %}
+              <!-- sad -->
+              <circle cx="9" cy="10" r="1"></circle><circle cx="15" cy="10" r="1"></circle>
+              <path d="M8 16c1.2-1 2.4-1.5 4-1.5S14.8 15 16 16" stroke="currentColor" fill="none"></path>
+            {% endif %}
+          </svg>
+          <span class="ms-1 small">{{ option.value }}</span>
+        </span>
+      </label>
+    {% endfor %}
+  {% endfor %}
+</div>

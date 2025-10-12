@@ -336,3 +336,61 @@ class CompetencyAssessment(models.Model):
     class Meta:
         unique_together = ("register", "course_competency")
         ordering = ["register_id", "course_competency_id"]
+
+# --- Feedback ---------------------------------------------------------------
+class FeedbackResponse(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    course_type = models.ForeignKey(CourseType, on_delete=models.PROTECT, related_name="feedback")
+    date = models.DateField(default=timezone.localdate)  # auto "today"
+    instructor = models.ForeignKey(Instructor, on_delete=models.SET_NULL, null=True, blank=True, related_name="feedback")
+
+    # 1–5 ratings
+    prior_knowledge = models.PositiveSmallIntegerField(null=True, blank=True)   # "Level of knowledge prior to course"
+    post_knowledge  = models.PositiveSmallIntegerField(null=True, blank=True)   # "Level of knowledge post course"
+
+    # Course objectives & content
+    q_purpose_clear     = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_personal_needs    = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_exercises_useful  = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # Presentation
+    q_structure         = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_pace              = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_content_clear     = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_instructor_knowledge = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_materials_quality = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_books_quality     = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # Venue
+    q_venue_suitable    = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # Summary
+    q_benefit_at_work   = models.PositiveSmallIntegerField(null=True, blank=True)
+    q_benefit_outside   = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # Free text
+    comments = models.TextField(blank=True)
+
+    # Contact follow-up
+    wants_callback = models.BooleanField(default=False)
+    contact_name   = models.CharField(max_length=200, blank=True)
+    contact_email  = models.EmailField(blank=True)
+    contact_phone  = models.CharField(max_length=50, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def overall_average(self):
+        vals = [
+            v for v in [
+                self.prior_knowledge, self.post_knowledge,
+                self.q_purpose_clear, self.q_personal_needs, self.q_exercises_useful,
+                self.q_structure, self.q_pace, self.q_content_clear, self.q_instructor_knowledge,
+                self.q_materials_quality, self.q_books_quality, self.q_venue_suitable,
+                self.q_benefit_at_work, self.q_benefit_outside
+            ] if v is not None
+        ]
+        return round(sum(vals)/len(vals), 2) if vals else None
+
+    def __str__(self):
+        ref = self.course_type.code if self.course_type_id else "Course"
+        return f"Feedback {ref} {self.date} ({self.id})"

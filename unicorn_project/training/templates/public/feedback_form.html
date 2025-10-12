@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block title %}
+  {% if course_type %}{{ course_type.name }} — Course Feedback{% else %}Course Feedback{% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+/* Bigger, clearer emoji radios */
+.emoji-scale .form-check-label{
+  font-size: 1.6rem;     /* make the emoji big */
+  line-height: 1.1;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;           /* space between emoji and number */
+}
+.emoji-scale .form-check{
+  margin-right: .6rem;   /* spacing between options */
+}
+.emoji-scale input[type="radio"]{
+  transform: scale(1.25);   /* slightly larger radio dot */
+  margin-right: .25rem;
+}
+@media (max-width: 576px){
+  .emoji-scale .form-check-label{ font-size: 1.4rem; }
+  .emoji-scale input[type="radio"]{ transform: scale(1.15); }
+}
+</style>
+
+<div class="mb-3">
+  <h2 class="mb-1">
+    {% if course_type %}
+      {{ course_type.name }} — Course Feedback
+    {% else %}
+      Course Feedback
+    {% endif %}
+  </h2>
+</div>
+
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  {# Keep course_type in POST. If prefilled, use a hidden field with a code hint for JS. #}
+  {% if course_type %}
+    <input type="hidden"
+           id="id_course_type"
+           name="{{ form.course_type.html_name }}"
+           value="{{ form.course_type.value|default:course_type.id }}"
+           data-code="{{ course_type.code }}">
+    <div class="row g-3 align-items-end mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="id_date">Date</label>
+        {{ form.date }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="id_instructor">Instructor (shown if more than one possible that day)</label>
+        {{ form.instructor }}
+        <div class="form-text">If this is blank, please select your instructor.</div>
+      </div>
+    </div>
+  {% else %}
+    <div class="row g-3 align-items-end mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="id_course_type">Course type</label>
+        {{ form.course_type }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="id_date">Date</label>
+        {{ form.date }}
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="id_instructor">Instructor (shown if more than one possible that day)</label>
+        {{ form.instructor }}
+        <div class="form-text">If this is blank, please select your instructor.</div>
+      </div>
+    </div>
+  {% endif %}
+
+  <hr>
+  <h5>Knowledge levels</h5>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Level of knowledge prior to course</label>
+      <div class="emoji-scale">{{ form.prior_knowledge }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Level of knowledge post course</label>
+      <div class="emoji-scale">{{ form.post_knowledge }}</div>
+    </div>
+  </div>
+
+  <hr>
+  <h5>Course objectives and content</h5>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Purpose & objectives were clearly explained</label>
+      <div class="emoji-scale">{{ form.q_purpose_clear }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Course met my personal training needs</label>
+      <div class="emoji-scale">{{ form.q_personal_needs }}</div>
+    </div>
+    <div class="col-md-12">
+      <label class="form-label">The exercises were relevant and useful</label>
+      <div class="emoji-scale">{{ form.q_exercises_useful }}</div>
+    </div>
+  </div>
+
+  <hr>
+  <h5>Course presentation</h5>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">Sessions were well structured / logical</label>
+      <div class="emoji-scale">{{ form.q_structure }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">The sessions were suitably paced</label>
+      <div class="emoji-scale">{{ form.q_pace }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Content & language easy to understand</label>
+      <div class="emoji-scale">{{ form.q_content_clear }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">The instructor was knowledgeable</label>
+      <div class="emoji-scale">{{ form.q_instructor_knowledge }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Training materials / equipment were of good standard</label>
+      <div class="emoji-scale">{{ form.q_materials_quality }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Course books / handouts were a good standard</label>
+      <div class="emoji-scale">{{ form.q_books_quality }}</div>
+    </div>
+  </div>
+
+  <hr>
+  <h5>Venue</h5>
+  <div class="mb-3">
+    <label class="form-label">The venue was suitable and comfortable</label>
+    <div class="emoji-scale">{{ form.q_venue_suitable }}</div>
+  </div>
+
+  <hr>
+  <h5>Summary</h5>
+  <div class="row g-3">
+    <div class="col-md-6">
+      <label class="form-label">The training will be beneficial to me at work</label>
+      <div class="emoji-scale">{{ form.q_benefit_at_work }}</div>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">The training will be beneficial to me outside of work</label>
+      <div class="emoji-scale">{{ form.q_benefit_outside }}</div>
+    </div>
+  </div>
+
+  <div class="mb-3 mt-3">
+    <label class="form-label">Comments</label>
+    {{ form.comments }}
+  </div>
+
+  <div class="form-check mb-2">
+    {{ form.wants_callback }} <label class="form-check-label" for="id_wants_callback">I would like to speak to you about my experience</label>
+  </div>
+
+  <div id="contact-block" class="row g-3" style="display:none;">
+    <div class="col-md-4">
+      <label class="form-label" for="id_contact_name">Name (optional)</label>
+      {{ form.contact_name }}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="id_contact_email">Email (optional)</label>
+      {{ form.contact_email }}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label" for="id_contact_phone">Telephone (optional)</label>
+      {{ form.contact_phone }}
+    </div>
+  </div>
+
+  <div class="mt-3 d-flex gap-2">
+    <button class="btn btn-primary">Submit feedback</button>
+  </div>
+</form>
+
+<script>
+  // Show/hide contact fields
+  (function(){
+    const chk = document.getElementById("id_wants_callback");
+    const block = document.getElementById("contact-block");
+    function toggle(){ block.style.display = chk && chk.checked ? "flex" : "none"; }
+    if(chk){ chk.addEventListener("change", toggle); toggle(); }
+  })();
+
+  // YYYY-MM-DD for inputs/API
+  function todayISO(){
+    const d = new Date();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return `${d.getFullYear()}-${m}-${day}`;
+  }
+  function toISODate(str) {
+    if (!str) return "";
+    if (str.includes("/")) {
+      const [dd, mm, yyyy] = str.split("/");
+      if (yyyy && mm && dd) return `${yyyy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+    }
+    return str; // already ISO
+  }
+
+  // Reload instructors on course/date changes
+  (function(){
+    const courseEl = document.getElementById("id_course_type");
+    const dateEl   = document.getElementById("id_date");
+    const instEl   = document.getElementById("id_instructor");
+
+    if (dateEl && !dateEl.value) dateEl.value = todayISO();
+
+    async function loadInstructors(){
+      if(!instEl) return;
+
+      let courseParam = "";
+      if (courseEl) courseParam = courseEl.dataset.code || courseEl.value || "";
+
+      const rawDate = dateEl && dateEl.value ? dateEl.value : todayISO();
+      const dateISO = toISODate(rawDate);
+
+      const url = new URL("{% url 'public_feedback_instructors_api' %}", window.location.origin);
+      if (courseParam) url.searchParams.set("course", courseParam);
+      if (dateISO)     url.searchParams.set("date",   dateISO);
+
+      try{
+        const res  = await fetch(url.toString(), {headers: {"X-Requested-With":"fetch"}});
+        const data = await res.json();
+
+        instEl.innerHTML = "";
+        const ph = document.createElement("option");
+        ph.value = "";
+        ph.textContent = "Select instructor…";
+        instEl.appendChild(ph);
+
+        (data.options || []).forEach(opt => {
+          const o = document.createElement("option");
+          o.value = opt.id;
+          o.textContent = opt.name;
+          instEl.appendChild(o);
+        });
+
+        if ((data.options || []).length === 1) {
+          instEl.value = data.options[0].id;
+        }
+      }catch(e){ /* ignore */ }
+    }
+
+    if (courseEl) courseEl.addEventListener("change", loadInstructors);
+    if (dateEl)   dateEl.addEventListener("change", loadInstructors);
+    loadInstructors(); // initial
+  })();
+</script>
+{% endblock %}

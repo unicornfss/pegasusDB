@@ -2,15 +2,21 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
 from django.db.models import Q
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, FileResponse
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_GET
-from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile, DelegateRegister
-from .forms import  BookingForm, InstructorForm, InstructorProfileForm, DelegateRegisterForm
+from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile, DelegateRegister, FeedbackResponse
+from .forms import  BookingForm, InstructorForm, InstructorProfileForm, DelegateRegisterForm, FeedbackForm
 from datetime import timedelta, datetime
+from reportlab.lib.pagesizes import A4, portrait
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm
+import uuid, io
+
 
 # --- helpers --------------------------------------------------
 
@@ -372,7 +378,7 @@ def instructor_booking_detail(request, pk):
     """
     Detail page for a single booking, visible only to its assigned instructor.
     """
-    inst = _get_instructor_for_user(request.user)
+    iinst = get_instructor_for_user(request.user)
     if not inst:
         return HttpResponseForbidden("Not an instructor account.")
 
@@ -426,3 +432,192 @@ def post_login_router(request):
 
     # If neither admin nor instructor, drop them at admin (or your public home)
     return redirect("app_admin_dashboard")
+
+def _resolve_course_type(value):
+    if not value:
+        return None
+    # Try UUID first
+    try:
+        return CourseType.objects.filter(id=uuid.UUID(str(value))).first()
+    except Exception:
+        pass
+    # Fall back to course code (case-insensitive)
+    return CourseType.objects.filter(code__iexact=str(value)).first()
+
+def _parse_date_flexible(s: str):
+    if not s:
+        return None
+    d = parse_date(s)  # expects YYYY-MM-DD
+    if d:
+        return d
+    # Try dd/mm/yyyy
+    if "/" in s:
+        try:
+            dd, mm, yyyy = s.split("/")
+            return parse_date(f"{yyyy}-{int(mm):02d}-{int(dd):02d}")
+        except Exception:
+            return None
+    return None
+
+def public_feedback_instructors_api(request):
+    """
+    Returns instructors who are delivering the given course on the given date.
+    Query params:
+      - course: course code (e.g. FAAW) or course UUID
+      - date:   YYYY-MM-DD (required for filtering)
+    If either parameter is missing, returns an empty list (no noisy fallback).
+    """
+    course_param = (request.GET.get("course") or "").strip()
+    date_str     = (request.GET.get("date") or "").strip()
+
+    # Resolve course by code OR UUID
+    ct = None
+    if course_param:
+        ct = CourseType.objects.filter(code__iexact=course_param).first()
+        if not ct:
+            try:
+                uuid.UUID(course_param)
+                ct = CourseType.objects.filter(pk=course_param).first()
+            except Exception:
+                ct = None
+
+    # Parse date flexibly: YYYY-MM-DD or dd/mm/yyyy
+    the_date = None
+    if date_str:
+        the_date = parse_date(date_str)
+        if not the_date and "/" in date_str:
+            try:
+                dd, mm, yyyy = date_str.split("/")
+                the_date = parse_date(f"{int(yyyy):04d}-{int(mm):02d}-{int(dd):02d}")
+            except Exception:
+                the_date = None
+
+    # Strict behaviour: only return matches when both pieces are present
+    qs = Instructor.objects.none()
+    if ct and the_date:
+        qs = (
+            Instructor.objects
+            .filter(
+                bookings__course_type=ct,
+                bookings__days__date=the_date,
+            )
+            .distinct()
+            .order_by("name")
+        )
+
+    return JsonResponse({
+        "options": [{"id": str(i.id), "name": i.name} for i in qs]
+    })
+
+
+def _resolve_course_type(q):
+    if not q:
+        return None
+    q = q.strip()
+    ct = CourseType.objects.filter(code__iexact=q).first()
+    if ct:
+        return ct
+    try:
+        uuid.UUID(q)
+        return CourseType.objects.filter(pk=q).first()
+    except Exception:
+        return None
+
+def _parse_flexible_date(s):
+    if not s:
+        return None
+    d = parse_date(s)
+    if d:
+        return d
+    if "/" in s:
+        try:
+            dd, mm, yyyy = s.split("/")
+            return parse_date(f"{int(yyyy):04d}-{int(mm):02d}-{int(dd):02d}")
+        except Exception:
+            return None
+    return None
+
+def public_feedback_form(request):
+    course_q = request.GET.get("course") or ""
+    prefilled_course = _resolve_course_type(course_q)
+
+    init = {
+        "date": _parse_flexible_date(request.GET.get("date") or "") or timezone.localdate()
+    }
+
+    inst_q = request.GET.get("instructor") or ""
+    if inst_q:
+        try:
+            init["instructor"] = Instructor.objects.get(pk=inst_q)
+        except Instructor.DoesNotExist:
+            pass
+
+    if request.method == "POST":
+        form = FeedbackForm(request.POST)
+    else:
+        form = FeedbackForm(initial=init)
+
+    # if not prefilled, user must choose a course
+    form.fields["course_type"].required = not bool(prefilled_course)
+
+    # if prefilled, make sure a value is posted (template renders a hidden input)
+    if prefilled_course:
+        form.fields["course_type"].initial = prefilled_course.id
+
+    if request.method == "POST" and form.is_valid():
+        cd = form.cleaned_data
+        effective_course = prefilled_course or cd.get("course_type")
+
+        # TODO: save feedback here
+
+        messages.success(request, "Thanks for your feedback!")
+        return redirect("public_feedback_thanks")
+
+    return render(
+        request,
+        "public/feedback_form.html",
+        {"form": form, "course_type": prefilled_course},
+    )
+
+
+def public_feedback_pdf(request, pk):
+    """Minimal single-response PDF so the route works."""
+    fb = get_object_or_404(
+        FeedbackResponse.objects.select_related("course_type", "instructor"),
+        pk=pk
+    )
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=portrait(A4))
+    W, H = portrait(A4)
+    left, top = 15*mm, H - 15*mm
+
+    y = top
+    c.setFont("Helvetica-Bold", 12)
+    c.drawCentredString(W/2, y, f"{fb.course_type.code} — Course Feedback")
+    y -= 8*mm
+    c.setFont("Helvetica", 10)
+    c.drawString(left, y, f"Date: {fb.date.strftime('%d %b %Y')}")
+    y -= 5*mm
+    c.drawString(left, y, f"Instructor: {fb.instructor.name if fb.instructor else '—'}")
+    y -= 10*mm
+
+    c.setFont("Helvetica", 9)
+    c.drawString(left, y, f"Prior knowledge: {fb.prior_knowledge or '—'} / 5")
+    y -= 5*mm
+    c.drawString(left, y, f"Post knowledge:  {fb.post_knowledge  or '—'} / 5")
+    y -= 8*mm
+    c.drawString(left, y, f"Comments: {(fb.comments or '')[:300]}")
+    y -= 12*mm
+
+    c.setFont("Helvetica", 8)
+    c.drawString(left, 10*mm, "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ: info@unicornsafety.co.uk: 01743 360211")
+
+    c.save()
+    buf.seek(0)
+    return FileResponse(buf, as_attachment=True, filename=f"feedback_{fb.course_type.code}_{fb.date:%Y%m%d}.pdf")
+
+def public_feedback_thanks(request):
+    """Simple thank-you page after feedback submission."""
+    return render(request, "public/feedback_thanks.html")
+
