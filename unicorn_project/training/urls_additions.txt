@@ -1,7 +1,0 @@
-# Add these to your training/urls.py (inside urlpatterns):
-from . import views_admin as admin
-
-path("admin/businesses/<int:pk>/delete/", admin.business_delete, name="admin_business_delete"),
-path("admin/courses/<int:pk>/delete/",    admin.course_delete,   name="admin_course_delete"),
-path("admin/instructors/<int:pk>/delete/",admin.instructor_delete, name="admin_instructor_delete"),
-path("admin/bookings/<int:pk>/delete/",   admin.booking_delete,  name="admin_booking_delete"),

@@ -11,7 +11,7 @@ from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Q, Count
-from django.forms import modelformset_factory
+from django.forms import modelformset_factory, inlineformset_factory
 from django.http import HttpResponseForbidden
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
@@ -21,13 +21,12 @@ from django.views.decorators.http import require_http_methods
 
 from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
-    StaffProfile, BookingDay, DelegateRegister
+    StaffProfile, BookingDay, DelegateRegister, CourseCompetency
 )
 from .forms import (
     BusinessForm, CourseTypeForm, TrainingLocationForm,
-    InstructorForm, BookingForm, DelegateRegisterAdminForm
+    InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm
 )
-
 # =========================
 # Helpers / guards
 # =========================
@@ -234,28 +233,51 @@ def course_list(request):
     return render(request, "admin/list.html", ctx)
 
 
+CourseCompetencyFormSet = inlineformset_factory(
+    parent_model=CourseType,
+    model=CourseCompetency,
+    form=CourseCompetencyForm,
+    fields=["name", "sort_order"],
+    extra=0,           # <-- No automatic blank row
+    can_delete=True,
+)
+
 @admin_required
 def course_form(request, pk=None):
-    obj = get_object_or_404(CourseType, pk=pk) if pk else None
+    if pk:
+        ct = get_object_or_404(CourseType, pk=pk)
+        title = "Edit course type"
+    else:
+        ct = CourseType()
+        title = "New course type"
+
     if request.method == "POST":
-        form = CourseTypeForm(request.POST, instance=obj)
-        if form.is_valid():
-            obj = form.save()
-            messages.success(request, "Changes saved.")
+        form = CourseTypeForm(request.POST, instance=ct)
+        formset = CourseCompetencyFormSet(request.POST, instance=ct, prefix="comps")
+        if form.is_valid() and formset.is_valid():
+            ct = form.save()
+            formset.instance = ct
+            formset.save()
+
+            # ✅ Add ONE success message only
+            messages.success(request, "Course type saved.")
+
+            # ✅ Branch by which button was pressed
             if "save_return" in request.POST:
                 return redirect("admin_course_list")
-            return redirect("admin_course_edit", pk=obj.id)
+            return redirect("admin_course_edit", pk=ct.pk)
         else:
-            messages.error(request, "Please fix the errors below.")
+            messages.error(request, "Please correct the errors below.")
     else:
-        form = CourseTypeForm(instance=obj)
+        form = CourseTypeForm(instance=ct)
+        formset = CourseCompetencyFormSet(instance=ct, prefix="comps")
 
-    return render(request, "admin/form.html", {
-        "title": ("Edit Course Type" if obj else "New Course Type"),
+    return render(request, "admin/course_form.html", {
+        "title": title,
         "form": form,
-        "back_url": reverse("admin_course_list"),
-        "delete_url": reverse("admin_course_delete", args=[obj.id]) if obj else None,
+        "formset": formset,
     })
+
 
 
 @admin_required

@@ -107,35 +107,95 @@
 </div>
 
 
-<h5 class="mb-2">Course days</h5>
-<div class="table-responsive">
-  <table class="table table-sm align-middle">
-    <thead>
-      <tr>
-        <th style="width:120px">Date</th>
-        <th style="width:120px">Start</th>
-        <th style="width:120px" class="text-center">Delegates</th>
-        <th style="width:160px" class="text-end">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for d in day_rows %}
-        <tr>
-          <td>{{ d.date }}</td>
-          <td>{% if d.start_time %}{{ d.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
-          <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
-          <td class="text-end">
-            <a class="btn btn-outline-primary btn-sm" href="{{ d.edit_url }}">
-              <i class="bi bi-people"></i> View / edit
-            </a>
-          </td>
-        </tr>
-      {% empty %}
-        <tr><td colspan="4" class="text-muted">No days created for this booking.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Tabs: Course days / registers, Assessments, Exams (optional), Invoicing -->
+<ul class="nav nav-tabs mt-3" id="bookingTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active" id="days-tab" data-bs-toggle="tab"
+            data-bs-target="#days-pane" type="button" role="tab"
+            aria-controls="days-pane" aria-selected="true">
+      Course days / registers
+    </button>
+  </li>
+
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="assessments-tab" data-bs-toggle="tab"
+            data-bs-target="#assessments-pane" type="button" role="tab"
+            aria-controls="assessments-pane" aria-selected="false">
+      Assessments
+    </button>
+  </li>
+
+  {% if has_exam %}
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="exams-tab" data-bs-toggle="tab"
+            data-bs-target="#exams-pane" type="button" role="tab"
+            aria-controls="exams-pane" aria-selected="false">
+      Exams
+    </button>
+  </li>
+  {% endif %}
+
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="invoicing-tab" data-bs-toggle="tab"
+            data-bs-target="#invoicing-pane" type="button" role="tab"
+            aria-controls="invoicing-pane" aria-selected="false">
+      Invoicing
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content border border-top-0 rounded-bottom p-3" id="bookingTabsContent">
+  <!-- Pane: Course days / registers -->
+  <div class="tab-pane fade show active" id="days-pane" role="tabpanel" aria-labelledby="days-tab" tabindex="0">
+    <div class="table-responsive">
+      <table class="table table-sm align-middle">
+        <thead>
+          <tr>
+            <th style="width:160px">Date</th>
+            {% comment %}Remove Start if you no longer want it{% endcomment %}
+            <th style="width:120px">Start</th>
+            <th style="width:120px" class="text-center">Delegates</th>
+            <th style="width:160px" class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in day_rows %}
+            <tr>
+              <td>{{ d.date }}</td>
+              <td>{% if d.start_time %}{{ d.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
+              <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
+              <td class="text-end">
+                <a class="btn btn-outline-primary btn-sm" href="{{ d.edit_url }}">
+                  <i class="bi bi-people"></i> View / edit
+                </a>
+              </td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="4" class="text-muted">No days created for this booking.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pane: Assessments (placeholder content for now) -->
+  <div class="tab-pane fade" id="assessments-pane" role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
+    <div class="text-muted">Assessments will go here.</div>
+  </div>
+
+  {% if has_exam %}
+  <!-- Pane: Exams (only when course type has exams) -->
+  <div class="tab-pane fade" id="exams-pane" role="tabpanel" aria-labelledby="exams-tab" tabindex="0">
+    <div class="text-muted">Exams will go here.</div>
+  </div>
+  {% endif %}
+
+  <!-- Pane: Invoicing (placeholder content for now) -->
+  <div class="tab-pane fade" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
+    <div class="text-muted">Invoicing will go here.</div>
+  </div>
 </div>
+
 
 <a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
 {% endblock %}

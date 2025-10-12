@@ -179,6 +179,7 @@ def instructor_booking_detail(request, pk):
         "day_rows": day_rows,
         "back_url": redirect("instructor_bookings").url,
         "notes_form": notes_form,   # <-- make sure this is present
+        "has_exam": getattr(booking.course_type, "has_exam", False),
     })
 
 

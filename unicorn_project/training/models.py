@@ -276,3 +276,33 @@ class DelegateRegister(models.Model):
             self.HealthStatus.WILL_DISCUSS: "",  # we'll style inline orange
             self.HealthStatus.NOT_FIT: "bg-danger",
         }.get(self.health_status, "bg-secondary")
+
+class CourseCompetency(models.Model):
+    course_type = models.ForeignKey(
+        CourseType,
+        on_delete=models.CASCADE,
+        related_name="competencies",
+    )
+    code = models.CharField(
+        max_length=32, blank=True,
+        help_text="Optional short code (e.g. C1, ABC-01)."
+    )
+    name = models.CharField(
+        max_length=200,
+        help_text="What the delegate must be able to do (visible to instructors)."
+    )
+    description = models.TextField(blank=True)
+    sort_order = models.PositiveIntegerField(default=0, help_text="Controls display order.")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course_type", "name"],
+                name="uniq_competency_name_per_course_type",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.course_type.code or self.course_type.name}: {self.name}"

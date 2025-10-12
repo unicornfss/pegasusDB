@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models import Q
+from django.forms import inlineformset_factory
 from . import models as m
 
 from .models import (
@@ -13,6 +14,7 @@ from .models import (
     BookingDay,
     Attendance,
     DelegateRegister,
+    CourseCompetency
 )
 
 import string, secrets
@@ -239,10 +241,32 @@ class CourseTypeForm(forms.ModelForm):
             "duration_days",
             "default_course_fee",
             "default_instructor_fee",
-            # If/when you add has_exam to the model, uncomment the next line:
-            # "has_exam",
+            "has_exam",  # <-- include this so the checkbox renders
         ]
 
+class CourseCompetencyForm(forms.ModelForm):
+    class Meta:
+        model = CourseCompetency
+        fields = ["name", "sort_order"]  # ONLY these two
+
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Competency"}),
+            "sort_order": forms.NumberInput(attrs={"class": "form-control", "style": "max-width:7rem"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["name"].label = "Competency"
+        self.fields["sort_order"].label = "Order"
+
+
+CourseCompetencyFormSet = inlineformset_factory(
+    parent_model=CourseType,
+    model=CourseCompetency,
+    form=CourseCompetencyForm,
+    extra=2,            # two blank rows for quick add
+    can_delete=True,
+)
 
 # ---------------- Instructor (Admin view) ----------------
 class InstructorForm(forms.ModelForm):
