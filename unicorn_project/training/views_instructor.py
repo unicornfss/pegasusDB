@@ -5,15 +5,18 @@ from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Max, Avg
 from django.forms import modelformset_factory
-from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed
+from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed, HttpResponse, Http404
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 
+from io import BytesIO
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
+from reportlab.lib import colors
+from statistics import mean
 
 from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency, FeedbackResponse
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm 
@@ -180,19 +183,25 @@ def _assessment_context(booking, user):
 
 @login_required
 def instructor_booking_detail(request, pk):
-    """Instructor course detail with per-day delegate counts and an edit link."""
+    """
+    Instructor course detail with:
+      - day list and delegate counts
+      - notes form
+      - assessments context (if available)
+      - feedback tab context (responses for the booking's dates + course type)
+    """
     instr = getattr(request.user, "instructor", None)
     booking = get_object_or_404(
         Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
-        pk=pk
+        pk=pk,
     )
 
-    # only its instructor can see
+    # Only the assigned instructor may view
     if not instr or booking.instructor_id != instr.id:
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
-    # --- NEW: handle booking_notes form on this page ---
+    # Notes form
     if request.method == "POST":
         notes_form = BookingNotesForm(request.POST, instance=booking)
         if notes_form.is_valid():
@@ -202,23 +211,34 @@ def instructor_booking_detail(request, pk):
     else:
         notes_form = BookingNotesForm(instance=booking)
 
-    # days list with counts
-    days = (
+    # Course days summary
+    days_qs = (
         BookingDay.objects
         .filter(booking=booking)
         .order_by("date")
         .annotate(n=Count("delegateregister"))
     )
+    day_rows = [{
+        "id": d.id,
+        "date": date_format(d.date, "j M Y"),
+        "start_time": d.start_time,
+        "n": d.n or 0,
+        "edit_url": redirect("instructor_day_registers", pk=d.id).url,
+    } for d in days_qs]
 
-    day_rows = []
-    for d in days:
-        day_rows.append({
-            "id": d.id,
-            "date": date_format(d.date, "j M Y"),  # 21 Oct 2025
-            "start_time": d.start_time,
-            "n": d.n or 0,
-            "edit_url": redirect("instructor_day_registers", pk=d.id).url,
-        })
+    # Feedback responses for this booking: same course type AND date is one of the booking's days
+    booking_dates = list(days_qs.values_list("date", flat=True))
+    if booking_dates:
+        fb_qs = (
+            FeedbackResponse.objects
+            .filter(course_type_id=booking.course_type_id, date__in=booking_dates)
+            .order_by("-date", "-created_at")   # your model has created_at, not submitted_at
+        )
+    else:
+        fb_qs = FeedbackResponse.objects.none()
+
+    fb_count = fb_qs.count()
+    fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
 
     ctx = {
         "title": booking.course_type.name,
@@ -227,19 +247,20 @@ def instructor_booking_detail(request, pk):
         "back_url": redirect("instructor_bookings").url,
         "notes_form": notes_form,
         "has_exam": getattr(booking.course_type, "has_exam", False),
+
+        # Feedback tab context
+        "fb_qs": fb_qs,
+        "fb_count": fb_count,
+        "fb_avg": fb_avg,
     }
 
-    # Add assessment matrix data for the tab
+    # Assessment context (best-effort)
     try:
-        ctx.update(_assessment_context(booking, request.user))
-    except PermissionError:
+        ctx.update(_assessment_context(booking, request.user))  # if you have this helper
+    except Exception:
         ctx.update({"delegates": [], "competencies": [], "existing": {}, "levels": []})
 
     return render(request, "instructor/booking_detail.html", ctx)
-
-
-
-
 
 @login_required
 def instructor_day_registers(request, pk: int):
@@ -1015,6 +1036,57 @@ def instructor_assessment_pdf(request, pk):
     filename = f"assessments_{booking.course_reference or booking.pk}.pdf"
     return FileResponse(buf, as_attachment=True, filename=filename)
 
+# views_instructor.py
+from django.db.models import Avg, Count
+# ...existing imports...
+from .models import FeedbackResponse
+
+def instructor_feedback_tab(request, booking_id):
+    """
+    Feedback tab for a booking:
+    - lists individual forms (date, instructor, overall)
+    - shows quick summary stats
+    """
+    booking = get_object_or_404(Booking, pk=booking_id)
+
+    # Full date range for this booking (min..max across all days)
+    day_qs = booking.days.order_by("date").values_list("date", flat=True)
+    if day_qs:
+        start_date = day_qs.first()
+        end_date   = day_qs.last()
+        date_filter = {"date__range": (start_date, end_date)}
+    else:
+        # fall back to the booking start date if no days are present
+        start_date = end_date = booking.course_date
+        date_filter = {"date": booking.course_date}
+
+    # Pull responses for this booking's course_type and date range
+    qs = (
+        FeedbackResponse.objects
+        .filter(course_type=booking.course_type, **date_filter)
+        .select_related("instructor")
+        .order_by("-date", "-created_at")
+    )
+
+    summary = qs.aggregate(n=Count("id"), avg_overall=Avg("overall_rating"))
+
+    context = {
+        "title": "Feedback",
+        "booking": booking,
+        "responses": qs,
+        "summary": summary,
+    }
+    return render(request, "instructor/booking_feedback.html", context)
+
+
+
+def instructor_feedback_view(request, pk):
+    """
+    Read-only view of a single feedback response.
+    """
+    fb = get_object_or_404(FeedbackResponse.objects.select_related("course_type", "instructor"), pk=pk)
+    return render(request, "instructor/feedback_detail.html", {"fb": fb})
+
 @login_required
 def instructor_feedback_all_pdf(request, pk):
     # simple redirect to a public/export endpoint if you already have one
@@ -1026,3 +1098,612 @@ def instructor_feedback_summary_pdf(request, pk):
     # (left as a stub so we don’t collide with existing code)
     return HttpResponseNotAllowed(["GET"])
 
+def _feedback_queryset_for_booking(booking):
+    day_qs = booking.days.order_by("date").values_list("date", flat=True)
+    if day_qs:
+        start_date, end_date = day_qs.first(), day_qs.last()
+        date_filter = {"date__range": (start_date, end_date)}
+    else:
+        start_date = end_date = booking.course_date
+        date_filter = {"date": booking.course_date}
+
+    return (
+        FeedbackResponse.objects
+        .filter(course_type=booking.course_type, **date_filter)
+        .select_related("instructor")
+        .order_by("date", "created_at")
+    )
+
+def _pdf_header_footer(c, booking, title):
+    w, h = A4
+    c.setTitle(title)
+
+    # Header
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(20*mm, h - 20*mm, f"{booking.course_type.name} — {title}")
+    c.setFont("Helvetica", 10)
+    c.drawString(20*mm, h - 26*mm, f"Course reference: {booking.course_reference}")
+    c.drawString(20*mm, h - 31*mm, f"Business: {booking.business.name}")
+    # Dates line
+    day_qs = booking.days.order_by("date").values_list("date", flat=True)
+    if day_qs:
+        ds = day_qs.first().strftime("%d %b %Y")
+        de = day_qs.last().strftime("%d %b %Y")
+        date_str = ds if ds == de else f"{ds} – {de}"
+    else:
+        date_str = booking.course_date.strftime("%d %b %Y")
+    c.drawString(20*mm, h - 36*mm, f"Course dates: {date_str}")
+
+    # Footer
+    c.setFont("Helvetica", 9)
+    c.setFillColor(colors.grey)
+    c.drawString(20*mm, 10*mm, "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ · info@unicornsafety.co.uk · 01743 360211")
+    c.setFillColor(colors.black)
+
+@login_required
+@login_required
+def instructor_feedback_pdf_all(request, booking_id):
+    """
+    Export all individual feedback forms (portrait, wrapped text).
+    """
+    instr = getattr(request.user, "instructor", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "business", "instructor"),
+        pk=booking_id
+    )
+    if not instr or booking.instructor_id != instr.id:
+        return HttpResponseForbidden("You do not have access to this booking.")
+
+    # Date span = all course days
+    day_dates = list(
+        BookingDay.objects.filter(booking=booking)
+        .order_by("date").values_list("date", flat=True)
+    )
+    if day_dates:
+        date_min, date_max = min(day_dates), max(day_dates)
+    else:
+        date_min = date_max = booking.course_date
+
+    from .models import FeedbackResponse
+    responses = list(
+        FeedbackResponse.objects
+        .filter(course_type=booking.course_type,
+                date__gte=date_min, date__lte=date_max)
+        .order_by("created_at")
+    )
+
+    # ---------- PDF ----------
+    buf = io.BytesIO()
+    pagesize = A4   # PORTRAIT
+    c = canvas.Canvas(buf, pagesize=pagesize)
+    W, H = pagesize
+
+    # Margins & geometry
+    M_L = 18*mm
+    M_R = 18*mm
+    M_T = 16*mm
+    M_B = 16*mm
+    left, right, top, bottom = M_L, W - M_R, H - M_T, M_B
+    content_w = right - left
+
+    # Helpers -------------------------------------------------------------
+    def sw(txt, font="Helvetica", size=10):
+        from reportlab.pdfbase import pdfmetrics
+        return pdfmetrics.stringWidth(str(txt), font, size)
+
+    def wrap_lines(text, font="Helvetica", size=9.5, max_width=120*mm):
+        """
+        Wrap a plain string to lines that fit max_width using the canvas font metrics.
+        Returns list[str].
+        """
+        text = (text or "").replace("\r", " ").strip()
+        if not text:
+            return []
+        words = text.split()
+        lines, cur = [], ""
+        for w in words:
+            probe = (cur + " " + w).strip()
+            if sw(probe, font, size) <= max_width:
+                cur = probe
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def header():
+        y = top
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(left, y, f"{booking.course_type.name} — Feedback — All Forms")
+        y -= 7*mm
+        c.setFont("Helvetica", 10)
+        meta = [
+            ("Course reference", booking.course_reference or "—"),
+            ("Business", booking.business.name),
+            ("Course dates", _format_course_dates_for_booking(booking)),
+            ("Instructor", booking.instructor.name if booking.instructor else "—"),
+        ]
+        for k, v in meta:
+            c.setFont("Helvetica-Bold", 10);  c.drawString(left, y, f"{k}:")
+            c.setFont("Helvetica", 10);       c.drawString(left+35*mm, y, str(v))
+            y -= 4.8*mm
+        c.setStrokeColorRGB(.8,.8,.85)
+        c.line(left, y-1.5*mm, right, y-1.5*mm)
+        c.setStrokeColor(colors.black)
+        return y - 5*mm
+
+    def footer():
+        c.setFont("Helvetica", 8.5)
+        c.setFillColorRGB(0.35, 0.35, 0.4)
+        c.drawCentredString(
+            W/2, 8*mm,
+            "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ  ·  info@unicornsafety.co.uk  ·  01743 360211"
+        )
+        c.setFillColor(colors.black)
+
+    def draw_card(y, idx, r):
+        """
+        One response 'card' with wrapped fields. Returns new y (after card).
+        Starts a new page if necessary.
+        """
+        # Layout constants inside the card
+        pad = 5*mm
+        col_gap = 6*mm
+        col1_x = left + pad + 1*mm
+        col2_x = left + pad + 70*mm
+        usable_w = content_w - 2*pad
+
+        # Build wrapped blocks to measure height
+        # Two columns of short items (no wrapping needed)
+        short_rows = 5
+        line_h = 4.9*mm
+
+        # Comments wrap across full width
+        comment_lines = wrap_lines(r.comments, "Helvetica-Oblique", 9.5, max_width=usable_w-6*mm)
+        comment_h = (len(comment_lines) or 1) * line_h
+
+        # Callback line (one line, maybe blank)
+        cb_needed = 1 if getattr(r, "wants_callback", False) else 0
+        cb_h = cb_needed * line_h
+
+        # Top title band
+        title_h = 7*mm
+
+        # Compute total height needed
+        rows_area = short_rows * line_h  # left column
+        rows_area = max(rows_area, short_rows * line_h)  # symmetrical
+        need = title_h + 2*mm + rows_area + 2*mm + line_h*2 + 2*mm + comment_h + cb_h + 4*mm
+
+        # New page if necessary
+        if y - need < bottom + 20*mm:
+            c.showPage()
+            y = header()
+
+        # Card background
+        c.setFillColorRGB(0.97, 0.98, 1.0)
+        c.setStrokeColorRGB(0.85, 0.88, 0.95)
+        c.roundRect(left, y-need, content_w, need, 3*mm, fill=1, stroke=1)
+        c.setFillColor(colors.black); c.setStrokeColor(colors.black)
+
+        # Title row
+        cy = y - pad
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(left+pad, cy-4*mm, f"{idx}. {r.date.strftime('%d %b %Y')}")
+        c.setFont("Helvetica", 10)
+        c.drawString(left+pad+40*mm, cy-4*mm, f"Instructor: {r.instructor.name if r.instructor else '—'}")
+        c.setFont("Helvetica-Bold", 10)
+        ov = getattr(r, "overall_rating", None)
+        c.drawRightString(right-pad, cy-4*mm, f"Overall: {ov}/5" if ov else "Overall: —")
+        cy -= (title_h + 2*mm)
+
+        # Two score columns
+        c.setFont("Helvetica", 9.5)
+        col1 = [
+            ("Prior knowledge", r.prior_knowledge),
+            ("Post", r.post_knowledge),
+            ("Structure", r.q_structure),
+            ("Pace", r.q_pace),
+            ("Materials", r.q_materials_quality),
+        ]
+        col2 = [
+            ("Purpose clear", r.q_purpose_clear),
+            ("Met needs", r.q_personal_needs),
+            ("Content clear", r.q_content_clear),
+            ("Instructor knowledge", r.q_instructor_knowledge),
+            ("Books/handouts", r.q_books_quality),
+        ]
+        for i in range(short_rows):
+            c.drawString(col1_x, cy, f"{col1[i][0]}: {col1[i][1] if col1[i][1] else '—'}")
+            c.drawString(col2_x, cy, f"{col2[i][0]}: {col2[i][1] if col2[i][1] else '—'}")
+            cy -= line_h
+
+        # Venue & benefits (single lines)
+        c.drawString(col1_x, cy, f"Venue: {r.q_venue_suitable if r.q_venue_suitable else '—'}")
+        c.drawString(col2_x, cy, f"Work benefit: {r.q_benefit_at_work if r.q_benefit_at_work else '—'}")
+        cy -= line_h
+        c.drawString(col1_x, cy, f"Outside-work benefit: {r.q_benefit_outside if r.q_benefit_outside else '—'}")
+        cy -= (line_h + 1*mm)
+
+        # Comments
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(col1_x, cy, "Comments:")
+        cy -= line_h
+        c.setFont("Helvetica-Oblique", 9.5)
+        if comment_lines:
+            for ln in comment_lines:
+                c.drawString(col1_x+6*mm, cy, ln)
+                cy -= line_h
+        else:
+            c.drawString(col1_x+6*mm, cy, "—")
+            cy -= line_h
+
+        # Callback
+        if cb_needed:
+            c.setFont("Helvetica-Bold", 9.5)
+            c.setFillColorRGB(0.8, 0.1, 0.1)
+            c.drawString(col1_x, cy, "Requested a callback")
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica", 9.5)
+            name = (r.contact_name or "—").strip()
+            email = (r.contact_email or "—").strip()
+            phone = (r.contact_phone or "—").strip()
+            c.drawString(col1_x + 42*mm, cy, f"Name: {name}")
+            c.drawString(col1_x + 95*mm, cy, f"Email: {email}")
+            c.drawString(col1_x + 150*mm, cy, f"Tel: {phone}")
+            cy -= line_h
+
+        return (y - need) - 6*mm
+
+    # Compose -------------------------------------------------------------
+    y = header()
+    if not responses:
+        c.setFont("Helvetica-Oblique", 10)
+        c.drawString(left, y, "No feedback responses yet for this booking.")
+    else:
+        for i, r in enumerate(responses, start=1):
+            y = draw_card(y, i, r)
+
+    footer()
+    c.showPage()
+    footer()
+    c.save()
+
+    buf.seek(0)
+    fn = f"feedback_all_{booking.course_reference or booking.pk}.pdf"
+    return FileResponse(buf, as_attachment=True, filename=fn)
+
+
+# --- ADD these two helpers (near your other helpers) ---
+def _format_course_dates_for_booking(booking):
+    """Return a nice dates string across all BookingDay rows."""
+    days = list(BookingDay.objects.filter(booking=booking).order_by("date").values_list("date", flat=True))
+    if not days:
+        return booking.course_date.strftime("%d %b %Y")
+    if len(days) == 1:
+        return days[0].strftime("%d %b %Y")
+    return f"{days[0].strftime('%d %b %Y')} – {days[-1].strftime('%d %b %Y')}"
+
+def _draw_zebra_row(c, x, y, w, h, idx, light=0.96, dark=0.90):
+    """Subtle zebra background behind a row rectangle at (x,y)."""
+    col = colors.Color(dark, dark, dark) if (idx % 2) else colors.Color(light, light, light)
+    c.setFillColor(col)
+    c.setStrokeColor(col)
+    c.rect(x, y, w, h, stroke=0, fill=1)
+    c.setFillColor(colors.black)
+    c.setStrokeColor(colors.black)
+
+# --- REPLACE your current instructor_feedback_pdf_summary with this one ---
+@login_required
+def instructor_feedback_pdf_summary(request, booking_id):
+    """
+    Pretty PDF summary of feedback for a booking:
+    - Header (Business, Course, Ref, Dates, Instructor, Count)
+    - Overall rating (avg) + distribution
+    - Averages table for all scored questions
+    - Comments (zebra)
+    - Callback requests list
+    - Footer
+    """
+    instr = getattr(request.user, "instructor", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "business", "instructor"),
+        pk=booking_id
+    )
+    if not instr or booking.instructor_id != instr.id:
+        return HttpResponseForbidden("You do not have access to this booking.")
+
+    # Figure date window (all booking days) to collect responses
+    day_dates = list(BookingDay.objects.filter(booking=booking).order_by("date").values_list("date", flat=True))
+    if day_dates:
+        date_min, date_max = min(day_dates), max(day_dates)
+    else:
+        date_min = date_max = booking.course_date
+
+    # Pull responses: match course_type and a date within the booking window
+    from .models import FeedbackResponse  # ensure this exists as created earlier
+    responses = list(
+        FeedbackResponse.objects.filter(
+            course_type=booking.course_type,
+            date__gte=date_min,
+            date__lte=date_max,
+        ).order_by("created_at")
+    )
+
+    # Build aggregates
+    count = len(responses)
+    overall_values = [r.overall_rating for r in responses if (getattr(r, "overall_rating", None) or 0) > 0]
+    overall_avg = round(mean(overall_values), 2) if overall_values else None
+    overall_dist = {i: 0 for i in range(1, 6)}
+    for v in overall_values:
+        if v in overall_dist:
+            overall_dist[v] += 1
+
+    # All 1–5 fields we want on the "averages" table (label, attribute)
+    score_fields = [
+        ("Prior knowledge", "prior_knowledge"),
+        ("Post knowledge", "post_knowledge"),
+        ("Purpose & objectives clear", "q_purpose_clear"),
+        ("Met my training needs", "q_personal_needs"),
+        ("Exercises were useful", "q_exercises_useful"),
+        ("Structure / logical", "q_structure"),
+        ("Pace suitable", "q_pace"),
+        ("Content & language clear", "q_content_clear"),
+        ("Instructor knowledgeable", "q_instructor_knowledge"),
+        ("Materials / equipment quality", "q_materials_quality"),
+        ("Books / handouts quality", "q_books_quality"),
+        ("Venue suitable & comfortable", "q_venue_suitable"),
+        ("Beneficial at work", "q_benefit_at_work"),
+        ("Beneficial outside work", "q_benefit_outside"),
+    ]
+
+    def avg_of(field):
+        vals = []
+        for r in responses:
+            v = getattr(r, field, None)
+            if v is not None:
+                try:
+                    v = int(v)
+                    if 1 <= v <= 5:
+                        vals.append(v)
+                except Exception:
+                    pass
+        return round(mean(vals), 2) if vals else None
+
+    averages = [(label, avg_of(attr)) for (label, attr) in score_fields]
+
+    # Comments & callbacks
+    comments = [r.comments.strip() for r in responses if (r.comments or "").strip()]
+    callbacks = []
+    for r in responses:
+        if getattr(r, "wants_callback", False):
+            callbacks.append({
+                "name": (r.contact_name or "").strip() or "—",
+                "email": (r.contact_email or "").strip(),
+                "phone": (r.contact_phone or "").strip(),
+                "submitted": r.created_at,
+            })
+
+    # ---- PDF rendering ----
+    buffer = io.BytesIO()
+    pagesize = landscape(A4)
+    c = canvas.Canvas(buffer, pagesize=pagesize)
+    W, H = pagesize
+
+    left = 18 * mm
+    right = W - 18 * mm
+    top = H - 16 * mm
+    bottom = 14 * mm
+    content_width = right - left
+
+    def draw_header():
+        y = top
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(left, y, "Course Feedback — Summary")
+        y -= 7 * mm
+        c.setFont("Helvetica", 10)
+
+        # two columns of meta
+        meta = [
+            ("Business", booking.business.name),
+            ("Course", booking.course_type.name),
+            ("Reference", booking.course_reference or "—"),
+            ("Dates", _format_course_dates_for_booking(booking)),
+            ("Instructor", booking.instructor.name if booking.instructor else "—"),
+            ("Responses", str(count)),
+        ]
+        col_gap = 8 * mm
+        col_w = (content_width - col_gap) / 2.0
+        x1, x2 = left, left + col_w + col_gap
+        y_line = y
+
+        for i, (k, v) in enumerate(meta):
+            if i == 0:
+                y_line = y
+            if i == 3:
+                y_line = y  # start second column aligned to the same y
+            x = x1 if i < 3 else x2
+            c.setFont("Helvetica-Bold", 10)
+            c.drawString(x, y_line, f"{k}:")
+            c.setFont("Helvetica", 10)
+            c.drawString(x + 28 * mm, y_line, str(v))
+            y_line -= 5.2 * mm
+
+        # underline
+        c.setStrokeColorRGB(0.8, 0.8, 0.85)
+        c.line(left, y_line - 2 * mm, right, y_line - 2 * mm)
+        c.setStrokeColor(colors.black)
+
+        return y_line - 6 * mm
+
+    def draw_overall(y):
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(left, y, "Overall rating")
+        c.setFont("Helvetica", 10)
+        if overall_avg is None:
+            c.drawString(left + 45 * mm, y, "No responses")
+            return y - 8 * mm
+
+        # Big average badge
+        badge_h = 12 * mm
+        badge_w = 28 * mm
+        x_badge = left + 45 * mm
+        y_badge = y + 3 * mm - badge_h
+        c.setFillColorRGB(0.89, 0.96, 0.90)  # light green
+        c.setStrokeColorRGB(0.75, 0.90, 0.80)
+        c.roundRect(x_badge, y_badge, badge_w, badge_h, 2.5 * mm, stroke=1, fill=1)
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica-Bold", 16)
+        c.drawCentredString(x_badge + badge_w / 2, y_badge + 3.2 * mm, f"{overall_avg:.2f}")
+
+        # Distribution 1–5
+        c.setFont("Helvetica", 10)
+        x = x_badge + badge_w + 10 * mm
+        c.drawString(x, y, "Distribution:")
+        x += 24 * mm
+        for i in range(1, 6):
+            c.drawString(x, y, f"{i}: {overall_dist.get(i,0)}")
+            x += 18 * mm
+        return y - 10 * mm
+
+    def draw_averages(y):
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(left, y, "Averages by question")
+        y -= 5 * mm
+
+        # Table columns: Question | Avg
+        col1 = left
+        col2 = left + content_width - 25 * mm
+        row_h = 7 * mm
+        top_y = y
+
+        for idx, (label, avgv) in enumerate(averages):
+            y -= row_h
+            _draw_zebra_row(c, left, y + 1.2 * mm, content_width, row_h - 1.2 * mm, idx)
+            c.setFont("Helvetica", 9.5)
+            c.drawString(col1 + 1.5 * mm, y + 2.2 * mm, label)
+            c.setFont("Helvetica-Bold", 10)
+            c.drawRightString(right - 1.5 * mm, y + 2.2 * mm, ("—" if avgv is None else f"{avgv:.2f}"))
+
+            # page break if needed
+            if y < bottom + 40 * mm:
+                c.showPage()
+                y = top
+                y = draw_header()
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(left, y, "Averages by question (cont.)")
+                y -= 7 * mm
+
+        return y - 6 * mm
+
+    def draw_comments(y):
+        if not comments:
+            return y
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(left, y, "Comments")
+        y -= 6 * mm
+
+        row_h = 12 * mm
+        for idx, txt in enumerate(comments):
+            # grow height if long (very light wrap: split into ~110 chars)
+            chunks = []
+            s = txt.replace("\r", "").split("\n")
+            s = " ".join(s).strip()
+            while len(s) > 110:
+                cut = s.rfind(" ", 0, 110)
+                if cut <= 0: cut = 110
+                chunks.append(s[:cut].strip())
+                s = s[cut:].strip()
+            if s: chunks.append(s)
+            needed_h = max(row_h, 5 * mm + len(chunks) * 5.2 * mm)
+
+            if y - needed_h < bottom + 16 * mm:
+                c.showPage()
+                y = top
+                y = draw_header()
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(left, y, "Comments (cont.)")
+                y -= 6 * mm
+
+            _draw_zebra_row(c, left, y - needed_h + 2 * mm, content_width, needed_h - 2 * mm, idx)
+            c.setFont("Helvetica-Oblique", 9.5)
+            yy = y - 6 * mm
+            for line in chunks:
+                c.drawString(left + 2 * mm, yy, f"“{line}”")
+                yy -= 5.2 * mm
+            y = y - needed_h
+
+        return y - 4 * mm
+
+    def draw_callbacks(y):
+        if not callbacks:
+            return y
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(left, y, "Call-back requested")
+        y -= 6 * mm
+
+        # columns: Name | Email | Telephone | Submitted
+        row_h = 7.2 * mm
+        widths = [50 * mm, 60 * mm, 40 * mm, content_width - (50 + 60 + 40) * mm]
+        xs = [left]
+        for w in widths[:-1]:
+            xs.append(xs[-1] + w)
+        # header
+        _draw_zebra_row(c, left, y - row_h + 2 * mm, content_width, row_h - 1.2 * mm, 1000)
+        c.setFont("Helvetica-Bold", 10)
+        headers = ["Name", "Email", "Telephone", "Submitted"]
+        for i, htxt in enumerate(headers):
+            c.drawString(xs[i] + 1.5 * mm, y - 4.5 * mm, htxt)
+        y -= row_h
+
+        c.setFont("Helvetica", 9.5)
+        for idx, cb in enumerate(callbacks):
+            if y - row_h < bottom + 16 * mm:
+                c.showPage()
+                y = top
+                y = draw_header()
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(left, y, "Call-back requested (cont.)")
+                y -= 6 * mm
+                # reprint header
+                _draw_zebra_row(c, left, y - row_h + 2 * mm, content_width, row_h - 1.2 * mm, 1000)
+                c.setFont("Helvetica-Bold", 10)
+                for i, htxt in enumerate(headers):
+                    c.drawString(xs[i] + 1.5 * mm, y - 4.5 * mm, htxt)
+                y -= row_h
+                c.setFont("Helvetica", 9.5)
+
+            _draw_zebra_row(c, left, y - row_h + 2 * mm, content_width, row_h - 1.2 * mm, idx)
+            c.drawString(xs[0] + 1.5 * mm, y - 4.5 * mm, cb["name"] or "—")
+            c.drawString(xs[1] + 1.5 * mm, y - 4.5 * mm, cb["email"] or "—")
+            c.drawString(xs[2] + 1.5 * mm, y - 4.5 * mm, cb["phone"] or "—")
+            submitted = cb["submitted"].strftime("%d %b %Y %H:%M") if cb.get("submitted") else "—"
+            c.drawString(xs[3] + 1.5 * mm, y - 4.5 * mm, submitted)
+            y -= row_h
+
+        return y - 4 * mm
+
+    def draw_footer():
+        c.setFont("Helvetica", 8.5)
+        c.setFillColorRGB(0.35, 0.35, 0.4)
+        footer = "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ  ·  info@unicornsafety.co.uk  ·  01743 360211"
+        c.drawCentredString(W / 2, 8 * mm, footer)
+        c.setFillColor(colors.black)
+
+    # --- compose pages ---
+    y = draw_header()
+    y = draw_overall(y)
+    y = draw_averages(y)
+    y = draw_comments(y)
+    y = draw_callbacks(y)
+    draw_footer()
+
+    c.showPage()
+    # If the previous page was full and forced showPage mid-section, we might have a blank new page; avoid adding content -> add footer anyway
+    draw_footer()
+    c.save()
+
+    buffer.seek(0)
+    fn = f"feedback_summary_{booking.course_reference or booking.pk}.pdf"
+    return FileResponse(buffer, as_attachment=True, filename=fn)

@@ -538,13 +538,17 @@ def _parse_flexible_date(s):
     return None
 
 def public_feedback_form(request):
+    """
+    Public course feedback form. Supports optional prefill via:
+      ?course=<code or UUID>&date=YYYY-MM-DD&instructor=<UUID>
+    """
     course_q = request.GET.get("course") or ""
     prefilled_course = _resolve_course_type(course_q)
 
+    # Initials: date (today unless provided) and instructor (optional)
     init = {
         "date": _parse_flexible_date(request.GET.get("date") or "") or timezone.localdate()
     }
-
     inst_q = request.GET.get("instructor") or ""
     if inst_q:
         try:
@@ -552,23 +556,47 @@ def public_feedback_form(request):
         except Instructor.DoesNotExist:
             pass
 
-    if request.method == "POST":
-        form = FeedbackForm(request.POST)
-    else:
-        form = FeedbackForm(initial=init)
+    form = FeedbackForm(request.POST or None, initial=init)
 
-    # if not prefilled, user must choose a course
+    # If course isn’t prefilled, user must choose it; otherwise set hidden initial
     form.fields["course_type"].required = not bool(prefilled_course)
-
-    # if prefilled, make sure a value is posted (template renders a hidden input)
     if prefilled_course:
         form.fields["course_type"].initial = prefilled_course.id
 
     if request.method == "POST" and form.is_valid():
         cd = form.cleaned_data
-        effective_course = prefilled_course or cd.get("course_type")
+        course = prefilled_course or cd.get("course_type")
 
-        # TODO: save feedback here
+        # Create the feedback row
+        FeedbackResponse.objects.create(
+            course_type = course,
+            date        = cd.get("date"),
+            instructor  = cd.get("instructor"),
+
+            # ratings
+            overall_rating       = cd.get("overall_rating"),
+            prior_knowledge      = cd.get("prior_knowledge"),
+            post_knowledge       = cd.get("post_knowledge"),
+            q_purpose_clear      = cd.get("q_purpose_clear"),
+            q_personal_needs     = cd.get("q_personal_needs"),
+            q_exercises_useful   = cd.get("q_exercises_useful"),
+            q_structure          = cd.get("q_structure"),
+            q_pace               = cd.get("q_pace"),
+            q_content_clear      = cd.get("q_content_clear"),
+            q_instructor_knowledge = cd.get("q_instructor_knowledge"),
+            q_materials_quality  = cd.get("q_materials_quality"),
+            q_books_quality      = cd.get("q_books_quality"),
+            q_venue_suitable     = cd.get("q_venue_suitable"),
+            q_benefit_at_work    = cd.get("q_benefit_at_work"),
+            q_benefit_outside    = cd.get("q_benefit_outside"),
+
+            # free text + contact
+            comments       = cd.get("comments") or "",
+            wants_callback = cd.get("wants_callback") or False,
+            contact_name   = cd.get("contact_name") or "",
+            contact_email  = cd.get("contact_email") or "",
+            contact_phone  = cd.get("contact_phone") or "",
+        )
 
         messages.success(request, "Thanks for your feedback!")
         return redirect("public_feedback_thanks")

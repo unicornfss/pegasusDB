@@ -10,7 +10,6 @@
   {% endif %}
 </h3>
 
-
 {% with st=booking.status %}
   {% if st == "scheduled" %}
     <span class="badge bg-info text-dark mb-3">Scheduled</span>
@@ -45,7 +44,6 @@
             {% if booking.training_location %}
               {{ booking.training_location.address_line }}<br>
               {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
-              {# Google Maps link built from the address #}
               {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
                 <a class="small" target="_blank" rel="noopener"
                    href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
@@ -107,8 +105,7 @@
   </div>
 </div>
 
-
-<!-- Tabs: Course days / registers, Assessments, Exams (optional), Invoicing -->
+<!-- Tabs: Course days / registers, Assessments, (optional) Exams, Feedback, Invoicing -->
 <ul class="nav nav-tabs mt-3" id="bookingTabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="days-tab" data-bs-toggle="tab"
@@ -135,7 +132,9 @@
     </button>
   </li>
   {% endif %}
-    <li class="nav-item" role="presentation">
+
+  <!-- New: Feedback tab button (in-page) -->
+  <li class="nav-item" role="presentation">
     <button class="nav-link" id="feedback-tab" data-bs-toggle="tab"
             data-bs-target="#feedback-pane" type="button" role="tab"
             aria-controls="feedback-pane" aria-selected="false">
@@ -160,7 +159,6 @@
         <thead>
           <tr>
             <th style="width:160px">Date</th>
-            {% comment %}Remove Start if you no longer want it{% endcomment %}
             <th style="width:120px">Start</th>
             <th style="width:120px" class="text-center">Delegates</th>
             <th style="width:160px" class="text-end">Actions</th>
@@ -186,11 +184,10 @@
     </div>
   </div>
 
-  <!-- Pane: Assessments (placeholder content for now) -->
+  <!-- Pane: Assessments -->
   <div class="tab-pane fade" id="assessments-pane" role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
     {% include "instructor/_assessment_matrix_inner.html" %}
   </div>
-
 
   {% if has_exam %}
   <!-- Pane: Exams (only when course type has exams) -->
@@ -199,63 +196,16 @@
   </div>
   {% endif %}
 
-  <!-- Pane: Feedback -->
+  <!-- Pane: Feedback (loads your booking_feedback.html) -->
   <div class="tab-pane fade" id="feedback-pane" role="tabpanel" aria-labelledby="feedback-tab" tabindex="0">
-    {% if feedback_list %}
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <div>
-          <strong>Average overall rating:</strong>
-          {% if feedback_avg %}{{ feedback_avg|floatformat:1 }} / 5{% else %}—{% endif %}
-        </div>
-        <div class="d-flex gap-2">
-          <a class="btn btn-outline-secondary btn-sm" href="{% url 'instructor_feedback_summary_pdf' booking.id %}">
-            Summary PDF
-          </a>
-          <a class="btn btn-outline-secondary btn-sm" href="{% url 'instructor_feedback_all_pdf' booking.id %}">
-            Export all PDFs
-          </a>
-        </div>
-      </div>
-
-      <div class="table-responsive">
-        <table class="table table-sm align-middle">
-          <thead>
-            <tr>
-              <th style="width:160px">Submitted</th>
-              <th style="width:110px">Overall</th>
-              <th>Instructor (selected)</th>
-              <th style="width:140px" class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for f in feedback_list %}
-              <tr>
-                <td>{{ f.created_at|date:"d M Y, H:i" }}</td>
-                <td><span class="badge bg-primary">{{ f.overall_rating }}</span></td>
-                <td>{{ f.instructor.name|default:"—" }}</td>
-                <td class="text-end">
-                  {# You already have public_feedback_pdf <uuid:pk> #}
-                  <a class="btn btn-outline-primary btn-sm" href="{% url 'public_feedback_pdf' f.id %}" target="_blank">
-                    View PDF
-                  </a>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="text-muted">No feedback responses have been submitted yet.</div>
-    {% endif %}
+    {% include "instructor/booking_feedback.html" %}
   </div>
 
-
-  <!-- Pane: Invoicing (placeholder content for now) -->
+  <!-- Pane: Invoicing -->
   <div class="tab-pane fade" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
     <div class="text-muted">Invoicing will go here.</div>
   </div>
 </div>
-
 
 <a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
 
@@ -264,20 +214,16 @@ document.addEventListener("DOMContentLoaded", function () {
   const hash = window.location.hash;
   if (!hash) return;
 
-  // Accept either the tab button id (#assessments-tab) or the pane id (#assessments-pane)
-  const tabTrigger = document.querySelector('button[data-bs-target="' + hash + '"]')
-                    || document.querySelector(hash + '[data-bs-toggle="tab"]')
-                    || document.getElementById('assessments-tab');
+  // Try to find a tab button targeting that pane, or a button with that id
+  const tabTrigger =
+    document.querySelector('button[data-bs-target="' + hash + '"]') ||
+    document.querySelector(hash + '[data-bs-toggle="tab"]');
 
-  if (tabTrigger) {
+  if (tabTrigger && window.bootstrap && bootstrap.Tab) {
     const tab = new bootstrap.Tab(tabTrigger);
     tab.show();
-    // ensure the content pane is scrolled to top
-    const pane = document.querySelector('#assessments-pane');
-    if (pane) pane.scrollTop = 0;
   }
 });
 </script>
-
 
 {% endblock %}

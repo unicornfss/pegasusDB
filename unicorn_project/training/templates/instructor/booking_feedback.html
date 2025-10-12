@@ -1,0 +1,55 @@
+{# templates/instructor/booking_feedback.html #}
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <div>
+    <strong>Total responses:</strong> {{ fb_count|default:0 }}
+    &nbsp;&nbsp;
+    <strong>Average overall:</strong>
+    {% if fb_avg %}{{ fb_avg|floatformat:1 }} (5/5){% else %}—{% endif %}
+  </div>
+
+  <div class="d-flex gap-2">
+    <a class="btn btn-outline-secondary btn-sm"
+       href="{% url 'instructor_feedback_pdf_summary' booking.id %}">
+      Summary PDF
+    </a>
+    <a class="btn btn-primary btn-sm"
+       href="{% url 'instructor_feedback_pdf_all' booking.id %}">
+      Export all to PDF
+    </a>
+  </div>
+</div>
+
+{% if fb_qs %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th style="width:140px">Date</th>
+          <th>Instructor</th>
+          <th style="width:120px" class="text-center">Overall</th>
+          <th style="width:120px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in fb_qs %}
+          <tr>
+            <td>{{ r.date|date:"j M Y" }}</td>
+            <td>{{ r.instructor.name|default:"—" }}</td>
+            <td class="text-center">
+              {{ r.overall_rating }}/5
+              <span aria-hidden="true">🙂</span>
+            </td>
+            <td class="text-end">
+              <a class="btn btn-outline-primary btn-sm"
+                 href="{% url 'instructor_feedback_view' r.id %}">
+                View
+              </a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="text-muted">No feedback responses for this booking yet.</div>
+{% endif %}

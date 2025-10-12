@@ -20,13 +20,16 @@ urlpatterns = [
     path("app/instructor/", instv.instructor_bookings, name="instructor_dashboard"),
     path("app/instructor/bookings/", instv.instructor_bookings, name="instructor_bookings"),
     path("app/instructor/booking/<uuid:pk>/", instv.instructor_booking_detail, name="instructor_booking_detail"),
-    path("app/instructor/booking/<uuid:pk>/assessment/", instv.instructor_assessment_matrix, name="instructor_assessment_matrix"),
-    path("app/instructor/booking/<uuid:pk>/assessment/save/", instv.instructor_assessment_save, name="instructor_assessment_save"),
     path("app/instructor/day/<int:pk>/registers/", instv.instructor_day_registers, name="instructor_day_registers"),
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
     path("app/instructor/profile/", views.instructor_profile, name="instructor_profile"),
-    path("app/instructor/booking/<uuid:pk>/assessment/pdf/", instv.instructor_assessment_pdf, name="instructor_assessment_pdf"),
+
+    # Instructor: delete a delegate row
+    path("app/instructor/register/<int:pk>/delete/", instv.instructor_delegate_delete, name="instructor_delegate_delete"),
+
+    # Instructor: export day's register to PDF
+    path("app/instructor/day/<int:pk>/registers/pdf/", instv.instructor_day_registers_pdf, name="instructor_day_registers_pdf"),
 
     # ---------- Public delegate register ----------
     path("register/", views.public_delegate_register, name="public_delegate_register"),
@@ -61,9 +64,6 @@ urlpatterns = [
     path("app/admin/instructors/new/", app_admin.admin_instructor_new, name="admin_instructor_new"),
     path("app/admin/instructors/<uuid:pk>/", app_admin.admin_instructor_edit, name="admin_instructor_edit"),
     path("app/admin/instructors/<uuid:pk>/delete/", app_admin.instructor_delete, name="admin_instructor_delete"),
-    path("app/instructor/booking/<uuid:pk>/feedback/all.pdf", instv.instructor_feedback_all_pdf, name="instructor_feedback_all_pdf"),
-    path("app/instructor/booking/<uuid:pk>/feedback/summary.pdf", instv.instructor_feedback_summary_pdf, name="instructor_feedback_summary_pdf"),
-
 
     # Bookings (admin)
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
@@ -89,16 +89,20 @@ urlpatterns = [
     path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
     path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
 
-    # Instructor: delete a delegate row
-    path("app/instructor/register/<int:pk>/delete/", instv.instructor_delegate_delete, name="instructor_delegate_delete"),
+    # ---------- Assessments ----------
+    # (matrix is embedded in booking detail; these are save/export endpoints)
+    path("app/instructor/booking/<uuid:pk>/assessment/save/", instv.instructor_assessment_save, name="instructor_assessment_save"),
+    path("app/instructor/booking/<uuid:pk>/assessment/pdf/", instv.instructor_assessment_pdf, name="instructor_assessment_pdf"),
 
-     # Instructor: export day's register to PDF
-    path("app/instructor/day/<int:pk>/registers/pdf/", instv.instructor_day_registers_pdf, name="instructor_day_registers_pdf"),
-
-     # ---------- Public Feedback ----------
+    # ---------- Public Feedback (QR-driven form) ----------
     path("feedback/", views.public_feedback_form, name="public_feedback_form"),
     path("feedback/thanks/", views.public_feedback_thanks, name="public_feedback_thanks"),
     path("feedback/<uuid:pk>/pdf/", views.public_feedback_pdf, name="public_feedback_pdf"),
     path("feedback/instructors", views.public_feedback_instructors_api, name="public_feedback_instructors_api"),
 
+    # ---------- Instructor: Feedback tab + detail + exports ----------
+    path("app/instructor/booking/<uuid:booking_id>/feedback/", instv.instructor_feedback_tab, name="instructor_feedback_tab"),
+    path("app/instructor/feedback/<uuid:pk>/", instv.instructor_feedback_view, name="instructor_feedback_view"),
+    path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/all/", instv.instructor_feedback_pdf_all, name="instructor_feedback_pdf_all"),
+    path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/summary/", instv.instructor_feedback_pdf_summary, name="instructor_feedback_pdf_summary"),
 ]

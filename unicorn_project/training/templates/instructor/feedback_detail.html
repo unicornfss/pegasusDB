@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Feedback response{% endblock %}
+{% block content %}
+<h3 class="mb-3">Feedback response</h3>
+
+<div class="mb-2 text-muted">
+  {{ fb.course_type.name }} — {{ fb.date|date:"d M Y" }}
+  {% if fb.instructor %} • {{ fb.instructor.name }}{% endif %}
+</div>
+
+<div class="row g-3">
+  <div class="col-md-3">
+    <div class="card">
+      <div class="card-body">
+        <div class="text-muted small">Overall</div>
+        <div class="fs-4">
+          {% if fb.overall_rating %}{{ fb.overall_rating }}/5{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<dl class="row">
+  <dt class="col-sm-5">Level of knowledge prior to course</dt>
+  <dd class="col-sm-7">{{ fb.prior_knowledge|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Level of knowledge post course</dt>
+  <dd class="col-sm-7">{{ fb.post_knowledge|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Purpose & objectives were clearly explained</dt>
+  <dd class="col-sm-7">{{ fb.q_purpose_clear|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Course met my personal training needs</dt>
+  <dd class="col-sm-7">{{ fb.q_personal_needs|default:"—" }}</dd>
+
+  <dt class="col-sm-5">The exercises were relevant and useful</dt>
+  <dd class="col-sm-7">{{ fb.q_exercises_useful|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Sessions were well structured / logical</dt>
+  <dd class="col-sm-7">{{ fb.q_structure|default:"—" }}</dd>
+
+  <dt class="col-sm-5">The sessions were suitably paced</dt>
+  <dd class="col-sm-7">{{ fb.q_pace|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Content & language easy to understand</dt>
+  <dd class="col-sm-7">{{ fb.q_content_clear|default:"—" }}</dd>
+
+  <dt class="col-sm-5">The instructor was knowledgeable</dt>
+  <dd class="col-sm-7">{{ fb.q_instructor_knowledge|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Training materials / equipment were of good standard</dt>
+  <dd class="col-sm-7">{{ fb.q_materials_quality|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Course books / handouts were a good standard</dt>
+  <dd class="col-sm-7">{{ fb.q_books_quality|default:"—" }}</dd>
+
+  <dt class="col-sm-5">The venue was suitable and comfortable</dt>
+  <dd class="col-sm-7">{{ fb.q_venue_suitable|default:"—" }}</dd>
+
+  <dt class="col-sm-5">The training will be beneficial to me at work</dt>
+  <dd class="col-sm-7">{{ fb.q_benefit_at_work|default:"—" }}</dd>
+
+  <dt class="col-sm-5">The training will be beneficial to me outside of work</dt>
+  <dd class="col-sm-7">{{ fb.q_benefit_outside|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Comments</dt>
+  <dd class="col-sm-7">{{ fb.comments|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Wants callback</dt>
+  <dd class="col-sm-7">{% if fb.wants_callback %}Yes{% else %}No{% endif %}</dd>
+
+  <dt class="col-sm-5">Contact name</dt>
+  <dd class="col-sm-7">{{ fb.contact_name|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Contact email</dt>
+  <dd class="col-sm-7">{{ fb.contact_email|default:"—" }}</dd>
+
+  <dt class="col-sm-5">Contact phone</dt>
+  <dd class="col-sm-7">{{ fb.contact_phone|default:"—" }}</dd>
+</dl>
+{% endblock %}
