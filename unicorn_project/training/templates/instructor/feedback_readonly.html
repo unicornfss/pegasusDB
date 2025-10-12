@@ -1,0 +1,32 @@
+<h4 class="mb-3">{{ r.course_type.name }} — Feedback ({{ r.date|date:"j M Y" }})</h4>
+<div class="mb-2"><strong>Overall:</strong> {{ r.overall_rating|default:"—" }}</div>
+<div class="row g-3">
+  <div class="col-md-6">
+    <div><strong>Prior knowledge:</strong> {{ r.prior_knowledge|default:"—" }}</div>
+    <div><strong>Purpose clear:</strong> {{ r.q_purpose_clear|default:"—" }}</div>
+    <div><strong>Exercises useful:</strong> {{ r.q_exercises_useful|default:"—" }}</div>
+    <div><strong>Structure:</strong> {{ r.q_structure|default:"—" }}</div>
+    <div><strong>Content clear:</strong> {{ r.q_content_clear|default:"—" }}</div>
+    <div><strong>Materials quality:</strong> {{ r.q_materials_quality|default:"—" }}</div>
+    <div><strong>Venue suitable:</strong> {{ r.q_venue_suitable|default:"—" }}</div>
+  </div>
+  <div class="col-md-6">
+    <div><strong>Post knowledge:</strong> {{ r.post_knowledge|default:"—" }}</div>
+    <div><strong>Personal needs met:</strong> {{ r.q_personal_needs|default:"—" }}</div>
+    <div><strong>Pace:</strong> {{ r.q_pace|default:"—" }}</div>
+    <div><strong>Instructor knowledge:</strong> {{ r.q_instructor_knowledge|default:"—" }}</div>
+    <div><strong>Books/handouts:</strong> {{ r.q_books_quality|default:"—" }}</div>
+    <div><strong>Benefit at work:</strong> {{ r.q_benefit_at_work|default:"—" }}</div>
+    <div><strong>Benefit outside:</strong> {{ r.q_benefit_outside|default:"—" }}</div>
+  </div>
+</div>
+
+<div class="mt-3">
+  <strong>Comments:</strong><br>
+  <div class="border rounded p-2 bg-light">{{ r.comments|default:"—" }}</div>
+</div>
+
+<div class="mt-3 text-muted">
+  {% if r.instructor %}Instructor: {{ r.instructor.name }} • {% endif %}
+  Submitted: {{ r.created_at|date:"j M Y H:i" }}
+</div>

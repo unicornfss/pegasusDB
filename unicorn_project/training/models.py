@@ -368,6 +368,11 @@ class FeedbackResponse(models.Model):
     q_benefit_at_work   = models.PositiveSmallIntegerField(null=True, blank=True)
     q_benefit_outside   = models.PositiveSmallIntegerField(null=True, blank=True)
 
+    # Overall
+    overall_rating = models.PositiveSmallIntegerField(
+        null=True, blank=True, help_text="Delegate’s overall 1–5 rating"
+    )
+
     # Free text
     comments = models.TextField(blank=True)
 

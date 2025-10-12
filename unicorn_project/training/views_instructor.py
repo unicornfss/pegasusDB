@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Avg
 from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed
 from django.shortcuts import redirect, render, get_object_or_404
@@ -15,7 +15,7 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 
-from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency
+from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency, FeedbackResponse
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm 
 
 buffer = io.BytesIO()
@@ -1014,3 +1014,15 @@ def instructor_assessment_pdf(request, pk):
     buf.seek(0)
     filename = f"assessments_{booking.course_reference or booking.pk}.pdf"
     return FileResponse(buf, as_attachment=True, filename=filename)
+
+@login_required
+def instructor_feedback_all_pdf(request, pk):
+    # simple redirect to a public/export endpoint if you already have one
+    return redirect("public_feedback_pdf", pk=pk)  # or build your own combined PDF
+
+@login_required
+def instructor_feedback_summary_pdf(request, pk):
+    # generate a 1-page summary; can reuse ReportLab similar to your matrix/export
+    # (left as a stub so we don’t collide with existing code)
+    return HttpResponseNotAllowed(["GET"])
+

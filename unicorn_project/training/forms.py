@@ -494,64 +494,53 @@ EMOJI_1_TO_5 = (
     (5, "😀 5"),
 )
 
-class FeedbackForm(forms.Form):
-    # header (unchanged)
-    course_type = forms.ModelChoiceField(
-        queryset=CourseType.objects.none(),
-        required=False,
-        label="Course type",
-        widget=forms.Select(attrs={"class": "form-select", "id": "id_course_type"}),
-    )
-    date = forms.DateField(
-        required=True,
-        widget=forms.DateInput(attrs={"type": "date", "class": "form-control", "id": "id_date"}),
-        label="Date",
-    )
-    instructor = forms.ModelChoiceField(
-        queryset=Instructor.objects.none(),
-        required=False,
-        label="Instructor",
-        widget=forms.Select(attrs={"class": "form-select", "id": "id_instructor"}),
-    )
+# forms.py
+from django import forms
+from .models import FeedbackResponse, CourseType, Instructor
 
-    # Knowledge levels
-    prior_knowledge = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    post_knowledge  = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
+RATING_CHOICES = (
+    (1, "1"),
+    (2, "2"),
+    (3, "3"),
+    (4, "4"),
+    (5, "5"),
+)
 
-    # Course objectives & content
-    q_purpose_clear        = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_personal_needs       = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_exercises_useful     = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
+class FeedbackForm(forms.ModelForm):
+    class Meta:
+        model = FeedbackResponse
+        fields = [
+            "course_type", "date", "instructor",
+            "prior_knowledge", "post_knowledge",
+            "q_purpose_clear", "q_personal_needs", "q_exercises_useful",
+            "q_structure", "q_pace", "q_content_clear", "q_instructor_knowledge",
+            "q_materials_quality", "q_books_quality",
+            "q_venue_suitable",
+            "q_benefit_at_work", "q_benefit_outside",  # <-- ensure included
+            "overall_rating",
+            "comments", "wants_callback",
+            "contact_name", "contact_email", "contact_phone",
+        ]
+        widgets = {
+            # 1–5 radio widgets for all rating questions, including the two “Summary” ones:
+            "prior_knowledge":        forms.RadioSelect(choices=RATING_CHOICES),
+            "post_knowledge":         forms.RadioSelect(choices=RATING_CHOICES),
+            "q_purpose_clear":        forms.RadioSelect(choices=RATING_CHOICES),
+            "q_personal_needs":       forms.RadioSelect(choices=RATING_CHOICES),
+            "q_exercises_useful":     forms.RadioSelect(choices=RATING_CHOICES),
+            "q_structure":            forms.RadioSelect(choices=RATING_CHOICES),
+            "q_pace":                 forms.RadioSelect(choices=RATING_CHOICES),
+            "q_content_clear":        forms.RadioSelect(choices=RATING_CHOICES),
+            "q_instructor_knowledge": forms.RadioSelect(choices=RATING_CHOICES),
+            "q_materials_quality":    forms.RadioSelect(choices=RATING_CHOICES),
+            "q_books_quality":        forms.RadioSelect(choices=RATING_CHOICES),
+            "q_venue_suitable":       forms.RadioSelect(choices=RATING_CHOICES),
+            "q_benefit_at_work":      forms.RadioSelect(choices=RATING_CHOICES),   # <-- FIX
+            "q_benefit_outside":      forms.RadioSelect(choices=RATING_CHOICES),   # <-- FIX
+            "overall_rating":         forms.RadioSelect(choices=RATING_CHOICES),
 
-    # Presentation
-    q_structure            = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_pace                 = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_content_clear        = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_instructor_knowledge = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_materials_quality    = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_books_quality        = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-
-    # Venue
-    q_venue_suitable = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-
-    # Summary
-    q_benefit_at_work  = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-    q_benefit_outside  = forms.ChoiceField(choices=EMOJI_1_TO_5, widget=forms.RadioSelect)
-
-    comments       = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 4, "class": "form-control"}))
-    wants_callback = forms.BooleanField(required=False)
-    contact_name   = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
-    contact_email  = forms.EmailField(required=False, validators=[EmailValidator()], widget=forms.EmailInput(attrs={"class": "form-control"}))
-    contact_phone  = forms.CharField(required=False, widget=forms.TextInput(attrs={"class": "form-control"}))
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["course_type"].queryset = CourseType.objects.order_by("name")
-        self.fields["course_type"].empty_label = "Select course type…"
-
-    def clean(self):
-        data = super().clean()
-        if data.get("wants_callback") and not (data.get("contact_email") or data.get("contact_phone")):
-            self.add_error("contact_email", "Please provide an email or phone number.")
-            self.add_error("contact_phone", "Please provide an email or phone number.")
-        return data
+            # the rest are normal inputs/textarea/checkbox:
+            "comments":       forms.Textarea(attrs={"rows": 4}),
+            "wants_callback": forms.CheckboxInput(),
+            "date":           forms.DateInput(attrs={"type": "date"}),
+        }

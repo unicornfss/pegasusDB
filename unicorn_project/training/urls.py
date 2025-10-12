@@ -61,6 +61,9 @@ urlpatterns = [
     path("app/admin/instructors/new/", app_admin.admin_instructor_new, name="admin_instructor_new"),
     path("app/admin/instructors/<uuid:pk>/", app_admin.admin_instructor_edit, name="admin_instructor_edit"),
     path("app/admin/instructors/<uuid:pk>/delete/", app_admin.instructor_delete, name="admin_instructor_delete"),
+    path("app/instructor/booking/<uuid:pk>/feedback/all.pdf", instv.instructor_feedback_all_pdf, name="instructor_feedback_all_pdf"),
+    path("app/instructor/booking/<uuid:pk>/feedback/summary.pdf", instv.instructor_feedback_summary_pdf, name="instructor_feedback_summary_pdf"),
+
 
     # Bookings (admin)
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
