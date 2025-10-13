@@ -1,18 +1,31 @@
 /* ========= Unicorn theme (sidebar + nav) ========= */
+/* Palette / helpers */
+:root { --unicorn-red: #8B0000; }
 
-/* Sidebar container */
+.bg-unicorn { background: var(--unicorn-red); }
+
+/* Sidebar base (desktop width handled below via media query) */
 .sidebar {
-  width: 280px;
-  min-height: 100vh;
-  background: #8B0000; /* deep red */
+  background: var(--unicorn-red);
   color: #fff;
 }
 
-/* Clock / small text */
+/* Keep the sidebar 280px and full height only on lg+ (offcanvas handles mobile) */
+@media (min-width: 992px) {
+  .sidebar { width: 280px; min-height: 100vh; }
+}
+
+/* When used as offcanvas, make the body stretch so footer pins to bottom */
+.sidebar .offcanvas-body { display: flex; flex-direction: column; min-height: 100%; }
+
+/* Slightly darker backdrop for the drawer */
+.offcanvas-backdrop.show { opacity: .65; }
+
+/* Typography tweaks inside the red sidebar */
 .sidebar .small,
 .sidebar .text-muted { color: rgba(255,255,255,.85) !important; }
 
-/* --- Nav tree: vertical stack --- */
+/* ----- Nav tree ----- */
 .sidebar .nav-tree {
   display: flex;
   flex-direction: column;
@@ -44,7 +57,7 @@
   color: #fff;
 }
 
-/* Icons */
+/* Icons keep a fixed gutter */
 .sidebar .nav-tree i {
   width: 1.25rem;
   text-align: center;
@@ -71,616 +84,67 @@
   border-left: 2px solid rgba(255,255,255,.25);
 }
 .sidebar .nav-tree li { list-style: none; margin: .15rem 0; }
-
-/* If any link uses Bootstrap's btn-link, normalize it */
 .sidebar .nav-tree .btn-link { color: #fff; text-decoration: none; padding: 0; }
 .sidebar .nav-tree .btn-link:hover { color: #fff; text-decoration: none; }
 
-/* --- Footer (user) as 2-row grid --- */
-/* row1: [avatar][who] ; row2: [actions spanning full width] */
-.sidebar .sidebar-footer {
+/* ----- Footer (user area) ----- */
+.sidebar .sidebar-footer{
+  margin-top: auto;                       /* pin to bottom */
+  padding-top: .75rem;
+  border-top: 1px solid rgba(255,255,255,.25);
   display: grid;
-  grid-template-columns: 28px 1fr;
+  grid-template-columns: 32px 1fr;        /* avatar + name column */
   column-gap: .75rem;
   align-items: start;
 }
-.sidebar .sidebar-footer .avatar {
-  grid-column: 1; grid-row: 1;
-  width: 28px; height: 28px; border-radius: 50%;
-  background: rgba(255,255,255,.25);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-weight: 700;
-  margin-top: 2px;
+.sidebar .sidebar-footer .avatar{
+  grid-column:1; grid-row:1;
+  width:32px; height:32px; border-radius:50%;
+  background:rgba(255,255,255,.25);
+  display:inline-flex; align-items:center; justify-content:center;
+  font-weight:700; margin-top:2px;
 }
-.sidebar .sidebar-footer .who { grid-column: 2; grid-row: 1; }
-.sidebar .sidebar-footer .actions { grid-column: 1 / -1; grid-row: 2; margin-top: .35rem; }
+.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
+.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
 
-/* Footer actions styled like menu items */
+/* Footer actions look like menu items */
 .sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  width: 100%;
-  padding: .45rem .75rem;     /* match menu padding */
-  border-radius: .5rem;
-  color: #fff;
-  text-decoration: none;
-  background: transparent;
-  border: 0;
+.sidebar .sidebar-footer button.leaf{
+  display:flex; align-items:center; gap:.5rem;
+  width:100%; padding:.45rem .75rem; line-height:1.25;
+  border-radius:.5rem; color:#fff; text-decoration:none;
+  background:transparent; border:0;
 }
 .sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover {
-  background: rgba(255,255,255,.15);
+.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
+.sidebar .sidebar-footer .actions .leaf i{
+  width:1.25rem; text-align:center; flex:0 0 1.25rem;
 }
-.sidebar .sidebar-footer .actions .leaf i {
-  width: 1.25rem;
-  text-align: center;
+
+/* Version text line */
+.sidebar .sidebar-footer .version{
+  grid-column:1 / -1; grid-row:3;
+  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
 }
+
+/* Center brand + clock */
+.sidebar .brand { text-align: center; }
+.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
+.sidebar #clock { text-align: center; }
 
 /* Misc */
 .badge.bg-danger { background:#d6336c !important; }
 .unicorn-geo-pin { position: relative; top: .25rem; }
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
+
+/* Make sure Bootstrap's offcanvas doesn't force a white background */
+.sidebar.offcanvas,
+.sidebar.offcanvas-lg { background: var(--unicorn-red) !important; }
+
+/* Text inside the drawer stays readable */
+.sidebar.offcanvas .offcanvas-body { color: #fff; }
+
+/* Remove fixed width on mobile; no stray white rail */
+@media (max-width: 991.98px) {
+  .sidebar { width: 100%; }          /* offcanvas controls width */
+  .sidebar.border-end { border-right: 0; }
 }
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{ grid-column:1; grid-row:1; width:32px; height:32px;
-  border-radius:50%; background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center; font-weight:700; margin-top:2px; }
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions look like menu items and align perfectly */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;       /* kill default button border */
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{
-  background:rgba(255,255,255,.15);
-}
-
-/* Ensure icons give a fixed left gutter matching the main menu */
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Footer pinned to bottom + 2-row grid */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* push to bottom */
-  padding-top: .75rem;
-  border-top: 1px solid rgba(255,255,255,.25);
-  display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
-  column-gap: .75rem;
-  align-items: start;
-}
-
-/* Grid placement */
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Actions align like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
-}
-
-/* Version text */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
-}
-
-/* — existing theme rules from earlier remain here — */
-
-

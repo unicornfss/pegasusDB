@@ -10,7 +10,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Min
 from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
 from django.http import HttpResponseForbidden
@@ -142,6 +142,7 @@ def business_list(request):
 def business_form(request, pk=None):
     obj = get_object_or_404(Business, pk=pk) if pk else None
 
+    # --- Save flow ---------------------------------------------------------
     if request.method == "POST":
         form = BusinessForm(request.POST, instance=obj)
         if form.is_valid():
@@ -155,18 +156,88 @@ def business_form(request, pk=None):
     else:
         form = BusinessForm(instance=obj)
 
+    # --- Locations (left card) --------------------------------------------
     locations = []
     add_location_url = None
     if obj:
         locations = TrainingLocation.objects.filter(business=obj).order_by("name")
         add_location_url = reverse("admin_location_new", args=[obj.id])
 
+    # --- Bookings (right card) + filters ----------------------------------
+    bookings = []
+    instructors = []
+    statuses = []
+
+    # GET filters (won't interfere with the POST save form)
+    f_status = request.GET.get("b_status", "all")
+    f_instr  = request.GET.get("b_instr") or ""
+    f_from   = request.GET.get("b_from") or ""
+    f_to     = request.GET.get("b_to") or ""
+
+    if obj:
+        base = (
+            Booking.objects
+            .filter(business=obj)
+            .select_related("course_type", "instructor", "training_location")
+            .annotate(first_day=Min("days__date"))   # earliest day from related BookingDay rows
+        )
+
+        # Distinct statuses present for this business (for tabs)
+        statuses = (
+            base.order_by()
+                .values_list("status", flat=True)
+                .distinct()
+        )
+
+        # Instructors who have bookings with this business (for dropdown)
+        instructors = (
+            Instructor.objects
+            .filter(bookings__business=obj)   # related_name 'bookings' on Booking.instructor
+            .distinct()
+            .order_by("name")
+        )
+
+        qs = base
+
+        # Status filter
+        if f_status and f_status != "all":
+            qs = qs.filter(status=f_status)
+
+        # Instructor filter
+        if f_instr:
+            qs = qs.filter(instructor_id=f_instr)
+
+        # Date range (use course_date if set, otherwise annotated first_day)
+        if f_from:
+            qs = qs.filter(Q(course_date__gte=f_from) | Q(first_day__gte=f_from))
+        if f_to:
+            qs = qs.filter(Q(course_date__lte=f_to) | Q(first_day__lte=f_to))
+
+        bookings = (
+            qs.order_by("-first_day", "-course_date", "-created_at")
+              .distinct()[:100]
+        )
+
+    # --- Render ------------------------------------------------------------
     return render(request, "admin/form_business.html", {
         "title": ("Edit Business" if obj else "New Business"),
         "form": form,
         "business": obj,
+
+        # locations card
         "locations": locations,
         "add_location_url": add_location_url,
+
+        # bookings card + filter data
+        "bookings": bookings,
+        "booking_statuses": statuses,
+        "booking_instructors": instructors,
+        "b_status": f_status,
+        "b_instr": f_instr,
+        "b_from": f_from,
+        "b_to": f_to,
+
+        # misc
         "back_url": reverse("admin_business_list"),
         "delete_url": reverse("admin_business_delete", args=[obj.id]) if obj else None,
     })
