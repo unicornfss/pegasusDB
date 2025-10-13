@@ -1,115 +1,170 @@
 {% load static %}
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{% block title %}Unicorn Training{% endblock %}</title>
 
-  <!-- Bootstrap + Icons -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-
-  <!-- Your theme (correct static path) -->
-  <link rel="stylesheet" href="{% static 'training/css/theme.css' %}">
+  <link rel="stylesheet" href="{% static 'training/css/theme.css' %}?v={{ now|date:'U' }}">
 </head>
-<body>
-  <div class="d-flex">
-    <aside class="sidebar p-3 border-end">
-      <div class="d-flex align-items-center gap-2 mb-3">
-        <img src="{% static 'training/img/logo.png' %}" height="125" alt="">
-        <strong>Unicorn</strong>
+<body class="min-vh-100 d-flex flex-column">
+
+  <div class="d-flex flex-grow-1">
+    <!-- LEFT: Sidebar -->
+    <aside class="sidebar d-flex flex-column p-3 border-end flex-shrink-0" style="width:280px">
+
+      {# Centered brand #}
+      <div class="brand text-center mb-2">
+        <img src="{% static 'training/img/logo.png' %}" height="125" alt="Unicorn logo"
+             class="brand-logo d-block mx-auto">
+        <strong class="d-block mt-1">Unicorn</strong>
       </div>
 
-      <div class="text-muted small mb-3" id="clock"></div>
+      {# Centered clock #}
+      <div class="small mb-3 text-center" id="clock" aria-live="polite"></div>
 
-      <nav class="nav-tree">
-        <a class="leaf" href="{% url 'home' %}"><i class="bi bi-house"></i> Home</a>
+      <nav class="nav-tree" aria-label="Main navigation">
+        <a class="leaf {% if request.resolver_match.url_name == 'home' %}active{% endif %}"
+           href="{% url 'home' %}">
+          <i class="bi bi-house"></i> Home
+        </a>
 
         {% if is_admin %}
-          <details class="branch" open>
+          <details class="branch" {% if 'business' in request.path %}open{% endif %}>
             <summary><i class="bi bi-building"></i> Businesses</summary>
             <ul>
-              <li><a class="leaf" href="{% url 'admin_business_list' %}"><i class="bi bi-columns"></i> View / edit / add</a></li>
-            </ul>
-          </details>
-
-          <details class="branch" open>
-            <summary><i class="bi bi-journal-bookmark"></i> Course Types</summary>
-            <ul>
-              <li><a class="leaf" href="{% url 'admin_course_type_list' %}"><i class="bi bi-columns"></i> View / edit / add</a></li>
-            </ul>
-          </details>
-
-          <!-- Bookings -->
-          <details class="branch" open>
-            <summary><i class="bi bi-calendar2-check"></i> Bookings</summary>
-            <ul>
               <li>
-                <a class="leaf" href="{% url 'admin_booking_list' %}">
+                <a class="leaf {% if 'business' in request.path %}active{% endif %}"
+                   href="{% url 'admin_business_list' %}">
                   <i class="bi bi-columns"></i> View / edit / add
                 </a>
               </li>
             </ul>
           </details>
 
-          <details class="branch" open>
+          <details class="branch" {% if 'course' in request.path or 'course_type' in request.path %}open{% endif %}>
+            <summary><i class="bi bi-journal-bookmark"></i> Course Types</summary>
+            <ul>
+              <li>
+                <a class="leaf {% if 'course' in request.path or 'course_type' in request.path %}active{% endif %}"
+                   href="{% url 'admin_course_type_list' %}">
+                  <i class="bi bi-columns"></i> View / edit / add
+                </a>
+              </li>
+            </ul>
+          </details>
+
+          <details class="branch" {% if 'booking' in request.path %}open{% endif %}>
+            <summary><i class="bi bi-calendar2-check"></i> Bookings</summary>
+            <ul>
+              <li>
+                <a class="leaf {% if 'booking' in request.path %}active{% endif %}"
+                   href="{% url 'admin_booking_list' %}">
+                  <i class="bi bi-columns"></i> View / edit / add
+                </a>
+              </li>
+            </ul>
+          </details>
+
+          <details class="branch" {% if 'instructor' in request.path or 'user' in request.path %}open{% endif %}>
             <summary><i class="bi bi-people"></i> Personnel</summary>
             <ul>
-              <li><a class="leaf" href="{% url 'admin_instructor_list' %}"><i class="bi bi-columns"></i> View / edit / add</a></li>
-              <li><a class="leaf" href="{% url 'admin_user_list' %}"><i class="bi bi-people-fill"></i> Users</a></li>
+              <li>
+                <a class="leaf {% if 'instructor' in request.path %}active{% endif %}"
+                   href="{% url 'admin_instructor_list' %}">
+                  <i class="bi bi-columns"></i> View / edit / add
+                </a>
+              </li>
+              <li>
+                <a class="leaf {% if 'user' in request.path %}active{% endif %}"
+                   href="{% url 'admin_user_list' %}">
+                  <i class="bi bi-people-fill"></i> Users
+                </a>
+              </li>
             </ul>
           </details>
         {% endif %}
 
-
         {% if is_instructor %}
-          <a class="nav-link" href="{% url 'instructor_bookings' %}"><i class="bi bi-calendar-event"></i> My bookings</a> 
-          <a class="leaf" href="{% url 'instructor_profile' %}"><i class="bi bi-person-gear"></i> My Profile</a>
+          <a class="leaf {% if request.resolver_match.url_name == 'instructor_bookings' %}active{% endif %}"
+             href="{% url 'instructor_bookings' %}">
+            <i class="bi bi-calendar-event"></i> My bookings
+          </a>
+          <a class="leaf {% if request.resolver_match.url_name == 'instructor_profile' %}active{% endif %}"
+             href="{% url 'instructor_profile' %}">
+            <i class="bi bi-person-gear"></i> My Profile
+          </a>
         {% endif %}
 
         {% if request.user.is_superuser %}
-          <a class="leaf" href="/admin/"><i class="bi bi-tools"></i> Django Admin</a>
+          <a class="leaf {% if '/admin/' in request.path %}active{% endif %}" href="/admin/">
+            <i class="bi bi-tools"></i> Django Admin
+          </a>
         {% endif %}
 
-        {% if user.is_authenticated %}
-          <a class="leaf" href="{% url 'password_change' %}">
-            <i class="bi bi-key"></i> Change password
-          </a>
-
-          <form method="post" action="{% url 'logout' %}" class="d-inline m-0 p-0">
-            {% csrf_token %}
-            <button type="submit" class="leaf btn btn-link p-0 text-start">
-              <i class="bi bi-box-arrow-right"></i> Logout
-            </button>
-          </form>
-        {% else %}
-          <a class="leaf" href="{% url 'login' %}">
+        {% if not user.is_authenticated %}
+          <a class="leaf {% if request.resolver_match.url_name == 'login' %}active{% endif %}"
+             href="{% url 'login' %}">
             <i class="bi bi-box-arrow-in-right"></i> Login
           </a>
         {% endif %}
       </nav>
+
+      {% if request.user.is_authenticated %}
+      <div class="sidebar-footer mt-auto">
+        <div class="avatar">
+          {{ request.user.get_full_name|default:request.user.username|slice:":1"|upper }}
+        </div>
+
+        <div class="who">
+          <div class="fw-semibold">{{ request.user.get_full_name|default:request.user.username }}</div>
+          <div class="small" style="opacity:.8;">Signed in</div>
+        </div>
+
+        <div class="actions d-flex flex-column gap-1">
+          <a class="leaf {% if request.resolver_match.url_name == 'password_change' %}active{% endif %}"
+             href="{% url 'password_change' %}">
+            <i class="bi bi-key"></i> Change password
+          </a>
+          <form method="post" action="{% url 'logout' %}" class="m-0">
+            {% csrf_token %}
+            <button type="submit" class="leaf text-start">
+              <i class="bi bi-box-arrow-right"></i> Logout
+            </button>
+          </form>
+        </div>
+
+        {# Version at the very bottom #}
+        <div class="version text-center"><strong>Pegasus v0.1</strong></div>
+      </div>
+      {% endif %}
     </aside>
 
+    <!-- RIGHT: Content -->
     <main class="flex-grow-1 p-3">
-      {% if messages %}{% for m in messages %}<div class="alert alert-{{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+      {% if messages %}
+        {% for m in messages %}
+          <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
   </div>
 
   <script>
-    // tiny clock
-    function updateClock(){const el=document.getElementById('clock'); if(!el) return; el.textContent=new Date().toLocaleString();}
-    setInterval(updateClock,1000); updateClock();
+    function updateClock(){
+      const el = document.getElementById('clock');
+      if(!el) return;
+      el.textContent = new Date().toLocaleString();
+    }
+    setInterval(updateClock, 1000); updateClock();
   </script>
 
-  <!-- Bootstrap bundle -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-  <!-- Your app JS (correct static path) -->
   <script src="{% static 'training/js/app.js' %}"></script>
-
-  <!-- Places helper (attaches to #id_address_line etc.) -->
   <script src="{% static 'training/js/places.js' %}"></script>
 
   {% if GOOGLE_MAPS_API_KEY %}
@@ -117,8 +172,6 @@
     src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places"
     onload="document.dispatchEvent(new Event('gmaps:ready'))">
   </script>
-  {% else %}
-    <!-- GOOGLE_MAPS_API_KEY not set; autocomplete disabled -->
   {% endif %}
 </body>
 </html>
