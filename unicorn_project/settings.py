@@ -1,9 +1,7 @@
 import os
 from pathlib import Path
 import dj_database_url
-
 from dotenv import load_dotenv
-import dj_database_url
 
 # --- Paths ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -41,14 +39,28 @@ if RENDER_EXTERNAL_HOSTNAME:
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-DATABASES = {
-    "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL"),
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
+# --- Database: Postgres via DATABASE_URL; fallback to SQLite ---
+def _is_postgres(url: str | None) -> bool:
+    return bool(url) and url.startswith(("postgres://", "postgresql://"))
 
+DB_URL = os.getenv("DATABASE_URL", "").strip()
+
+if _is_postgres(DB_URL):
+    # Production (Render): PostgreSQL with SSL
+    DATABASES = {
+        "default": dj_database_url.config(
+            default=DB_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
+    }
+else:
+    # Development: SQLite (no sslmode arguments)
+    # Accept DATABASE_URL=sqlite:///... if provided, otherwise default path
+    sqlite_url = DB_URL or f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
+    DATABASES = {
+        "default": dj_database_url.parse(sqlite_url, conn_max_age=0)
+    }
 
 # --- Installed apps ------------------------------------------
 INSTALLED_APPS = [
@@ -101,24 +113,6 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "unicorn_project.wsgi.application"
-
-# --- Database: Postgres via DATABASE_URL; fallback to SQLite ---
-db_url = os.getenv("DATABASE_URL", "").strip()
-if db_url:
-    DATABASES = {
-        "default": dj_database_url.config(
-            default=db_url,
-            conn_max_age=600,
-            ssl_require=True,
-        )
-    }
-else:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
-        }
-    }
 
 # --- Internationalization ------------------------------------
 LANGUAGE_CODE = "en-gb"
