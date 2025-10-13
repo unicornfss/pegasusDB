@@ -1,5 +1,6 @@
 import json
-from datetime import timedelta, datetime, time as dtime
+import math
+from datetime import timedelta, datetime, time, time as dtime
 
 from django import forms
 from django.conf import settings
@@ -19,6 +20,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.views.decorators.http import require_http_methods
+from math import ceil, floor
 
 from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
@@ -32,6 +34,38 @@ from .forms import (
 # =========================
 # Helpers / guards
 # =========================
+
+def _parse_time_or_none(s):
+    if not s:
+        return None
+    try:
+        hh, mm = s.split(':', 1)
+        return time(int(hh), int(mm))
+    except Exception:
+        return None
+
+def _add_hours_to_time(t: time, hours_float: float) -> time:
+    """Return a time = t + hours_float (e.g., 7.0 or 3.5 hours)."""
+    base = datetime(2000, 1, 1, t.hour or 0, t.minute or 0)
+    end  = base + timedelta(seconds=round(hours_float * 3600))
+    return time(end.hour, end.minute)
+
+def _hours_for_day_index(i: int, total_days: float, rows: int) -> float:
+    """
+    i      = 1-based day index
+    rows   = ceil(total_days)
+    rules  = 7h for whole days; 3.5h for the final fractional day
+    """
+    if rows == 1:
+        return 3.5 if (0 < total_days < 1) else 7.0
+    whole = floor(total_days)
+    frac  = total_days - whole
+    if i <= whole:
+        return 7.0
+    if frac > 0 and i == whole + 1:
+        return 3.5
+    return 7.0
+
 def is_admin(user):
     return user.is_authenticated and (
         user.is_superuser
@@ -616,7 +650,6 @@ def booking_form(request, pk=None):
     Create/edit a booking.
     - On POST: save and replace BookingDay rows from hidden JSON ('booking_days' or 'days_json').
     - On GET: send booking_days_initial_json so the days table repopulates.
-    - Additionally passes 'day_rows' (days + delegate counts) for Registers buttons (if used elsewhere).
     """
     obj = get_object_or_404(Booking, pk=pk) if pk else None
 
@@ -626,17 +659,7 @@ def booking_form(request, pk=None):
             was_new = obj is None
             booking = form.save()
 
-            # ---- helpers ----
-            def _parse_time_or_none(s: str | None):
-                if not s:
-                    return None
-                try:
-                    hh, mm = s.split(":", 1)
-                    return time(int(hh), int(mm))
-                except Exception:
-                    return None
-
-            # Accept either key name (template writes to both)
+            # Accept either key; template writes to both
             raw_days = request.POST.get("booking_days") or request.POST.get("days_json") or "[]"
             try:
                 days_payload = json.loads(raw_days)
@@ -649,42 +672,40 @@ def booking_form(request, pk=None):
                 # Replace all BookingDay rows with what came from the inline table
                 booking.days.all().delete()
 
-                for row in days_payload:
+                total_days = float(getattr(booking.course_type, "duration_days", 1.0) or 1.0)
+                rows = max(1, math.ceil(total_days))
+
+                for i, row in enumerate(days_payload, start=1):
                     day_date_str = (row.get("day_date") or "").strip()
                     if not day_date_str:
                         continue
 
-                    # required pieces we know exist in the model
-                    dt = datetime.fromisoformat(day_date_str).date()
-                    st = _parse_time_or_none(row.get("start_time")) or booking.start_time
+                    start_t = _parse_time_or_none(row.get("start_time")) or booking.start_time
+                    end_t   = _parse_time_or_none(row.get("end_time"))
 
-                    # optional pieces — uncomment these two lines if your BookingDay has these fields
-                    # et = _parse_time_or_none(row.get("end_time"))
-                    # note = (row.get("note") or "").strip() or None
+                    # If browser didn't send end_time, compute it from duration
+                    if not end_t and start_t:
+                        end_t = _add_hours_to_time(start_t, _hours_for_day_index(i, total_days, rows))
 
                     BookingDay.objects.create(
                         booking=booking,
-                        date=dt,
-                        start_time=st,
-                        # end_time=et,
-                        # note=note,
+                        date=datetime.fromisoformat(day_date_str).date(),
+                        start_time=start_t,
+                        end_time=end_t,
                     )
             else:
-                # Fallback: create rows from duration if NEW and no JSON was provided
+                # Fallback: create rows from duration when creating
                 if was_new and booking.course_type_id and booking.course_date:
-                    # If duration_days can be fractional (e.g. 1.5), we still create whole-day rows here.
-                    try:
-                        duration_val = booking.course_type.duration_days or 1
-                        duration = math.ceil(float(duration_val))
-                    except Exception:
-                        duration = 1
-
-                    start = booking.course_date
-                    for i in range(duration):
+                    total_days = float(getattr(booking.course_type, "duration_days", 1.0) or 1.0)
+                    rows = max(1, math.ceil(total_days))
+                    for i in range(1, rows + 1):
+                        s = booking.start_time
+                        e = _add_hours_to_time(s, _hours_for_day_index(i, total_days, rows)) if s else None
                         BookingDay.objects.create(
                             booking=booking,
-                            date=start + timedelta(days=i),
-                            start_time=booking.start_time,
+                            date=booking.course_date + timedelta(days=i - 1),
+                            start_time=s,
+                            end_time=e,
                         )
 
             messages.success(request, "Booking saved.")
@@ -695,10 +716,10 @@ def booking_form(request, pk=None):
             messages.error(request, "Please correct the errors below.")
     else:
         # Auto-advance due bookings to "in_progress" before showing the form
-        _auto_update_booking_statuses()
+        _auto_update_booking_statuses()  # if you renamed the helper; otherwise call your existing one
         form = BookingForm(instance=obj)
 
-    # ---- maps for client-side behaviour (unchanged) ----
+    # maps for client-side behaviour
     course_type_map = {
         str(ct.id): {
             "code": ct.code or "",
@@ -722,38 +743,28 @@ def booking_form(request, pk=None):
         for loc in TrainingLocation.objects.select_related("business").order_by("name")
     }
 
-    # Seed the inline table (we include start_time; end_time/note left blank unless your model has them)
     if obj and obj.pk:
         booking_days_initial = [
             {
                 "day_date": d.date.isoformat(),
                 "start_time": d.start_time.strftime("%H:%M") if d.start_time else "",
-                "end_time": "",  # uncomment if you add that field and fetch it here
-                "note": "",      # uncomment/fill if you add a note field
+                "end_time": d.end_time.strftime("%H:%M") if d.end_time else "",
             }
             for d in obj.days.all().order_by("date")
         ]
     else:
         booking_days_initial = []
 
-    return render(
-        request,
-        "admin/form_booking.html",
-        {
-            "title": ("Edit Booking" if obj else "New Booking"),
-            "form": form,
-            "booking": obj,
-            "back_url": reverse("admin_booking_list"),
-            "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
-            "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
-            "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
-            "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
-        },
-    )
-
-
-
-
+    return render(request, "admin/form_booking.html", {
+        "title": ("Edit Booking" if obj else "New Booking"),
+        "form": form,
+        "booking": obj,
+        "back_url": reverse("admin_booking_list"),
+        "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
+        "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
+        "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
+        "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
+    })
 
 @admin_required
 @require_http_methods(["GET", "POST"])

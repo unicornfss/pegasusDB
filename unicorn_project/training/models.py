@@ -170,6 +170,7 @@ class BookingDay(models.Model):
     booking = models.ForeignKey('Booking', on_delete=models.CASCADE, related_name='days')
     date = models.DateField()  # (you already renamed from day_date)
     start_time = models.TimeField(blank=True, null=True)
+    end_time   = models.TimeField(null=True, blank=True)
     # Make it safe to migrate without a one-off default:
     day_code = models.CharField(max_length=64, blank=True, default='', db_index=True)
 
