@@ -1,18 +1,19 @@
 {% extends "public/base_public.html" %}
 {% load static %}
 
-{# Browser/tab title only #}
+{# Browser/tab title #}
 {% block title %}
   {% if course_type %}{{ course_type.name }} — Course Register{% else %}Course Register{% endif %}
 {% endblock %}
 
-{# Replace the header so it shows logo + company name (no page title here) #}
+{# Header: logo + company name #}
 {% block header %}
   <div class="d-flex align-items-center gap-3 py-2">
     <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
     <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
   </div>
 {% endblock %}
+
 {% block content %}
 <h3 class="mb-3">Delegate register</h3>
 
@@ -25,6 +26,7 @@
 
   <div class="row g-3">
 
+    {# COURSE #}
     {% if course %}
       <div class="col-12">
         <label class="form-label">Course</label>
@@ -32,7 +34,6 @@
           {{ course.name }} ({{ course.code }})
         </div>
         <input type="hidden" name="course_id" value="{{ course.id }}">
-        <!-- Let JS know the code when preselected -->
         <input type="hidden" name="course_code" value="{{ course.code }}">
       </div>
     {% else %}
@@ -48,36 +49,42 @@
       </div>
     {% endif %}
 
-    <div class="col-md-6">
-      <label class="form-label">Name</label>
-      {{ form.name }}
-      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-6">
-      <label class="form-label">Date of birth</label>
-      {{ form.date_of_birth }}
-      {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-6">
-      <label class="form-label">Job title</label>
-      {{ form.job_title }}
-      {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-6">
-      <label class="form-label">Employee ID (optional)</label>
-      {{ form.employee_id }}
-      {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
+    {# DATE (moved before Name) #}
     <div class="col-md-6">
       <label class="form-label">Date</label>
       {{ form.date }}
       {% for err in form.date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
 
+    {# DATE OF BIRTH #}
+    <div class="col-md-6">
+      <label class="form-label">Date of birth</label>
+      {{ form.date_of_birth }}
+      {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    {# NAME #}
+    <div class="col-md-6">
+      <label class="form-label">Name</label>
+      {{ form.name }}
+      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    {# JOB TITLE #}
+    <div class="col-md-6">
+      <label class="form-label">Job title</label>
+      {{ form.job_title }}
+      {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    {# EMPLOYEE ID #}
+    <div class="col-md-6">
+      <label class="form-label">Employee ID (optional)</label>
+      {{ form.employee_id }}
+      {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+
+    {# INSTRUCTOR (populated based on course + date) #}
     <div class="col-md-6">
       <label class="form-label">Instructor</label>
       <select name="instructor" class="form-select" {% if not course %}disabled{% endif %}>
@@ -90,39 +97,36 @@
       </select>
     </div>
 
-    <!-- HEALTH DECLARATION -->
+    {# HEALTH DECLARATION #}
     <div class="col-12">
-  <label class="form-label">Health declaration</label>
+      <label class="form-label">Health declaration</label>
 
-  <div class="vstack gap-2">
-    {# Render each radio explicitly #}
-    {% for rb in form.health_status %}
-      <label class="form-check d-flex align-items-start gap-2">
-        {{ rb.tag }}
-        <span>{{ rb.choice_label }}</span>
-      </label>
-    {% endfor %}
-  </div>
+      <div class="vstack gap-2">
+        {% for rb in form.health_status %}
+          <label class="form-check d-flex align-items-start gap-2">
+            {{ rb.tag }}
+            <span>{{ rb.choice_label }}</span>
+          </label>
+        {% endfor %}
+      </div>
 
-  {# Show validation errors for this field #}
-  {% for err in form.health_status.errors %}
-    <div class="text-danger small">{{ err }}</div>
-  {% endfor %}
+      {% for err in form.health_status.errors %}
+        <div class="text-danger small">{{ err }}</div>
+      {% endfor %}
 
-  <div class="form-text">
-    This helps the instructor make reasonable adjustments where needed.
-  </div>
-</div>
-
+      <div class="form-text">
+        This helps the instructor make reasonable adjustments where needed.
+      </div>
+    </div>
 
   </div>
 
-  <button class="btn btn-primary mt-3">Submit</button>
+  <button class="btn btn-primary mt-3 w-100 w-md-auto">Submit</button>
 </form>
 
-<!-- Keep this script: date or course change refreshes instructors -->
+{# Script: handle course change + refresh instructor list; default date if blank #}
 <script>
-  // If the user picks a course without a QR, reload to lock it via ?ct=<CODE>
+  // When course is chosen via dropdown, persist as ?ct=<CODE> and keep selected date
   const courseSelect = document.getElementById('courseSelect');
   if (courseSelect) {
     courseSelect.addEventListener('change', function(){
@@ -130,7 +134,6 @@
       if (opt && opt.dataset.code){
         const params = new URLSearchParams(window.location.search);
         params.set('ct', opt.dataset.code);
-        // also keep current date choice (if any)
         const dateEl = document.querySelector('input[name="date"]');
         if (dateEl && dateEl.value) params.set('date', dateEl.value);
         window.location.search = params.toString();
@@ -141,6 +144,13 @@
   (function(){
     const dateInput  = document.querySelector('input[name="date"]');
     const instSelect = document.querySelector('select[name="instructor"]');
+
+    // Fallback: if date is empty (shouldn't be after server fix), set to today
+    if (dateInput && !dateInput.value) {
+      const tzOffset = new Date().getTimezoneOffset() * 60000;
+      const today = new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
+      dateInput.value = today;
+    }
 
     function currentCourseCode() {
       const hidden = document.querySelector('input[name="course_code"]');
