@@ -23,7 +23,7 @@
   {% endwith %}
 {% endif %}
 
-<form method="post" class="card p-3">
+<form id="booking-form" method="post" class="card p-3">
   {% csrf_token %}
 
   {% if form.non_field_errors %}
@@ -33,96 +33,122 @@
   {% endif %}
 
   <div class="row g-3">
-    <div class="col-md-6">
-      <label class="form-label">Business *</label>
-      {{ form.business }}
-      {% for err in form.business.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    <!-- Course details -->
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">Course details</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-12">
+              <label class="form-label">Business *</label>
+              {{ form.business }}
+              {% for err in form.business.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label">Training location *</label>
+              {{ form.training_location }}
+              {% for err in form.training_location.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              <div id="loc-address-text" class="form-text mt-1"></div>
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label">Course type *</label>
+              <select name="{{ form.course_type.html_name }}" id="{{ form.course_type.id_for_label }}" class="form-select">
+                <option value="">— Select a course type —</option>
+                {% for ct in form.fields.course_type.queryset %}
+                  <option value="{{ ct.pk }}"
+                    {% if form.is_bound and form.data.course_type == ct.pk|stringformat:"s" %}
+                      selected
+                    {% elif not form.is_bound and form.instance and form.instance.course_type_id == ct.pk %}
+                      selected
+                    {% elif not form.is_bound and form.initial.course_type == ct.pk|stringformat:"s" %}
+                      selected
+                    {% endif %}
+                    data-duration="{{ ct.duration_days }}"
+                    data-course-fee="{{ ct.default_course_fee }}"
+                    data-instructor-fee="{{ ct.default_instructor_fee }}"
+                    data-code="{{ ct.code|default_if_none:'' }}"
+                  >{{ ct.name }}</option>
+                {% endfor %}
+              </select>
+              {% for err in form.course_type.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Course date *</label>
+              {{ form.course_date }}
+              {% for err in form.course_date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Start time *</label>
+              {{ form.start_time }}
+              {% for err in form.start_time.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label">Course reference</label>
+              {{ form.course_reference }}
+              {% for err in form.course_reference.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="col-md-6">
-      <label class="form-label">Training location *</label>
-      {{ form.training_location }}
-      {% for err in form.training_location.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-      <div id="loc-address-text" class="form-text mt-1"></div>
+    <!-- Instructor & contact -->
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">Instructor &amp; contact</div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-12">
+              <label class="form-label">Instructor</label>
+              {{ form.instructor }}
+              {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Course fee</label>
+              {{ form.course_fee }}
+              {% for err in form.course_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">Instructor fee</label>
+              {{ form.instructor_fee }}
+              {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Contact name</label>
+              {{ form.contact_name }}
+              {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Telephone</label>
+              {{ form.telephone }}
+              {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Email</label>
+              {{ form.email }}
+              {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <div class="col-md-6">
-      <label class="form-label">Course type *</label>
-      <select name="{{ form.course_type.html_name }}" id="{{ form.course_type.id_for_label }}" class="form-select">
-        <option value="">— Select a course type —</option>
-        {% for ct in form.fields.course_type.queryset %}
-          <option value="{{ ct.pk }}"
-            {% if form.is_bound and form.data.course_type == ct.pk|stringformat:"s" %}
-              selected
-            {% elif not form.is_bound and form.instance and form.instance.course_type_id == ct.pk %}
-              selected
-            {% elif not form.is_bound and form.initial.course_type == ct.pk|stringformat:"s" %}
-              selected
-            {% endif %}
-            data-duration="{{ ct.duration_days }}"
-            data-course-fee="{{ ct.default_course_fee }}"
-            data-instructor-fee="{{ ct.default_instructor_fee }}"
-            data-code="{{ ct.code|default_if_none:'' }}"
-          >{{ ct.name }}</option>
-        {% endfor %}
-      </select>
-      {% for err in form.course_type.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-6">
-      <label class="form-label">Instructor</label>
-      {{ form.instructor }}
-      {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Course date *</label>
-      {{ form.course_date }}
-      {% for err in form.course_date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Start time *</label>
-      {{ form.start_time }}
-      {% for err in form.start_time.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Course reference</label>
-      {{ form.course_reference }}
-      {% for err in form.course_reference.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-6">
-      <label class="form-label">Course fee</label>
-      {{ form.course_fee }}
-      {% for err in form.course_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-    <div class="col-md-6">
-      <label class="form-label">Instructor fee</label>
-      {{ form.instructor_fee }}
-      {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Contact name</label>
-      {{ form.contact_name }}
-      {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Telephone</label>
-      {{ form.telephone }}
-      {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-    <div class="col-md-4">
-      <label class="form-label">Email</label>
-      {{ form.email }}
-      {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
+    <!-- Notes -->
     <div class="col-12">
-      <label class="form-label">Comments</label>
-      {{ form.comments }}
-      {% for err in form.comments.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      <div class="card">
+        <div class="card-header">Course notes</div>
+        <div class="card-body">
+          <label class="form-label">Comments</label>
+          {{ form.booking_notes }}
+          {% for err in form.booking_notes.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+      </div>
     </div>
   </div>
 
@@ -144,7 +170,9 @@
     </table>
   </div>
 
+  <!-- Hidden JSON payload for inline days -->
   <input type="hidden" name="booking_days" id="booking-days-json">
+  <input type="hidden" name="days_json"     id="booking-days-json-mirror">
 
   {% if booking %}
     <hr class="my-3">
@@ -163,9 +191,7 @@
             {% for d in day_rows %}
               <tr>
                 <td>{{ d.date }}</td>
-                <td class="text-center">
-                  <span class="badge bg-secondary">{{ d.n }}</span>
-                </td>
+                <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
                 <td class="text-end">
                   <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_booking_day_registers' d.id %}">
                     <i class="bi bi-people"></i> View / edit
@@ -301,7 +327,6 @@
     return `${String(end.getHours()).padStart(2,"0")}:${String(end.getMinutes()).padStart(2,"0")}`;
   }
 
-  // ----- NEW: duration logic (supports 0.5, 1.5, etc.)
   function getCourseSelect() {
     let el = document.getElementById("id_course_type");
     if (el) return el;
@@ -317,9 +342,9 @@
     return isNaN(v) ? 0 : v;
   }
 
-  // 7h for whole days; 3.5h for fractional last day (0.5)
+  // 7h for whole days; 3.5h for fractional last day
   function durHoursForIndex(i, rows) {
-    const total = getTotalDurationDays();     // e.g. 0.5, 1, 1.5, 2
+    const total = getTotalDurationDays();
     const whole = Math.floor(total);
     const frac  = total - whole;
 
@@ -357,6 +382,7 @@
       noteI.type = 'text';
       noteI.className = 'form-control form-control-sm';
       noteI.placeholder = '(optional)';
+      noteI.id = `day-${i}-note`;  /* <-- so we can read it */
 
       const td0 = document.createElement('td'); td0.textContent = `Day ${i}`;
       const td1 = document.createElement('td'); td1.appendChild(dateI);
@@ -382,6 +408,8 @@
       if (i === 1) { dateI.readOnly = true; stI.readOnly = true; dateI.title="Controlled by Course date above"; stI.title="Controlled by Start time above"; }
 
       const noteI=document.createElement('input'); noteI.type='text'; noteI.className='form-control form-control-sm'; noteI.placeholder='(optional)';
+      noteI.id = `day-${i}-note`;
+      noteI.value = d.note || '';
 
       const td0=document.createElement('td'); td0.textContent=`Day ${i}`;
       const td1=document.createElement('td'); td1.appendChild(dateI);
@@ -433,16 +461,28 @@
     }
   });
 
-  function serializeDays(){
-    const tb=$tbody(); if(!tb) return;
-    const rows=Array.from(tb.children);
-    const payload = rows.map((tr, idx)=>({
-      day_index: idx+1,
-      day_date:  document.getElementById(`day-${idx+1}-date`)?.value || '',
-      start_time:document.getElementById(`day-${idx+1}-start`)?.value || '',
-      end_time:  document.getElementById(`day-${idx+1}-end`)?.value || ''
-    }));
-    const hid=document.getElementById('booking-days-json'); if(hid) hid.value=JSON.stringify(payload);
+  /* ----- SERIALISE ALL INLINE ROWS BEFORE SUBMIT ----- */
+  function serializeDays() {
+    const tb = document.getElementById('booking-days');
+    if (!tb) return;
+
+    const rows = Array.from(tb.children);
+    const payload = rows.map((tr, idx) => {
+      const i = idx + 1;
+      return {
+        day_index:  i,
+        day_date:   document.getElementById(`day-${i}-date`)?.value || '',
+        start_time: document.getElementById(`day-${i}-start`)?.value || '',
+        end_time:   document.getElementById(`day-${i}-end`)?.value   || '',
+        note:       document.getElementById(`day-${i}-note`)?.value  || ''
+      };
+    });
+
+    const json = JSON.stringify(payload);
+    const h1 = document.getElementById('booking-days-json');
+    const h2 = document.getElementById('booking-days-json-mirror');
+    if (h1) h1.value = json;
+    if (h2) h2.value = json;
   }
 
   /* ---- Fees + reference helpers ---- */
@@ -455,7 +495,7 @@
     const courseFeeRaw  = parseFloat(opt.dataset.courseFee || '0');
     const instrFeeRaw   = parseFloat(opt.dataset.instructorFee || '0');
     return {
-      duration: isNaN(durationRaw) ? 0 : Math.ceil(durationRaw), // used only for row count
+      duration: isNaN(durationRaw) ? 0 : Math.ceil(durationRaw), // row count
       courseFee: isNaN(courseFeeRaw) ? 0 : courseFeeRaw,
       instructorFee: isNaN(instrFeeRaw) ? 0 : instrFeeRaw,
       code: (opt.dataset.code || '').toUpperCase()
@@ -526,11 +566,28 @@
     const courseSel = getCourseSelect();
     if (courseSel) courseSel.addEventListener('change', handleCourseChanged);
 
-    // Run once on load (important for edit/autofill cases)
+    // Run once on load
     handleCourseChanged();
 
-    const form=document.querySelector('form');
-    if(form) form.addEventListener('submit', serializeDays);
+    // Keep the payload in sync and ensure it’s written before submit
+    const form = document.getElementById('booking-form');
+    if (form) form.addEventListener('submit', serializeDays);
+
+    const daysTbody = document.getElementById('booking-days');
+    if (daysTbody) {
+      daysTbody.addEventListener('input', serializeDays);
+      daysTbody.addEventListener('change', serializeDays);
+    }
+
+    // auto-grow notes textarea for nicer UX
+    const notes = document.getElementById('{{ form.booking_notes.id_for_label }}');
+    if (notes) {
+      notes.addEventListener('input', () => {
+        notes.style.height = 'auto';
+        notes.style.height = (notes.scrollHeight) + 'px';
+      });
+      notes.dispatchEvent(new Event('input'));
+    }
   });
 </script>
 

@@ -69,25 +69,59 @@ def _make_local_aware(local_date, local_time):
             # Non-existent local times (spring forward): nudge +1h
             return timezone.make_aware(naive + timedelta(hours=1), tz)
 
-def _auto_bump_due_bookings_to_in_progress():
-    """
-    Move SCHEDULED bookings to IN PROGRESS if now (local) is past their
-    local start datetime (course_date + start_time).
-    Lightweight and safe to call from list/form views.
-    """
-    now_local = timezone.localtime()  # aware datetime in settings.TIME_ZONE
-    qs = (Booking.objects
-          .filter(status="scheduled", course_date__lte=now_local.date())
-          .only("id", "course_date", "start_time", "status"))
+# imports you likely already have; add any missing
+from datetime import datetime, time
+from django.db.models import Max, Q
+from django.utils import timezone
 
-    due_ids = []
+def _auto_update_booking_statuses():
+    """
+    1) Scheduled -> In progress     when a day starts
+    2) Scheduled/In progress -> Awaiting instructor closure when the last day is finished
+    """
+    now = timezone.localtime()
+    today = now.date()
+    now_t = now.time()
+
+    # --- 1) SCHEDULED -> IN PROGRESS when today's day has started ---
+    Booking.objects.filter(status="scheduled").filter(
+        Q(days__date=today, days__start_time__lte=now_t)
+    ).update(status="in_progress")
+
+    # --- 2) -> AWAITING_CLOSURE when the final day has ended ---
+    # We’ll look at any booking that is still scheduled or in_progress.
+    # Annotate with the last day date to minimise queries.
+    qs = (
+        Booking.objects
+        .filter(status__in=["scheduled", "in_progress"])
+        .annotate(last_day=Max("days__date"))
+    )
+
+    DEFAULT_END = time(17, 0)  # fallback if you don't store an end_time yet
+
     for b in qs:
-        start_local = _make_local_aware(b.course_date, b.start_time)
-        if now_local >= start_local:
-            due_ids.append(b.id)
+        if not b.last_day:
+            continue  # no days yet
 
-    if due_ids:
-        Booking.objects.filter(id__in=due_ids, status="scheduled").update(status="in_progress")
+        # If today is before the last day, we obviously aren't finished
+        if today < b.last_day:
+            continue
+
+        # work out the closure moment for the last day
+        end_t = DEFAULT_END
+        # If you have an end_time field on BookingDay, prefer it:
+        ld = b.days.filter(date=b.last_day).order_by("-id").first()
+        if ld and getattr(ld, "end_time", None):
+            end_t = ld.end_time
+
+        # build an aware datetime for the last day’s end moment
+        last_dt = timezone.make_aware(datetime.combine(b.last_day, end_t))
+        if now >= last_dt:
+            # flip to awaiting closure
+            if b.status in ("scheduled", "in_progress"):
+                b.status = "awaiting_closure"
+                b.save(update_fields=["status"])
+
 
 # =========================
 # Admin dashboard
@@ -417,7 +451,8 @@ def course_delete(request, pk):
 # =========================
 @admin_required
 def booking_list(request):
-    _auto_bump_due_bookings_to_in_progress()
+    _auto_update_booking_statuses()
+
     """
     Bookings index with search + filters + sorting + pagination (25/page).
     Columns: Date, Course, Business, Status, Instructor, Ref
@@ -579,9 +614,9 @@ def booking_list(request):
 def booking_form(request, pk=None):
     """
     Create/edit a booking.
-    - On POST: save and replace BookingDay rows from hidden JSON 'booking_days'.
+    - On POST: save and replace BookingDay rows from hidden JSON ('booking_days' or 'days_json').
     - On GET: send booking_days_initial_json so the days table repopulates.
-    - Additionally passes 'day_rows' (days + delegate counts) for Registers buttons.
+    - Additionally passes 'day_rows' (days + delegate counts) for Registers buttons (if used elsewhere).
     """
     obj = get_object_or_404(Booking, pk=pk) if pk else None
 
@@ -591,36 +626,59 @@ def booking_form(request, pk=None):
             was_new = obj is None
             booking = form.save()
 
-            def _parse_time_or_none(s):
+            # ---- helpers ----
+            def _parse_time_or_none(s: str | None):
                 if not s:
                     return None
                 try:
-                    hh, mm = s.split(':', 1)
+                    hh, mm = s.split(":", 1)
                     return time(int(hh), int(mm))
                 except Exception:
                     return None
 
-            raw_days = request.POST.get("booking_days", "[]")
+            # Accept either key name (template writes to both)
+            raw_days = request.POST.get("booking_days") or request.POST.get("days_json") or "[]"
             try:
                 days_payload = json.loads(raw_days)
+                if not isinstance(days_payload, list):
+                    days_payload = []
             except json.JSONDecodeError:
                 days_payload = []
 
             if days_payload:
+                # Replace all BookingDay rows with what came from the inline table
                 booking.days.all().delete()
+
                 for row in days_payload:
                     day_date_str = (row.get("day_date") or "").strip()
                     if not day_date_str:
                         continue
+
+                    # required pieces we know exist in the model
+                    dt = datetime.fromisoformat(day_date_str).date()
+                    st = _parse_time_or_none(row.get("start_time")) or booking.start_time
+
+                    # optional pieces — uncomment these two lines if your BookingDay has these fields
+                    # et = _parse_time_or_none(row.get("end_time"))
+                    # note = (row.get("note") or "").strip() or None
+
                     BookingDay.objects.create(
                         booking=booking,
-                        date=datetime.fromisoformat(day_date_str).date(),
-                        start_time=_parse_time_or_none(row.get("start_time")) or booking.start_time,
+                        date=dt,
+                        start_time=st,
+                        # end_time=et,
+                        # note=note,
                     )
             else:
-                # fallback: create rows from duration if new and no JSON provided
+                # Fallback: create rows from duration if NEW and no JSON was provided
                 if was_new and booking.course_type_id and booking.course_date:
-                    duration = int(max(1, booking.course_type.duration_days or 1))
+                    # If duration_days can be fractional (e.g. 1.5), we still create whole-day rows here.
+                    try:
+                        duration_val = booking.course_type.duration_days or 1
+                        duration = math.ceil(float(duration_val))
+                    except Exception:
+                        duration = 1
+
                     start = booking.course_date
                     for i in range(duration):
                         BookingDay.objects.create(
@@ -637,55 +695,62 @@ def booking_form(request, pk=None):
             messages.error(request, "Please correct the errors below.")
     else:
         # Auto-advance due bookings to "in_progress" before showing the form
-        _auto_bump_due_bookings_to_in_progress()
+        _auto_update_booking_statuses()
         form = BookingForm(instance=obj)
 
-    # maps for client-side behaviour
+    # ---- maps for client-side behaviour (unchanged) ----
     course_type_map = {
-    str(ct.id): {
-        "code": ct.code or "",
-        "default_course_fee": str(ct.default_course_fee or ""),
-        "default_instructor_fee": str(ct.default_instructor_fee or ""),
+        str(ct.id): {
+            "code": ct.code or "",
+            "default_course_fee": str(ct.default_course_fee or ""),
+            "default_instructor_fee": str(ct.default_instructor_fee or ""),
+        }
+        for ct in CourseType.objects.order_by("name")
     }
-    for ct in CourseType.objects.order_by("name")
-}
 
     location_map = {
-    str(loc.id): {
-        "name": loc.name or "",                           # <-- add this
-        "contact_name": loc.contact_name or "",
-        "telephone": loc.telephone or "",
-        "email": loc.email or "",
-        "address_line": loc.address_line or "",
-        "town": loc.town or "",
-        "postcode": loc.postcode or "",
-        "business_id": str(loc.business_id),
+        str(loc.id): {
+            "name": loc.name or "",
+            "contact_name": loc.contact_name or "",
+            "telephone": loc.telephone or "",
+            "email": loc.email or "",
+            "address_line": loc.address_line or "",
+            "town": loc.town or "",
+            "postcode": loc.postcode or "",
+            "business_id": str(loc.business_id),
+        }
+        for loc in TrainingLocation.objects.select_related("business").order_by("name")
     }
-    for loc in TrainingLocation.objects.select_related("business").order_by("name")
-}
 
+    # Seed the inline table (we include start_time; end_time/note left blank unless your model has them)
     if obj and obj.pk:
         booking_days_initial = [
             {
                 "day_date": d.date.isoformat(),
                 "start_time": d.start_time.strftime("%H:%M") if d.start_time else "",
-                "end_time": "",
+                "end_time": "",  # uncomment if you add that field and fetch it here
+                "note": "",      # uncomment/fill if you add a note field
             }
             for d in obj.days.all().order_by("date")
         ]
     else:
         booking_days_initial = []
 
-    return render(request, "admin/form_booking.html", {
-        "title": ("Edit Booking" if obj else "New Booking"),
-        "form": form,
-        "booking": obj,
-        "back_url": reverse("admin_booking_list"),
-        "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
-        "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
-        "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
-        "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
-    })
+    return render(
+        request,
+        "admin/form_booking.html",
+        {
+            "title": ("Edit Booking" if obj else "New Booking"),
+            "form": form,
+            "booking": obj,
+            "back_url": reverse("admin_booking_list"),
+            "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
+            "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
+            "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
+            "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
+        },
+    )
+
 
 
 

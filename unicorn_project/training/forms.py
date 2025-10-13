@@ -47,13 +47,14 @@ class BookingForm(forms.ModelForm):
             "telephone",
             "email",
             "course_reference",
-            "comments",
+            "booking_notes",
         ]
+        # BookingForm.Meta.widgets
         widgets = {
             "course_date": forms.DateInput(attrs={"type": "date"}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "course_reference": forms.TextInput(attrs={"readonly": "readonly"}),
-            "comments": forms.Textarea(attrs={"rows": 3, "class": "form-control"}),
+            "booking_notes": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
         }
 
     def __init__(self, *args, **kwargs):
