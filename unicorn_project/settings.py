@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import dj_database_url
 
 # --- Paths ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,6 +21,15 @@ if DEBUG:
     ALLOWED_HOSTS = ["*"]
 else:
     ALLOWED_HOSTS = [h.strip() for h in os.getenv("ALLOWED_HOSTS", "*").split(",") if h.strip()]
+
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True
+    )
+}
+
 
 # --- Installed apps ------------------------------------------
 INSTALLED_APPS = [
