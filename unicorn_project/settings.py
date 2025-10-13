@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import dj_database_url
 
 from dotenv import load_dotenv
 import dj_database_url
@@ -39,6 +40,15 @@ if RENDER_EXTERNAL_HOSTNAME:
     CSRF_TRUSTED_ORIGINS.append(f"https://{RENDER_EXTERNAL_HOSTNAME}")
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True
+    )
+}
+
 
 # --- Installed apps ------------------------------------------
 INSTALLED_APPS = [
