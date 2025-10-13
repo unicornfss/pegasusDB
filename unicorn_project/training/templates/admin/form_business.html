@@ -16,14 +16,31 @@
       </div>
     {% endfor %}
   </div>
-  <div class="mt-3 d-flex gap-2">
+
+  {# Actions row #}
+  <div class="mt-3 d-flex gap-2 align-items-center">
     <a href="{{ back_url }}" class="btn btn-outline-secondary">Back</a>
+
     <button class="btn btn-primary" type="submit" name="save_continue" value="1">
       Save and continue editing
     </button>
+
     <button class="btn btn-success" type="submit" name="save_return" value="1">
       Save and return
     </button>
+
+    {% if business %}
+      {# DELETE: submit this same form to the delete URL; skip validation; confirm first #}
+      <button
+        type="submit"
+        class="btn btn-outline-danger ms-auto"
+        formaction="{% url 'admin_business_delete' business.id %}"
+        formmethod="post"
+        formnovalidate
+        onclick="return confirm('This will permanently delete this business. This cannot be undone.\n\nAre you sure you want to proceed?');">
+        <i class="bi bi-trash"></i> Delete
+      </button>
+    {% endif %}
   </div>
 </form>
 

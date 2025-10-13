@@ -1,10 +1,58 @@
 {% extends "admin_base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="m-0">{{ title }}</h3>
-  <a class="btn btn-primary" href="{{ create_url }}"><i class="bi bi-plus-lg"></i> Add</a>
+
+<h3 class="mb-3">{{ title }}</h3>
+
+{% if list_id == "businesses" %}
+  <form method="get" id="bizSearchForm" class="row g-2 align-items-center mb-2">
+  <div class="col-12 col-md-7 col-lg-6">
+    <input name="q"
+           type="search"
+           class="form-control"
+           placeholder="Search businesses"
+           value="{{ q|default_if_none:'' }}">
+  </div>
+  <div class="col-auto d-flex gap-2">
+    <button class="btn btn-light">Search</button>
+    <button type="button"
+            id="clearSearch"
+            class="btn btn-outline-secondary"
+            title="Clear search">
+      <i class="bi bi-x-circle"></i> Clear
+    </button>
+  </div>
+</form>
+
+<div class="d-flex justify-content-end mb-3">
+  <a class="btn btn-primary" href="{{ create_url }}">
+    <i class="bi bi-plus-lg"></i> Add
+  </a>
 </div>
+
+<script>
+  // Clear button: empty the input and remove ?q=... from the URL
+  (function () {
+    const btn = document.getElementById('clearSearch');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      const form = document.getElementById('bizSearchForm');
+      const input = form && form.querySelector('input[name="q"]');
+      if (input) input.value = '';
+      // reload without querystring (removes server-side filter)
+      window.location = window.location.pathname;
+    });
+  })();
+</script>
+
+{% else %}
+  {# non-business lists keep their original top-right Add button #}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div></div>
+    <a class="btn btn-primary" href="{{ create_url }}"><i class="bi bi-plus-lg"></i> Add</a>
+  </div>
+{% endif %}
+
 <table class="table table-striped align-middle">
   <thead><tr>
     {% for h in headers %}<th>{{ h }}</th>{% endfor %}

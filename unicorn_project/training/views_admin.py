@@ -11,6 +11,7 @@ from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
 from django.db.models import Q, Count
+from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
 from django.http import HttpResponseForbidden
 from django.shortcuts import render, redirect, get_object_or_404
@@ -27,6 +28,7 @@ from .forms import (
     BusinessForm, CourseTypeForm, TrainingLocationForm,
     InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm
 )
+
 # =========================
 # Helpers / guards
 # =========================
@@ -100,19 +102,40 @@ def dashboard(request):
 # =========================
 @admin_required
 def business_list(request):
+    q = (request.GET.get("q") or "").strip()
+
+    qs = Business.objects.all()
+
+    if q:
+        qs = qs.filter(
+            Q(name__icontains=q) |
+            Q(town__icontains=q) |
+            Q(postcode__icontains=q)
+            # If your model has these, uncomment:
+            # | Q(primary_contact_name__icontains=q)
+            # | Q(primary_contact_email__icontains=q)
+            # Or search related contacts (adjust relation name):
+            # | Q(contacts__name__icontains=q)
+            # | Q(contacts__email__icontains=q)
+        ).distinct()
+
     rows = []
-    for b in Business.objects.order_by("name"):
+    for b in qs.order_by("name"):
         rows.append({
             "cells": [b.name, b.town or "", b.postcode or ""],
             "edit_url": reverse("admin_business_edit", args=[b.id]),
         })
+
     ctx = {
         "title": "Businesses",
         "headers": ["Name", "Town", "Postcode"],
         "rows": rows,
         "create_url": reverse("admin_business_new"),
+        "q": q,                   # <- keeps the search box filled
+        "list_id": "businesses",  # <- tells the template to show the search UI
     }
     return render(request, "admin/list.html", ctx)
+
 
 
 @admin_required
@@ -212,6 +235,29 @@ def location_edit(request, pk):
         "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,
     })
 
+@admin_required
+@require_http_methods(["POST"])
+def location_delete(request, pk):
+    loc = get_object_or_404(TrainingLocation, pk=pk)  # <-- TrainingLocation
+    # keep the parent to return to its edit page after delete
+    business_pk = getattr(loc, "business_id", None)
+    name = loc.name
+
+    try:
+        loc.delete()
+    except ProtectedError:
+        messages.error(
+            request,
+            f'“{name}” can’t be deleted because it has related records.'
+        )
+        if business_pk:
+            return redirect("admin_business_edit", pk=business_pk)
+        return redirect("admin_business_list")
+
+    messages.success(request, f'Location “{name}” deleted.')
+    if business_pk:
+        return redirect("admin_business_edit", pk=business_pk)
+    return redirect("admin_business_list")
 
 # =========================
 # Course Types
@@ -873,14 +919,28 @@ def instructor_delete(request, pk):
 @require_http_methods(["GET", "POST"])
 def business_delete(request, pk):
     obj = get_object_or_404(Business, pk=pk)
+
     if request.method == "POST":
-        obj.delete()
-        messages.success(request, "Business deleted.")
+        try:
+            name = obj.name
+            obj.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                f"“{obj.name}” can’t be deleted because it has related records."
+            )
+            return redirect("admin_business_edit", pk=obj.pk)
+
+        messages.success(request, f"Business “{name}” deleted.")
         return redirect("admin_business_list")
+
+    # GET -> confirm page
     return render(request, "admin/confirm_delete.html", {
         "title": "Delete business",
         "object": obj,
-        "back_url": reverse("admin_business_edit", args=[obj.id]),
+        "back_url": reverse("admin_business_edit", args=[obj.id]),  # uuid ok
+        "post_url": reverse("admin_business_delete", args=[obj.id]),
+        "warning": "This action cannot be undone.",
     })
 
 @admin_required

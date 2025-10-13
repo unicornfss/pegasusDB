@@ -51,6 +51,8 @@ urlpatterns = [
     # Training Locations
     path("app/admin/businesses/<uuid:business_id>/locations/new/", app_admin.location_new, name="admin_location_new"),
     path("app/admin/locations/<uuid:pk>/", app_admin.location_edit, name="admin_location_edit"),
+    path("app/admin/locations/<uuid:pk>/delete/", app_admin.location_delete, name="admin_location_delete"),
+
 
     # Course Types
     path("app/admin/courses/", app_admin.course_list, name="admin_course_list"),
