@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "unicorn_project.training",
+    "import_export",
 ]
 
 # --- Middleware (WhiteNoise just after Security) --------------
