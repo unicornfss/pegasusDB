@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 from django.db.models import Q
 from django.forms import inlineformset_factory
+from django.utils import timezone
 from . import models as m
 
 from .models import (
@@ -393,8 +394,10 @@ class AdminInstructorForm(forms.ModelForm):
             "name_on_account",
         ]
 
+from django import forms
+from django.utils import timezone
+
 class DelegateRegisterForm(forms.ModelForm):
-    # Use the model’s choices and render as radios
     health_status = forms.ChoiceField(
         choices=DelegateRegister.HealthStatus.choices,
         widget=forms.RadioSelect,
@@ -412,16 +415,31 @@ class DelegateRegisterForm(forms.ModelForm):
             "instructor",
             "health_status",
         ]
+        # Force HTML5 date format so initial shows up
         widgets = {
-            "date_of_birth": forms.DateInput(attrs={"type": "date"}),
-            "date":          forms.DateInput(attrs={"type": "date"}),
+            "date_of_birth": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "date":          forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # default to FIT if nothing set
+
+        # default health status
         if not self.is_bound and not self.initial.get("health_status"):
             self.initial["health_status"] = DelegateRegister.HealthStatus.FIT
+
+        # default date to today if not provided by the view
+        if not self.is_bound and not self.initial.get("date"):
+            self.initial["date"] = timezone.localdate()
+
+        # Make sure parsing accepts the browser's YYYY-MM-DD
+        self.fields["date"].input_formats = ["%Y-%m-%d"]
+        self.fields["date_of_birth"].input_formats = ["%Y-%m-%d"]
+
+        # (nice-to-have) avoid autofill weirdness
+        self.fields["date"].widget.attrs.setdefault("autocomplete", "off")
+        self.fields["date_of_birth"].widget.attrs.setdefault("autocomplete", "off")
+
    
 class DelegateRegisterAdminForm(forms.ModelForm):
     class Meta:

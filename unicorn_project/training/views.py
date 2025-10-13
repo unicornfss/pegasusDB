@@ -124,10 +124,12 @@ def public_delegate_register(request):
     # For the dropdown when no QR is used
     course_types = CourseType.objects.order_by("name")
 
-    # 2) Initial date (from querystring if present)
+    # 2) Initial date (from querystring if present, else today)
     initial = {}
     if request.GET.get("date"):
-        initial["date"] = request.GET["date"]
+        initial["date"] = request.GET["date"]              # 'YYYY-MM-DD'
+    else:
+        initial["date"] = timezone.localdate()             # today (date obj)
 
     form = DelegateRegisterForm(request.POST or None, initial=initial)
 
@@ -138,7 +140,7 @@ def public_delegate_register(request):
         instructors = (
             Instructor.objects
             .filter(
-                bookings__course_type=course,       # NOTE plural 'bookings__'
+                bookings__course_type=course,
                 bookings__days__date=bound_date
             )
             .distinct()
@@ -146,10 +148,8 @@ def public_delegate_register(request):
         )
 
     if request.method == "POST" and form.is_valid():
-        # Save delegate and attach to matching BookingDay if we can find one
         delegate = form.save(commit=False)
 
-        # The form has an FK 'instructor' field; use it and also try to attach a BookingDay
         inst = delegate.instructor
         bd = None
         if course and inst and form.cleaned_data.get("date"):
@@ -166,13 +166,11 @@ def public_delegate_register(request):
         delegate.save()
 
         messages.success(request, "Thank you — you’re on the register.")
-        # Redirect to the same page (keeps ?ct=... to stay on the same course)
         return redirect(request.get_full_path())
 
-    # 4) Render (make sure we point at the correct template path)
     return render(
         request,
-        "public/delegate_register.html",   # <— correct location
+        "public/delegate_register.html",
         {
             "form": form,
             "course": course,
