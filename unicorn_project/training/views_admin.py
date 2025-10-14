@@ -11,7 +11,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.db.models import Q, Count, Min
+from django.db.models import Q, Count, Min, Max
 from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
 from django.http import HttpResponseForbidden
@@ -21,6 +21,8 @@ from django.utils import timezone
 from django.utils.formats import date_format
 from django.views.decorators.http import require_http_methods
 from math import ceil, floor
+
+from .services.booking_status import auto_update_booking_statuses
 
 from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
@@ -102,60 +104,6 @@ def _make_local_aware(local_date, local_time):
         except Exception:
             # Non-existent local times (spring forward): nudge +1h
             return timezone.make_aware(naive + timedelta(hours=1), tz)
-
-# imports you likely already have; add any missing
-from datetime import datetime, time
-from django.db.models import Max, Q
-from django.utils import timezone
-
-def _auto_update_booking_statuses():
-    """
-    1) Scheduled -> In progress     when a day starts
-    2) Scheduled/In progress -> Awaiting instructor closure when the last day is finished
-    """
-    now = timezone.localtime()
-    today = now.date()
-    now_t = now.time()
-
-    # --- 1) SCHEDULED -> IN PROGRESS when today's day has started ---
-    Booking.objects.filter(status="scheduled").filter(
-        Q(days__date=today, days__start_time__lte=now_t)
-    ).update(status="in_progress")
-
-    # --- 2) -> AWAITING_CLOSURE when the final day has ended ---
-    # We’ll look at any booking that is still scheduled or in_progress.
-    # Annotate with the last day date to minimise queries.
-    qs = (
-        Booking.objects
-        .filter(status__in=["scheduled", "in_progress"])
-        .annotate(last_day=Max("days__date"))
-    )
-
-    DEFAULT_END = time(17, 0)  # fallback if you don't store an end_time yet
-
-    for b in qs:
-        if not b.last_day:
-            continue  # no days yet
-
-        # If today is before the last day, we obviously aren't finished
-        if today < b.last_day:
-            continue
-
-        # work out the closure moment for the last day
-        end_t = DEFAULT_END
-        # If you have an end_time field on BookingDay, prefer it:
-        ld = b.days.filter(date=b.last_day).order_by("-id").first()
-        if ld and getattr(ld, "end_time", None):
-            end_t = ld.end_time
-
-        # build an aware datetime for the last day’s end moment
-        last_dt = timezone.make_aware(datetime.combine(b.last_day, end_t))
-        if now >= last_dt:
-            # flip to awaiting closure
-            if b.status in ("scheduled", "in_progress"):
-                b.status = "awaiting_closure"
-                b.save(update_fields=["status"])
-
 
 # =========================
 # Admin dashboard
@@ -485,13 +433,16 @@ def course_delete(request, pk):
 # =========================
 @admin_required
 def booking_list(request):
-    _auto_update_booking_statuses()
-
     """
     Bookings index with search + filters + sorting + pagination (25/page).
     Columns: Date, Course, Business, Status, Instructor, Ref
     Sort keys: date | course | business | status | instructor | ref
     """
+    # Run the automatic status updater
+    if getattr(settings, "BOOKING_AUTO_UPDATE_ON_PAGE", True) and not request.GET.get("noauto"):
+        auto_update_booking_statuses()
+
+
     qs = (Booking.objects
           .select_related("business", "training_location", "course_type", "instructor")
           .all())
@@ -539,7 +490,13 @@ def booking_list(request):
     order_field = allowed.get(sort_key, "course_date")
     if sort_dir == "desc":
         order_field = "-" + order_field
-    qs = qs.order_by(order_field)
+
+    # Add a stable tie-breaker so new items don't get buried on equal dates
+    order_by_args = [order_field]
+    if "created_at" not in order_field:
+        order_by_args.append("-created_at")
+
+    qs = qs.order_by(*order_by_args)
 
     # ----- pagination (25/page)
     paginator  = Paginator(qs, 25)
@@ -602,7 +559,7 @@ def booking_list(request):
             "dir": sort_dir if active else "",
         })
 
-    # ----- pagination links (no custom template tags needed)
+    # ----- pagination links
     prev_url = url_with(page=page_obj.previous_page_number()) if page_obj.has_previous() else None
     next_url = url_with(page=page_obj.next_page_number()) if page_obj.has_next() else None
     page_info = f"Page {page_obj.number} of {page_obj.paginator.num_pages}" if page_obj.paginator.num_pages > 1 else ""
@@ -640,9 +597,8 @@ def booking_list(request):
     return render(request, "admin/bookings_list.html", ctx)
 
 
-# =========================
-# Bookings — FORM (create/edit + per-day rows)
-# =========================
+
+
 @admin_required
 @transaction.atomic
 def booking_form(request, pk=None):
@@ -715,8 +671,10 @@ def booking_form(request, pk=None):
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        # Auto-advance due bookings to "in_progress" before showing the form
-        _auto_update_booking_statuses()  # if you renamed the helper; otherwise call your existing one
+        # Auto-advance statuses before showing the form
+        if getattr(settings, "BOOKING_AUTO_UPDATE_ON_PAGE", True) and not request.GET.get("noauto"):
+            auto_update_booking_statuses()
+
         form = BookingForm(instance=obj)
 
     # maps for client-side behaviour
@@ -765,6 +723,8 @@ def booking_form(request, pk=None):
         "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
         "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
     })
+
+
 
 @admin_required
 @require_http_methods(["GET", "POST"])

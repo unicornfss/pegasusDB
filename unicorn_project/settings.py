@@ -73,8 +73,8 @@ INSTALLED_APPS = [
 
     "rest_framework",
     "import_export",
-
-    "unicorn_project.training",
+    "django_crontab",
+    "unicorn_project.training.apps.TrainingConfig",
 ]
 
 # --- Middleware (WhiteNoise just after Security) --------------
@@ -135,3 +135,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/post-login/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+
+# stop views from auto-updating unless you flip this to True
+BOOKING_AUTO_UPDATE_ON_PAGE = False
+
+CRONJOBS = [
+    ('*/15 * * * *', 'django.core.management.call_command', ['update_booking_statuses']),
+]
+

@@ -55,8 +55,8 @@ class CourseType(models.Model):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=20, unique=True)
     duration_days = models.DecimalField(
-        max_digits=3, decimal_places=1,
-        validators=[MinValueValidator(Decimal("0.5")), MaxValueValidator(Decimal("5.0"))],
+        max_digits=3, decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01")), MaxValueValidator(Decimal("10.0"))],
         default=Decimal("1.0"),
     )
 
