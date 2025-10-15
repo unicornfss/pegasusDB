@@ -16,8 +16,7 @@ class Command(BaseCommand):
         now = timezone.localtime()
         today, now_t = now.date(), now.time()
 
-        if opts["debug"]:
-            # Show what *would* move
+        if opts.get("debug"):
             can_in_progress = (
                 Booking.objects.filter(status="scheduled")
                 .filter(Q(days__date=today, days__start_time__lte=now_t))
@@ -32,11 +31,18 @@ class Command(BaseCommand):
             self.stdout.write(f"Candidates to go in_progress: {can_in_progress}")
             self.stdout.write(f"Pool for awaiting_closure (sched/in_prog): {pool}")
 
-        updated = auto_update_booking_statuses()
+        result = auto_update_booking_statuses()
 
-        if not opts["quiet"]:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"[{timezone.now().isoformat()}] Updated {updated} bookings."
-                )
-            )
+        # Support both return styles: (n_in_prog, n_await) or just n_await
+        if isinstance(result, tuple) and len(result) == 2:
+            n_in_prog, n_await = result
+        else:
+            n_in_prog, n_await = None, int(result or 0)
+
+        if not opts.get("quiet"):
+            if n_in_prog is None:
+                msg = f"[{timezone.now().isoformat()}] Updated {n_await} bookings to awaiting_closure."
+            else:
+                msg = (f"[{timezone.now().isoformat()}] "
+                       f"Moved {n_in_prog} → in_progress, {n_await} → awaiting_closure.")
+            self.stdout.write(self.style.SUCCESS(msg))

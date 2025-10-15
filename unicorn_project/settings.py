@@ -134,11 +134,9 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/post-login/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
-
 # stop views from auto-updating unless you flip this to True
 BOOKING_AUTO_UPDATE_ON_PAGE = False
 
-CRONJOBS = [
-    ('*/15 * * * *', 'django.core.management.call_command', ['update_booking_statuses']),
-]
+# APScheduler test mode: run every N minutes (0 = use 15-minute cron)
+BOOKING_TEST_INTERVAL_MIN = 1  # set to 0 (or remove) to go back to 00,15,30,45
 
