@@ -458,243 +458,311 @@ def instructor_delegate_delete(request, pk: int):
 @login_required
 def instructor_day_registers_pdf(request, pk: int):
     """
-    Register PDF for a single day, in LANDSCAPE, with:
-    - Header: Business, Course reference, Instructor, This day’s date
-    - Footer on every page with Unicorn contact details
-    - Health declaration column (full text per row)
+    PDF: Delegate register (A4 landscape).
+    Main row: Full name | Date of birth | Job title | Emp. ID | Health declaration
+    If a delegate has notes, a second sub-row is drawn immediately underneath:
+        [ Notes ] | <wrapped notes spanning remaining width>
     """
-    instr = getattr(request.user, "instructor", None)
-    day = get_object_or_404(
-        BookingDay.objects.select_related(
-            "booking__course_type", "booking__business", "booking__instructor"
-        ),
-        pk=pk
-    )
-    if not instr or day.booking.instructor_id != instr.id:
-        messages.error(request, "You do not have access to this register.")
-        return redirect("instructor_bookings")
-
-    regs = list(
-        DelegateRegister.objects.filter(booking_day=day)
-        .order_by("name")
-        .only("name", "date_of_birth", "job_title", "employee_id", "health_status", "notes")
-    )
-
-    # --- PDF setup ---
-    import io, textwrap
-    from reportlab.pdfgen import canvas
+    # Lazy imports
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas
+    from reportlab.lib import colors
 
-    buf = io.BytesIO()
-    pagesize = landscape(A4)
-    c = canvas.Canvas(buf, pagesize=pagesize)
-    W, H = pagesize
+    from .models import BookingDay, DelegateRegister
 
-    left   = 15*mm
-    right  = W - 15*mm
-    top    = H - 15*mm
-    bottom = 15*mm
+    # --- Fetch data ---
+    day = get_object_or_404(
+        BookingDay.objects.select_related(
+            "booking",
+            "booking__course_type",
+            "booking__business",
+            "booking__training_location",
+            "booking__instructor",
+        ),
+        pk=pk,
+    )
+    booking = day.booking
+    regs = list(DelegateRegister.objects.filter(booking_day=day).order_by("name", "id"))
 
-    # Footer (each page)
-    FOOTER_TEXT = "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ: info@unicornsafety.co.uk: 01743 360211"
-    def draw_footer():
+    # --- Page geometry ---
+    page_w, page_h = landscape(A4)
+    left, right = 12 * mm, page_w - 12 * mm
+    top, bottom = page_h - 12 * mm, 12 * mm
+
+    # Main table columns (no dedicated notes column)
+    col_name   = 62 * mm
+    col_dob    = 24 * mm
+    col_job    = 46 * mm
+    col_emp    = 22 * mm
+    col_health = (right - left) - (col_name + col_dob + col_job + col_emp)
+
+    # Notes sub-row widths
+    notes_label_w   = 20 * mm
+    notes_content_w = (right - left) - notes_label_w
+
+    # Sizing
+    row_min_h  = 12 * mm
+    line_gap   = 4
+    pad_x      = 2 * mm
+    pad_y      = 3
+    header_pad = 6 * mm  # extra padding below header line before table
+
+    # (Adjust these to match your matrix/assessment PDFs as needed)
+    FOOTER_LINE_1 = "Unicorn Training — Delegate Register"
+    FOOTER_LINE_2 = "This form may contain personal data. Handle and store appropriately."
+
+    # --- Wrapping helpers ---
+    def wrap_lines(c, text, font, size, max_w):
+        if not text:
+            return []
+        words = text.split()
+        if not words:
+            return []
+        lines, cur = [], words[0]
+        for w in words[1:]:
+            t = f"{cur} {w}"
+            if c.stringWidth(t, font, size) <= max_w:
+                cur = t
+            else:
+                lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def cell_height(c, text, font="Helvetica", size=9, max_w=1000, min_h=row_min_h):
+        lines = wrap_lines(c, text or "", font, size, max_w)
+        return max(min_h, (len(lines) * (size + line_gap)) + pad_y * 2) if lines else min_h
+
+    # --- Header/footer ---
+    def draw_header_block(c):
+        """
+        Draws the header and returns the y position of the horizontal line
+        under the header. The table should start below that line.
+        """
         c.saveState()
         try:
-            c.setFont("Helvetica", 8)
-            c.setFillGray(0.35)
-            c.drawString(left, bottom - 6*mm, FOOTER_TEXT)
-            c.setFillGray(0)
+            y = top
+            c.setFont("Helvetica-Bold", 14)
+            c.drawString(left, y, "Delegate Register")
+            c.setFont("Helvetica", 9)
+
+            y -= 7 * mm
+            if booking and booking.course_type:
+                c.drawString(left, y, f"Course: {booking.course_type.name}")
+                y -= 5 * mm
+
+            c.drawString(left, y, f"Date: {day.date.strftime('%d %b %Y')}")
+            y -= 5 * mm
+
+            if booking and booking.instructor:
+                c.drawString(left, y, f"Instructor: {booking.instructor.name}")
+                y -= 5 * mm
+
+            if booking and booking.training_location:
+                loc = booking.training_location
+                addr = ", ".join(filter(None, [loc.name, loc.address_line, loc.town, loc.postcode]))
+                c.drawString(left, y, f"Location: {addr}")
+                y -= 5 * mm
+
+            if booking and booking.course_reference:
+                c.drawString(left, y, f"Reference: {booking.course_reference}")
+                y -= 5 * mm
+
+            c.setStrokeColor(colors.lightgrey)
+            c.line(left, y, right, y)
+            return y
         finally:
             c.restoreState()
 
-    # Helpers
-    def fmt_date(d):
-        # Windows-safe date like '21 Oct 2025'
-        return f"{d.day} {d.strftime('%b %Y')}"
+    def draw_footer(c):
+        """
+        Draw a two-line footer and page number.
+        Draw this *after* finishing page content and *before* showPage().
+        """
+        c.saveState()
+        try:
+            # fine line above footer
+            c.setStrokeColor(colors.lightgrey)
+            c.line(left, bottom + 12, right, bottom + 12)
 
-    # Column layout (mm -> points via units)
-    # Name | DOB | Job title | Emp ID | Health declaration
-    col_name   = 62*mm
-    col_dob    = 24*mm
-    col_job    = 46*mm
-    col_emp    = 22*mm
-    col_health = (right - left) - (col_name + col_dob + col_job + col_emp)
-
-    row_min_h   = 12*mm          # minimum row height
-    line_gap    = 4              # points between wrapped lines
-    body_fs     = 9
-    small_fs    = 8
-
-    def wrap_to_width(text, font="Helvetica", size=9, max_width=col_health-4*mm):
-        if not text:
-            return [""]
-        # quick word-wrap using textwrap; then ensure width via a second pass
-        c.setFont(font, size)
-        # rough char estimate to seed wrap width
-        approx_chars = max(12, int(max_width / (size * 0.5)))
-        lines = []
-        for para in str(text).splitlines():
-            for chunk in textwrap.wrap(para, width=approx_chars):
-                # final hard trim if still too wide
-                while c.stringWidth(chunk, font, size) > max_width and len(chunk) > 1:
-                    chunk = chunk[:-1]
-                lines.append(chunk)
-        return lines or [""]
-
-    # Header block
-    y = top
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(left, y, f"{day.booking.course_type.name} — Daily Register")
-    y -= 6*mm
-    c.setFont("Helvetica", 10)
-    c.drawString(left, y, f"Business: {day.booking.business.name}")
-    y -= 5*mm
-    c.drawString(left, y, f"Course reference: {day.booking.course_reference or '—'}")
-    y -= 5*mm
-    c.drawString(left, y, f"Instructor: {day.booking.instructor.name if day.booking.instructor else '—'}")
-    y -= 5*mm
-    c.drawString(left, y, f"Date: {fmt_date(day.date)}")
-    y -= 8*mm
-
-    def draw_header_row():
-        nonlocal y
-        # Header band
-        c.setFillGray(0.95)
-        c.rect(left, y-10*mm, (right-left), 10*mm, stroke=0, fill=1)
-        c.setFillGray(0)
-        c.setFont("Helvetica-Bold", 9)
-        x = left
-        def cell(w, label):
-            c.rect(x, y-10*mm, w, 10*mm, stroke=1, fill=0)
-            c.drawCentredString(x + w/2, y-10*mm + 3.5*mm, label)
-        cell(col_name,   "Name")
-        x += col_name
-        cell(col_dob,    "DOB")
-        x += col_dob
-        cell(col_job,    "Job title")
-        x += col_job
-        cell(col_emp,    "Emp. ID")
-        x += col_emp
-        cell(col_health, "Health declaration")
-        y -= 10*mm
-        c.setFont("Helvetica", body_fs)
-
-    def new_page(continued=False):
-        nonlocal y
-        # footer + new page
-        draw_footer()
-        c.showPage()
-        y = H - 15*mm
-        # repeat header block
-        c.setFont("Helvetica-Bold", 14)
-        title = f"{day.booking.course_type.name} — Daily Register"
-        if continued:
-            title += " (cont.)"
-        c.drawString(left, y, title)
-        y -= 6*mm
-        c.setFont("Helvetica", 10)
-        c.drawString(left, y, f"Business: {day.booking.business.name}")
-        y -= 5*mm
-        c.drawString(left, y, f"Course reference: {day.booking.course_reference or '—'}")
-        y -= 5*mm
-        c.drawString(left, y, f"Instructor: {day.booking.instructor.name if day.booking.instructor else '—'}")
-        y -= 5*mm
-        c.drawString(left, y, f"Date: {fmt_date(day.date)}")
-        y -= 8*mm
-        draw_header_row()
-
-    # first header row
-    draw_header_row()
-
-    # Rows
-    for idx, r in enumerate(regs, start=1):
-        # compute wrapped lines for health declaration
-        health_text = r.get_health_status_display() if hasattr(r, "get_health_status_display") else ""
-        health_lines = wrap_to_width(health_text, size=body_fs, max_width=col_health - 4*mm)
-        # job title might need a tiny wrap too
-        job_lines = wrap_to_width(r.job_title or "", size=body_fs, max_width=col_job - 4*mm)
-        line_height = body_fs + line_gap
-        needed_h = max(row_min_h, (max(len(health_lines), len(job_lines)) * line_height) + 6)  # + padding
-
-        # page break guard
-        if y - needed_h < bottom + 18*mm:
-            new_page(continued=True)
-
-        # zebra band
-        if idx % 2 == 0:
-            c.setFillGray(0.90)
-            c.rect(left, y-needed_h, (right-left), needed_h, stroke=0, fill=1)
+            c.setFont("Helvetica", 8)
+            c.setFillGray(0.35)
+            c.drawString(left, bottom + 5 * mm, FOOTER_LINE_1)
+            c.drawString(left, bottom + 3 * mm, FOOTER_LINE_2)
+            c.drawRightString(right, bottom + 3 * mm, f"Page {c.getPageNumber()}")
             c.setFillGray(0)
+            c.setStrokeColor(colors.black)
+        finally:
+            c.restoreState()
 
-        # draw cells & content
+    def draw_header_row(c, y):
+        c.saveState()
+        try:
+            c.setFont("Helvetica-Bold", 9)
+            x = left
+            headers = [
+                ("Full name", col_name),
+                ("Date of birth", col_dob),
+                ("Job title", col_job),
+                ("Emp. ID", col_emp),
+                ("Health declaration", col_health),
+            ]
+            for title, w in headers:
+                c.rect(x, y - row_min_h, w, row_min_h, stroke=1, fill=0)
+                c.drawString(x + pad_x, y - row_min_h + pad_y, title)
+                x += w
+        finally:
+            c.restoreState()
+
+    # --- Draw one delegate (with optional notes sub-row) ---
+    def draw_one_row(c, r, y_top):
+        """
+        Returns new y (next row top) or None if a page break is needed.
+        """
+        name  = (getattr(r, "name", "") or "").strip()
+        dob   = r.date_of_birth.strftime("%d/%m/%Y") if getattr(r, "date_of_birth", None) else ""
+        job   = (getattr(r, "job_title", "") or "").strip()
+        emp   = (getattr(r, "employee_id", "") or "").strip()
+        notes = (getattr(r, "notes", "") or "").strip()
+
+        c.setFont("Helvetica", 9)
+        h_name = cell_height(c, name, max_w=col_name - 2 * pad_x)
+        h_job  = cell_height(c, job,  max_w=col_job  - 2 * pad_x)
+        base_h = max(row_min_h, h_name, h_job)
+
+        notes_h = cell_height(c, notes, max_w=notes_content_w - 2 * pad_x, min_h=10 * mm) if notes else 0
+        total_h = base_h + notes_h
+
+        # Keep a buffer above the footer
+        if y_top - total_h < (bottom + 24 * mm):
+            return None
+
+        # --- base row ---
         x = left
+
         # Name
-        c.rect(x, y-needed_h, col_name, needed_h, stroke=1, fill=0)
-        c.setFont("Helvetica", body_fs)
-        c.drawString(x + 2*mm, y - needed_h + 3 + line_height*(len(job_lines) > 1 and 0 or 0), r.name or "—")
+        c.rect(x, y_top - base_h, col_name, base_h, stroke=1, fill=0)
+        lines = wrap_lines(c, name, "Helvetica", 9, col_name - 2 * pad_x) or [""]
+        yy = y_top - pad_y - 9
+        for ln in lines:
+            c.drawString(x + pad_x, yy, ln)
+            yy -= (9 + line_gap)
+            if yy < y_top - base_h + pad_y:
+                break
         x += col_name
 
         # DOB
-        c.rect(x, y-needed_h, col_dob, needed_h, stroke=1, fill=0)
-        c.drawString(x + 2*mm, y - needed_h + 3, r.date_of_birth.strftime("%d/%m/%Y") if r.date_of_birth else "—")
+        c.rect(x, y_top - base_h, col_dob, base_h, stroke=1, fill=0)
+        if dob:
+            c.drawString(x + pad_x, y_top - base_h + pad_y, dob)
         x += col_dob
 
-        # Job title (wrapped)
-        c.rect(x, y-needed_h, col_job, needed_h, stroke=1, fill=0)
-        yy = y - 4 - body_fs
-        for line in job_lines[:4]:
-            c.drawString(x + 2*mm, yy, line)
-            yy -= line_height
+        # Job
+        c.rect(x, y_top - base_h, col_job, base_h, stroke=1, fill=0)
+        lines = wrap_lines(c, job, "Helvetica", 9, col_job - 2 * pad_x)
+        if lines:
+            yy = y_top - pad_y - 9
+            for ln in lines:
+                c.drawString(x + pad_x, yy, ln)
+                yy -= (9 + line_gap)
+                if yy < y_top - base_h + pad_y:
+                    break
         x += col_job
 
-        # Employee ID
-        c.rect(x, y-needed_h, col_emp, needed_h, stroke=1, fill=0)
-        c.drawString(x + 2*mm, y - needed_h + 3, r.employee_id or "—")
+        # Emp ID
+        c.rect(x, y_top - base_h, col_emp, base_h, stroke=1, fill=0)
+        c.drawString(x + pad_x, y_top - base_h + pad_y, emp or "—")
         x += col_emp
 
-        # Health declaration (wrapped)
-        c.rect(x, y-needed_h, col_health, needed_h, stroke=1, fill=0)
-        yy = y - 4 - body_fs
-        for line in health_lines[:6]:
-            c.drawString(x + 2*mm, yy, line)
-            yy -= line_height
+        # Health declaration: show stored value if present, otherwise a faint signature line
+        c.rect(x, y_top - base_h, col_health, base_h, stroke=1, fill=0)
+        if hasattr(r, "get_health_status_display"):
+            health_txt = (r.get_health_status_display() or "").strip()
+        else:
+            health_txt = (getattr(r, "health_status", "") or "").strip()
 
-        y -= needed_h
+        if health_txt:
+            lines = wrap_lines(c, health_txt, "Helvetica", 9, col_health - 2 * pad_x)
+            yy = y_top - pad_y - 9
+            for ln in lines:
+                c.drawString(x + pad_x, yy, ln)
+                yy -= (9 + line_gap)
+                if yy < y_top - base_h + pad_y:
+                    break
+        else:
+            sig_y = y_top - base_h + base_h / 2
+            c.setStrokeColor(colors.lightgrey)
+            c.line(x + pad_x, sig_y, x + col_health - pad_x, sig_y)
+            c.setStrokeColor(colors.black)
 
-    # Legend (optional – keep concise)
-    y -= 6*mm
-    c.setFont("Helvetica", small_fs)
-    c.drawString(left, y, "Health declaration text shown as recorded by the delegate on the day.")
+        y = y_top - base_h
 
-    # last-page footer and save
-    draw_footer()
+        # --- optional notes sub-row ---
+        if notes:
+            # label
+            c.rect(left, y - notes_h, notes_label_w, notes_h, stroke=1, fill=0)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(left + pad_x, y - notes_h + pad_y, "Notes")
+            c.setFont("Helvetica", 9)
+
+            # content
+            nx = left + notes_label_w
+            c.rect(nx, y - notes_h, notes_content_w, notes_h, stroke=1, fill=0)
+            lines = wrap_lines(c, notes, "Helvetica", 9, notes_content_w - 2 * pad_x)
+            if lines:
+                yy = y - pad_y - 9
+                for ln in lines:
+                    c.drawString(nx + pad_x, yy, ln)
+                    yy -= (9 + line_gap)
+                    if yy < y - notes_h + pad_y:
+                        break
+            y -= notes_h
+
+        return y
+
+    # --- Build PDF (force download) ---
+    filename = f"register-{day.pk}.pdf"
+    resp = HttpResponse(content_type="application/pdf")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'  # << force download
+
+    c = canvas.Canvas(resp, pagesize=landscape(A4))
+    c.setTitle(f"Delegate Register — {booking.course_reference if booking else day.pk}")
+
+    def start_new_page():
+        header_line_y = draw_header_block(c)
+        y0 = header_line_y - header_pad
+        draw_header_row(c, y0)
+        return y0 - row_min_h - 2
+
+    y = start_new_page()
+
+    if not regs:
+        c.setFont("Helvetica-Oblique", 10)
+        c.drawString(left, y - 8 * mm, "No delegates recorded.")
+        # footer + page
+        draw_footer(c)
+        c.showPage()
+        c.save()
+        return resp
+
+    for r in regs:
+        new_y = draw_one_row(c, r, y)
+        if new_y is None:
+            # finish this page
+            draw_footer(c)
+            c.showPage()
+            y = start_new_page()
+            new_y = draw_one_row(c, r, y) or (y - (row_min_h * 2))
+        y = new_y - 1  # small gap
+
+    # finish last page
+    draw_footer(c)
+    c.showPage()
     c.save()
-    buf.seek(0)
-    filename = f"register_{day.date.strftime('%Y%m%d')}.pdf"
-    return FileResponse(buf, as_attachment=True, filename=filename)
+    return resp
 
-
-@login_required
-def instructor_assessment_matrix(request, pk):
-    """
-    Placeholder view for the assessment matrix.
-    Loads the booking and renders the matrix template with empty data.
-    We'll wire delegates/competencies next.
-    """
-    booking = get_object_or_404(Booking, pk=pk)
-
-    # Only assigned instructor or staff can view
-    if not (request.user.is_staff or (booking.instructor and getattr(booking.instructor, "user_id", None) == request.user.id)):
-        return HttpResponseForbidden("You are not assigned to this booking.")
-
-    context = {
-        "booking": booking,
-        "delegates": [],        # TODO: populate from your DelegateRegister(s)
-        "competencies": [],     # TODO: populate from CourseCompetency for booking.course_type
-        "existing": {},         # TODO: map of (register_id, competency_id) -> assessment obj
-    }
-    return render(request, "instructor/assessment_matrix.html", context)
 
 @login_required
 @transaction.atomic

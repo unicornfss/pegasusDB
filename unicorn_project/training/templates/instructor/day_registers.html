@@ -11,9 +11,12 @@
   <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_new' day.pk %}">
     <i class="bi bi-person-plus"></i> Add delegate
   </a>
-  <a class="btn btn-outline-secondary btn-sm" href="{% url 'instructor_day_registers_pdf' day.pk %}">
-    <i class="bi bi-file-earmark-pdf"></i> Export PDF
-  </a>
+<a class="btn btn-outline-primary btn-sm"
+   href="{% url 'instructor_day_registers_pdf' day.id %}"
+   download>
+  <i class="bi bi-filetype-pdf"></i> Export PDF
+</a>
+
 </div>
 
 <div class="table-responsive">
