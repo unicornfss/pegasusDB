@@ -83,8 +83,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "unicorn_project.training.middleware.MustChangePasswordMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
+    "unicorn_project.training.middleware.MustChangePasswordMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "unicorn_project.training.middleware.AdminGateMiddleware",
 ]

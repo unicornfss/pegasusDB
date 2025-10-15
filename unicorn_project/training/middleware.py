@@ -29,29 +29,27 @@ def _is_admin(user):
     )
 
 class MustChangePasswordMiddleware(MiddlewareMixin):
-    """
-    (You already had this — keep as-is.)
-    Blocks any page except the change-password screen if the user
-    is flagged to change password.
-    """
     def process_request(self, request):
         user = getattr(request, "user", None)
-        # Only act for logged-in users
         if not (user and user.is_authenticated):
             return None
 
-        must_change = getattr(user, "profile", None)
-        must_change = getattr(must_change, "must_change_password", False)
+        # OLD:
+        # prof = getattr(user, "profile", None)
+        # NEW:
+        prof = getattr(user, "staff_profile", None)
+
+        must_change = getattr(prof, "must_change_password", False)
         if not must_change:
             return None
 
         path = request.path or "/"
-        # let them access only the force-change page and auth endpoints
         if path.startswith("/accounts/password_change/") or path.startswith("/accounts/login/") or path.startswith("/accounts/logout/"):
             return None
 
         messages.warning(request, "You must change your password before continuing.")
-        return redirect("password_change")  # django.contrib.auth.views.PasswordChangeView
+        return redirect("password_change")
+
 
 class AdminGateMiddleware(MiddlewareMixin):
     """
