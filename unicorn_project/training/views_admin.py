@@ -714,17 +714,16 @@ def booking_form(request, pk=None):
         booking_days_initial = []
 
     return render(request, "admin/form_booking.html", {
-        "title": ("Edit Booking" if obj else "New Booking"),
-        "form": form,
-        "booking": obj,
-        "back_url": reverse("admin_booking_list"),
-        "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
-        "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
-        "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
-        "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
-    })
-
-
+    "title": ("Edit Booking" if obj else "New Booking"),
+    "form": form,
+    "booking": obj,
+    "back_url": reverse("admin_booking_list"),
+    "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
+    "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
+    "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
+    "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
+    "unlock_url": (reverse("admin_booking_unlock", args=[obj.id]) if obj and getattr(obj, "status", "") == "completed" else None),
+})
 
 @admin_required
 @require_http_methods(["GET", "POST"])
@@ -796,6 +795,46 @@ def booking_reinstate(request, pk):
         "booking": booking,
         "back_url": reverse("admin_booking_edit", args=[booking.pk]),
     })
+
+# --- Unlock a completed booking so instructor can edit again ---
+@admin_required
+@require_http_methods(["GET", "POST"])
+def booking_unlock(request, pk):
+    """
+    Admin action: reopen a completed booking for instructor editing.
+    - Sets status back to 'awaiting_closure'
+    - Optionally clears the two 'manual submission to follow' flags
+    """
+    booking = get_object_or_404(
+        Booking.objects.select_related("business", "course_type", "training_location"),
+        pk=pk
+    )
+
+    if request.method == "POST":
+        reset_flags = request.POST.get("reset_flags") == "1"
+
+        fields = ["status"]
+        booking.status = "awaiting_closure"
+
+        # If your Booking has these fields (you created them earlier), allow clearing them:
+        if reset_flags and hasattr(booking, "closure_register_manual"):
+            booking.closure_register_manual = False
+            fields.append("closure_register_manual")
+        if reset_flags and hasattr(booking, "closure_assess_manual"):
+            booking.closure_assess_manual = False
+            fields.append("closure_assess_manual")
+
+        booking.save(update_fields=fields)
+        messages.success(request, "Booking unlocked — instructor can edit again.")
+        return redirect("admin_booking_edit", pk=booking.pk)
+
+    # GET – confirm page
+    return render(request, "admin/confirm_unlock.html", {
+        "title": "Unlock booking",
+        "booking": booking,
+        "back_url": reverse("admin_booking_edit", args=[booking.pk]),
+    })
+
 
 # =========================
 # Users (admin creates/edits)

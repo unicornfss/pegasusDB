@@ -26,6 +26,13 @@
   {% endif %}
 {% endwith %}
 
+{% if is_locked %}
+  <div class="alert alert-warning d-flex align-items-center gap-2">
+    <i class="bi bi-lock"></i>
+    This course is closed. All tabs are read-only except <strong>Invoicing</strong>.
+  </div>
+{% endif %}
+
 <div class="card mb-3">
   <div class="card-body">
     <div class="row g-4">
@@ -89,15 +96,27 @@
         <form method="post" class="h-100 d-flex flex-column">
           {% csrf_token %}
           <div class="mb-2 text-muted small">Course notes</div>
-          {{ notes_form.booking_notes }}
+          {% if is_locked %}
+            {{ notes_form.booking_notes }}
+            <script>
+              document.addEventListener('DOMContentLoaded', function(){
+                var ta = document.getElementById('id_booking_notes');
+                if (ta){ ta.setAttribute('readonly','readonly'); ta.classList.add('bg-light'); }
+              });
+            </script>
+          {% else %}
+            {{ notes_form.booking_notes }}
+          {% endif %}
           {% for err in notes_form.booking_notes.errors %}
             <div class="text-danger small">{{ err }}</div>
           {% endfor %}
-          <div class="mt-2">
-            <button class="btn btn-primary btn-sm">
-              <i class="bi bi-check2"></i> Save notes
-            </button>
-          </div>
+          {% if not is_locked %}
+            <div class="mt-2">
+              <button class="btn btn-primary btn-sm">
+                <i class="bi bi-check2"></i> Save notes
+              </button>
+            </div>
+          {% endif %}
         </form>
       </div>
 
@@ -105,7 +124,6 @@
   </div>
 </div>
 
-<!-- Tabs: Course days / registers, Assessments, (optional) Exams, Feedback, Invoicing -->
 <ul class="nav nav-tabs mt-3" id="bookingTabs" role="tablist">
   <li class="nav-item" role="presentation">
     <button class="nav-link active" id="days-tab" data-bs-toggle="tab"
@@ -133,12 +151,19 @@
   </li>
   {% endif %}
 
-  <!-- New: Feedback tab button (in-page) -->
   <li class="nav-item" role="presentation">
     <button class="nav-link" id="feedback-tab" data-bs-toggle="tab"
             data-bs-target="#feedback-pane" type="button" role="tab"
             aria-controls="feedback-pane" aria-selected="false">
       Feedback
+    </button>
+  </li>
+
+  <li class="nav-item" role="presentation">
+    <button class="nav-link" id="closure-tab" data-bs-toggle="tab"
+            data-bs-target="#closure-pane" type="button" role="tab"
+            aria-controls="closure-pane" aria-selected="false">
+      Course closure
     </button>
   </li>
 
@@ -201,9 +226,75 @@
     {% include "instructor/booking_feedback.html" %}
   </div>
 
-  <!-- Pane: Invoicing -->
+  <!-- Pane: Course closure -->
+  <div class="tab-pane fade" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0"
+       data-registers-ok="{{ registers_all_days|yesno:'true,false' }}"
+       data-assess-ok="{{ assessments_all_complete|yesno:'true,false' }}">
+
+    <!-- Registers status -->
+    <div class="row g-3 align-items-center mb-3">
+      <div class="col-auto">
+        <div class="text-muted small">Register status</div>
+        <span id="closure-register-status"
+              class="badge {% if registers_all_days %}bg-success{% elif registers_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+          {% if registers_all_days %}OK{% elif registers_manual %}Manual submission(s){% else %}Not complete{% endif %}
+        </span>
+      </div>
+      <div class="col-auto">
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" id="closure-register-manual"
+                 {% if registers_all_days %}disabled{% endif %}
+                 {% if registers_manual and not registers_all_days %}checked{% endif %}>
+          <label class="form-check-label" for="closure-register-manual">
+            Manual submission to follow
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Assessments status -->
+    <div class="row g-3 align-items-center">
+      <div class="col-auto">
+        <div class="text-muted small">Assessments status</div>
+        <span id="closure-assess-status"
+              class="badge {% if assessments_all_complete %}bg-success{% elif assessments_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+          {% if assessments_all_complete %}OK{% elif assessments_manual %}Manual submission(s){% else %}Delegate(s) still &quot;Pending&quot; on matrix{% endif %}
+        </span>
+      </div>
+      <div class="col-auto">
+        <div class="form-check mt-3">
+          <input class="form-check-input" type="checkbox" id="closure-assess-manual"
+                 {% if assessments_all_complete %}disabled{% endif %}
+                 {% if assessments_manual and not assessments_all_complete %}checked{% endif %}>
+          <label class="form-check-label" for="closure-assess-manual">
+            Manual submission to follow
+          </label>
+        </div>
+      </div>
+    </div>
+
+    {% if not is_locked %}
+      <form id="close-course-form" method="post" class="mt-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="close_course">
+        <!-- Hidden fields capture current checkbox states for persistence -->
+        <input type="hidden" id="hf-reg-manual" name="reg_manual" value="{{ registers_manual|yesno:'1,0' }}">
+        <input type="hidden" id="hf-assess-manual" name="assess_manual" value="{{ assessments_manual|yesno:'1,0' }}">
+        <button type="button" id="close-course-btn" class="btn btn-danger" style="display:none">
+          <i class="bi bi-check2-circle"></i> Close course and prepare invoice
+        </button>
+      </form>
+    {% else %}
+      <div class="mt-3 alert alert-info">
+        Course already closed — proceed to the <strong>Invoicing</strong> tab.
+      </div>
+    {% endif %}
+
+  </div>
+
+   <!-- Pane: Invoicing -->
   <div class="tab-pane fade" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
-    <div class="text-muted">Invoicing will go here.</div>
+    {% include "instructor/_invoicing_tab.html" %}
   </div>
 </div>
 
@@ -213,15 +304,100 @@
 document.addEventListener("DOMContentLoaded", function () {
   const hash = window.location.hash;
   if (!hash) return;
-
-  // Try to find a tab button targeting that pane, or a button with that id
   const tabTrigger =
     document.querySelector('button[data-bs-target="' + hash + '"]') ||
     document.querySelector(hash + '[data-bs-toggle="tab"]');
-
   if (tabTrigger && window.bootstrap && bootstrap.Tab) {
-    const tab = new bootstrap.Tab(tabTrigger);
-    tab.show();
+    new bootstrap.Tab(tabTrigger).show();
+  }
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  // Read-only lock: disable all panes except Invoicing when locked
+  const isLocked = {{ is_locked|yesno:'true,false' }};
+  if (isLocked) {
+    const invoicingPane = document.getElementById('invoicing-pane');
+    document.querySelectorAll('#bookingTabsContent .tab-pane').forEach(function(pane){
+      if (pane !== invoicingPane) {
+        pane.querySelectorAll('input, select, textarea, button, a.btn').forEach(function(el){
+          if (el.closest('#close-course-form')) return;
+          if (el.tagName.toLowerCase() === 'a') {
+            el.classList.add('disabled'); el.setAttribute('tabindex','-1'); el.setAttribute('aria-disabled','true');
+          } else {
+            el.setAttribute('disabled','disabled');
+          }
+        });
+      }
+    });
+    return;
+  }
+
+  // ----- Course closure dynamic logic (when NOT locked) -----
+  const pane = document.getElementById('closure-pane');
+  if (!pane) return;
+
+  const regBadge = document.getElementById('closure-register-status');
+  const regBox   = document.getElementById('closure-register-manual');
+  const asBadge  = document.getElementById('closure-assess-status');
+  const asBox    = document.getElementById('closure-assess-manual');
+  const regsOk   = (pane.dataset.registersOk === 'true');
+  const assessOk = (pane.dataset.assessOk === 'true');
+
+  const closeBtn  = document.getElementById('close-course-btn');
+  const closeForm = document.getElementById('close-course-form');
+  const hfReg     = document.getElementById('hf-reg-manual');
+  const hfAssess  = document.getElementById('hf-assess-manual');
+
+  function setBadge(el, text, cls) {
+    el.textContent = text;
+    el.className = 'badge ' + cls;
+  }
+
+  function syncSection(ok, box, badge, notCompleteText) {
+    if (!box || !badge) return { okish: ok };
+    if (ok) {
+      box.checked = false;
+      box.disabled = true;
+      setBadge(badge, 'OK', 'bg-success');
+      return { okish: true };
+    }
+    box.disabled = false;
+    if (box.checked) {
+      setBadge(badge, 'Manual submission(s)', 'bg-primary');
+      return { okish: true };
+    } else {
+      setBadge(badge, notCompleteText, 'bg-warning text-dark');
+      return { okish: false };
+    }
+  }
+
+  function syncAll() {
+    const regState = syncSection(regsOk, regBox, regBadge, 'Not complete');
+    const asState  = syncSection(assessOk, asBox, asBadge, 'Delegate(s) still "Pending" on matrix');
+    const allOkish = (!!regState.okish) && (!!asState.okish);
+    if (closeBtn) closeBtn.style.display = allOkish ? '' : 'none';
+
+    // Keep hidden fields in step with UI
+    if (hfReg)    hfReg.value    = regBox && regBox.checked ? '1' : '0';
+    if (hfAssess) hfAssess.value = asBox && asBox.checked   ? '1' : '0';
+  }
+
+  if (regBox) regBox.addEventListener('change', syncAll);
+  if (asBox)  asBox.addEventListener('change',  syncAll);
+  syncAll();
+
+  if (closeBtn && closeForm) {
+    closeBtn.addEventListener('click', function(){
+      if (!confirm(
+        "Once you close this course you will no longer be able to edit registers or assessments.\n" +
+        "You’ll still be able to use the Invoicing tab.\n\n" +
+        "Are you sure you wish to proceed?"
+      )) return;
+      // Hidden fields already synced, just submit
+      closeForm.submit();
+    });
   }
 });
 </script>

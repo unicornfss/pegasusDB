@@ -1,15 +1,23 @@
+from pathlib import Path
 import io
+import os
+from decimal import Decimal
 from datetime import timedelta
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
 from django.forms import modelformset_factory
-from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed, HttpResponse, Http404
+from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed, HttpResponse, Http404, HttpResponseServerError
 from django.shortcuts import redirect, render, get_object_or_404
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
+from django.utils.timezone import now
+# from .utils.invoice import get_invoice_template_path, render_invoice_file
+from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
 
 from io import BytesIO
 from reportlab.lib.pagesizes import A4, landscape
@@ -18,8 +26,38 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
 
-from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency, FeedbackResponse
-from .forms import DelegateRegisterInstructorForm, BookingNotesForm 
+import subprocess, tempfile, os
+
+from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem
+from .forms import DelegateRegisterInstructorForm, BookingNotesForm
+
+from .utils.invoice import (
+    get_invoice_template_path,
+    render_invoice_pdf,      # returns (bytes, filename); falls back to DOCX if PDF conversion not available
+    render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
+    send_invoice_email,      # email helper with dev/admin routing
+)
+
+
+def get_invoice_template_path():
+    """
+    Find Invoice.docx in common locations (project-level templates or app templates).
+    """
+    candidates = [
+        Path(settings.BASE_DIR) / "templates" / "invoicing" / "Invoice.docx",
+        Path(settings.BASE_DIR) / "unicorn_project" / "training" / "templates" / "invoicing" / "Invoice.docx",
+        Path(__file__).resolve().parent / "templates" / "invoicing" / "Invoice.docx",
+    ]
+    for p in candidates:
+        try:
+            if p.exists():
+                return str(p)
+        except Exception:
+            pass
+    raise FileNotFoundError("Invoice.docx template not found. Tried: " + " | ".join(str(p) for p in candidates))
+
+# Adjust if your templates dir differs
+DOCX_TEMPLATE_PATH = os.path.join(settings.BASE_DIR, "templates", "invoicing", "Invoice.docx")
 
 buffer = io.BytesIO()
 c = canvas.Canvas(buffer, pagesize=landscape(A4))
@@ -133,17 +171,45 @@ def _get_user_instructor(user):
         return None
     return Instructor.objects.filter(user=user).first()
 
-def _assessment_context(booking, user):
-    # permissions: staff or assigned instructor
-    if not (user.is_staff or (booking.instructor and getattr(booking.instructor, "user_id", None) == user.id)):
-        raise PermissionError("Not your booking.")
-
-    # --- Delegates: ALL days for this booking (no final-day restriction) ---
-    delegates = list(
+def _unique_delegates_for_booking(booking):
+    """
+    Return DelegateRegister rows for the booking, deduped by (normalized name, DOB).
+    Keep the first occurrence (lowest id). If DOB is missing, do NOT dedupe that row.
+    """
+    qs = (
         DelegateRegister.objects
         .filter(booking_day__booking=booking)
-        .order_by("name", "id")
+        .order_by("name", "date_of_birth", "id")
+        # IMPORTANT: no select_related here; and avoid deferring fields needed by FK traversal
+        # (we don't actually traverse booking_day in this helper)
+        # If you want to keep 'only', include booking_day_id to be safe:
+        # .only("id", "name", "date_of_birth", "outcome", "booking_day_id")
     )
+
+    unique = []
+    seen = set()
+    for r in qs:
+        nm = (r.name or "").strip().lower()
+        dob = getattr(r, "date_of_birth", None)
+        key = (nm, dob) if dob else ("__nodedob__", r.id)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+    return unique
+
+
+
+def _assessment_context(booking, user):
+    # permissions: staff or assigned instructor (match the guard used in the view)
+    instr = getattr(user, "instructor", None)
+    if not (user.is_staff or (instr and booking.instructor_id == instr.id)):
+        raise PermissionError("Not your booking.")
+
+
+    # --- Delegates: unique by (name + DOB) for the whole booking ---
+    delegates = _unique_delegates_for_booking(booking)
+
 
     # --- Competencies: all for this course type (no is_active filter) ---
     competencies = list(
@@ -181,6 +247,20 @@ def _assessment_context(booking, user):
         "levels": levels,
     }
 
+def _get_or_create_invoice(booking):
+    inv = getattr(booking, "invoice", None)
+    if inv:
+        return inv
+    return Invoice.objects.create(
+        booking=booking,
+        instructor=booking.instructor,
+        invoice_date=now().date(),
+        account_name=getattr(booking.instructor, "account_name", "") or "",
+        sort_code=getattr(booking.instructor, "sort_code", "") or "",
+        account_number=getattr(booking.instructor, "account_number", "") or "",
+    )
+
+
 @login_required
 def instructor_booking_detail(request, pk):
     """
@@ -189,6 +269,8 @@ def instructor_booking_detail(request, pk):
       - notes form
       - assessments context (if available)
       - feedback tab context (responses for the booking's dates + course type)
+      - course close action -> lock page except "Invoicing"
+      - INVOICING: save draft (items + bank details + instructor ref + date), send, preview context
     """
     instr = getattr(request.user, "instructor", None)
     booking = get_object_or_404(
@@ -201,15 +283,113 @@ def instructor_booking_detail(request, pk):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
-    # Notes form
+    # Helper: ensure we have an invoice row for this booking
+    def _ensure_invoice_row(b):
+        inv = getattr(b, "invoice", None)
+        if inv:
+            return inv
+        try:
+            return Invoice.objects.create(booking=b, status="draft")
+        except Exception:
+            return None
+
+    # Lock flag once completed
+    is_locked = (booking.status == "completed")
+
+    # ---------- POST (notes, close, invoice) ----------
     if request.method == "POST":
-        notes_form = BookingNotesForm(request.POST, instance=booking)
-        if notes_form.is_valid():
-            notes_form.save()
-            messages.success(request, "Course notes saved.")
+        action = request.POST.get("action")
+
+        # ----- Close course -----
+        if action == "close_course":
+            reg_manual = request.POST.get("reg_manual") == "1"
+            assess_manual = request.POST.get("assess_manual") == "1"
+
+            fields_to_update = ["status"]
+            booking.status = "completed"
+
+            if hasattr(booking, "closure_register_manual"):
+                booking.closure_register_manual = reg_manual
+                fields_to_update.append("closure_register_manual")
+
+            if hasattr(booking, "closure_assess_manual"):
+                booking.closure_assess_manual = assess_manual
+                fields_to_update.append("closure_assess_manual")
+
+            booking.save(update_fields=fields_to_update)
+            messages.success(request, "Course closed. You can now prepare the invoice.")
             return redirect("instructor_booking_detail", pk=booking.pk)
+
+        # ----- Save invoice (draft) OR send invoice -----
+        if action in {"save_invoice", "send_invoice"}:
+            inv = _ensure_invoice_row(booking)
+            if not inv:
+                messages.error(request, "Could not create or load the invoice record.")
+                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
+
+            # Block edits if invoice is locked and user is only saving
+            if getattr(inv, "is_locked", False) and action == "save_invoice":
+                messages.error(request, "Invoice has been sent and cannot be edited unless admin re-opens it.")
+                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
+
+            # Main fields from the form (fallback to existing values)
+            inv.instructor_ref = request.POST.get("instructor_ref", inv.instructor_ref) or ""
+            inv.account_name   = request.POST.get("account_name",   inv.account_name)   or ""
+            inv.sort_code      = request.POST.get("sort_code",      inv.sort_code)      or ""
+            inv.account_number = request.POST.get("account_number", inv.account_number) or ""
+            # Ensure invoice_date always has a value (today by default); we will render it read-only in the template
+            inv.invoice_date   = request.POST.get("invoice_date") or inv.invoice_date or now().date()
+            inv.save()
+
+            # Rebuild items
+            inv.items.all().delete()
+
+            # Dynamic arrays (used when sending)
+            descs = request.POST.getlist("items_desc[]")
+            amts  = request.POST.getlist("items_amount[]")
+
+            # Draft rows (used by Save draft)
+            if not descs:
+                descs = request.POST.getlist("item_desc")
+                amts  = request.POST.getlist("item_amount")
+
+            for d, a in zip(descs, amts):
+                d = (d or "").strip()
+                a = (a or "").strip()
+                if not d and not a:
+                    continue
+                try:
+                    amount = Decimal(a.replace(",", "")) if a else Decimal("0")
+                except Exception:
+                    amount = Decimal("0")
+                InvoiceItem.objects.create(invoice=inv, description=d, amount=amount)
+
+            # If just saving draft, set status (unless in special review state)
+            if action == "save_invoice":
+                if hasattr(inv, "status") and inv.status not in ("awaiting_review",):
+                    inv.status = "draft"
+                    inv.save(update_fields=["status"])
+                messages.success(request, "Invoice details saved.")
+                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
+
+            # If action == "send_invoice": the actual rendering & emailing usually happens elsewhere;
+            # leave it to your existing send handler / separate view. We still persist the latest inputs.
+            messages.success(request, "Invoice saved. Use 'Send invoice to admin' to email it.")
+            return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
+
+        # ----- Notes form (only if not locked) -----
+        if not is_locked:
+            notes_form = BookingNotesForm(request.POST, instance=booking)
+            if notes_form.is_valid():
+                notes_form.save()
+                messages.success(request, "Course notes saved.")
+                return redirect("instructor_booking_detail", pk=booking.pk)
+        else:
+            notes_form = BookingNotesForm(instance=booking)
     else:
         notes_form = BookingNotesForm(instance=booking)
+
+    # ---------- READ-ONLY DATA FOR TABS ----------
 
     # Course days summary
     days_qs = (
@@ -226,7 +406,21 @@ def instructor_booking_detail(request, pk):
         "edit_url": redirect("instructor_day_registers", pk=d.id).url,
     } for d in days_qs]
 
-    # Feedback responses for this booking: same course type AND date is one of the booking's days
+    # Registers status: OK if each day has at least one register
+    day_counts = list(days_qs.values_list("n", flat=True))
+    registers_all_days = bool(day_counts) and all((n or 0) > 0 for n in day_counts)
+
+    # Assessments completion status (complete = all outcomes in pass/fail/dnf)
+    delegate_outcomes = list(
+        DelegateRegister.objects
+        .filter(booking_day__booking=booking)
+        .values_list("outcome", flat=True)
+    )
+    completed_outcomes = {"pass", "fail", "dnf"}
+    has_any = bool(delegate_outcomes)
+    assessments_all_complete = has_any and all(((o or "").lower() in completed_outcomes) for o in delegate_outcomes)
+
+    # Feedback responses for this booking
     booking_dates = list(days_qs.values_list("date", flat=True))
     if booking_dates:
         fb_qs = (
@@ -234,7 +428,7 @@ def instructor_booking_detail(request, pk):
             .filter(
                 course_type_id=booking.course_type_id,
                 date__in=booking_dates,
-                instructor_id=booking.instructor_id,   # ← restrict to this booking's instructor
+                instructor_id=booking.instructor_id,
             )
             .order_by("-date", "-created_at")
         )
@@ -243,6 +437,28 @@ def instructor_booking_detail(request, pk):
 
     fb_count = fb_qs.count()
     fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
+
+    # ---------- Invoicing context ----------
+    invoice = _ensure_invoice_row(booking)
+    invoice_items = list(invoice.items.all()) if invoice else []
+    base_fee = booking.instructor_fee or 0
+
+    # Compute total for display: base instructor fee + sum(items)
+    total = Decimal(str(base_fee))
+    for it in invoice_items:
+        total += (it.amount or Decimal("0"))
+
+    # Instructor one-line address
+    instructor_address = ", ".join([
+        getattr(instr, "address_line", "") or "",
+        getattr(instr, "town", "") or "",
+        getattr(instr, "postcode", "") or "",
+    ]).replace(" ,", ",").strip(" ,")
+
+    # Bank details (prefer invoice overrides, else instructor defaults)
+    bank_account_name   = (getattr(invoice, "account_name", None)   or getattr(instr, "name_on_account", "") or "")
+    bank_sort_code      = (getattr(invoice, "sort_code", None)      or getattr(instr, "bank_sort_code", "") or "")
+    bank_account_number = (getattr(invoice, "account_number", None) or getattr(instr, "bank_account_number", "") or "")
 
     ctx = {
         "title": booking.course_type.name,
@@ -256,11 +472,32 @@ def instructor_booking_detail(request, pk):
         "fb_qs": fb_qs,
         "fb_count": fb_count,
         "fb_avg": fb_avg,
+
+        # Course closure helpers
+        "registers_all_days": registers_all_days,
+        "assessments_all_complete": assessments_all_complete,
+
+        # Lock & persisted manual flags
+        "is_locked": is_locked,
+        "registers_manual": getattr(booking, "closure_register_manual", False),
+        "assessments_manual": getattr(booking, "closure_assess_manual", False),
+
+        # Invoicing tab
+        "invoice": invoice,
+        "invoice_items": invoice_items,
+        "base_instructor_fee": base_fee,
+        "invoice_total": total,
+        "instructor_address": instructor_address,
+        "bank_account_name": bank_account_name,
+        "bank_sort_code": bank_sort_code,
+        "bank_account_number": bank_account_number,
+        "today": now().date(),
+        "invoice_date": (getattr(invoice, "invoice_date", None) or now().date()),
     }
 
     # Assessment context (best-effort)
     try:
-        ctx.update(_assessment_context(booking, request.user))  # if you have this helper
+        ctx.update(_assessment_context(booking, request.user))
     except Exception:
         ctx.update({"delegates": [], "competencies": [], "existing": {}, "levels": []})
 
@@ -776,7 +1013,9 @@ def instructor_assessment_save(request, pk):
         return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
 
     # guard: only registers for this booking; only competencies for this course type
-    delegates = list(DelegateRegister.objects.filter(booking_day__booking=booking).only("id", "outcome"))
+    # Deduplicate delegates by (name + DOB)
+    delegates = _unique_delegates_for_booking(booking)
+
     comps = list(CourseCompetency.objects.filter(course_type=booking.course_type).only("id"))
     reg_map = {str(r.id): r for r in delegates}
     comp_ids = [str(c.id) for c in comps]
@@ -854,12 +1093,9 @@ def instructor_assessment_pdf(request, pk):
         return redirect("instructor_bookings")
 
     # Delegates & competencies
-    delegates = list(
-        DelegateRegister.objects
-        .filter(booking_day__booking=booking)
-        .order_by("name", "id")
-        .only("id", "name", "outcome")
-    )
+    # Unique delegates (one per person across the booking)
+    delegates = _unique_delegates_for_booking(booking)
+
     competencies = list(
         CourseCompetency.objects
         .filter(course_type=booking.course_type, is_active=True)
@@ -1185,6 +1421,79 @@ def _feedback_queryset_for_booking(booking):
         .select_related("instructor")
         .order_by("date", "created_at")
     )
+
+@login_required
+def invoice_preview(request, pk):
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type","business","instructor","training_location"),
+        pk=pk,
+    )
+    instr = getattr(request.user, "instructor", None)
+    if not instr or instr.id != booking.instructor_id:
+        return HttpResponseForbidden("Not allowed.")
+
+    # ---- Build context for the HTML invoice template ----
+    inv = getattr(booking, "invoice", None) or Invoice.objects.create(
+        booking=booking, instructor=booking.instructor, invoice_date=now().date()
+    )
+
+    addr_parts = [
+        getattr(booking.instructor, "address_line", ""),
+        getattr(booking.instructor, "town", ""),
+        getattr(booking.instructor, "postcode", ""),
+    ]
+    from_address = "\n".join([p for p in addr_parts if p.strip()])
+
+    base_fee = Decimal(str(booking.instructor_fee or 0))
+    items = [{"description": f"{booking.course_type.name} – {booking.business.name} – {booking.course_date:%d/%m/%Y}",
+              "amount": f"{base_fee:.2f}"}]
+    for it in inv.items.all().order_by("id"):
+        items.append({"description": it.description or "", "amount": f"{(it.amount or 0):.2f}"})
+
+    ctx = {
+        "instructor_name": booking.instructor.name if booking.instructor else "",
+        "from_address": from_address,
+        "invoice_date": (inv.invoice_date or now().date()).strftime("%d/%m/%Y"),
+        "course_ref": booking.course_reference or "",
+        "instructor_ref": inv.instructor_ref or "",
+        "items": items,
+        "invoice_total": f"{(base_fee + sum((x.amount or 0) for x in inv.items.all())):.2f}",
+        "account_name":   inv.account_name   or getattr(booking.instructor, "name_on_account", "") or "",
+        "sort_code":      inv.sort_code      or getattr(booking.instructor, "bank_sort_code", "") or "",
+        "account_number": inv.account_number or getattr(booking.instructor, "bank_account_number", "") or "",
+    }
+
+    html = render_to_string("invoicing/invoice.html", ctx)  # your HTML template
+
+    # ---- Run wkhtmltopdf ----
+    wk = getattr(settings, "WKHTMLTOPDF_CMD", None)
+    if not wk or not os.path.exists(wk):
+        return HttpResponseServerError("wkhtmltopdf not configured.")
+
+    # Use a temp HTML file so asset paths resolve correctly
+    with tempfile.TemporaryDirectory() as tmp:
+        html_path = os.path.join(tmp, "invoice.html")
+        pdf_path  = os.path.join(tmp, "invoice.pdf")
+        with open(html_path, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        # Common flags: quiet, enable-local-file-access for Windows
+        cmd = [wk, "--quiet", "--enable-local-file-access", html_path, pdf_path]
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if proc.returncode != 0 or not os.path.exists(pdf_path):
+            # Surface wkhtmltopdf errors to help debugging
+            return HttpResponseServerError(
+                "wkhtmltopdf failed:\n" + (proc.stderr.decode("utf-8", errors="ignore") or "Unknown error")
+            )
+
+        with open(pdf_path, "rb") as f:
+            pdf = f.read()
+
+    response = HttpResponse(pdf, content_type="application/pdf")
+    filename = f"invoice-{booking.course_reference or booking.pk}.pdf"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
 
 def _pdf_header_footer(c, booking, title):
     w, h = A4

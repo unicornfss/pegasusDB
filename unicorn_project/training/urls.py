@@ -5,6 +5,8 @@ from django.contrib.auth import views as auth_views
 from . import views
 from . import views_admin as app_admin
 from . import views_instructor as instv
+from . import views_instructor
+
 
 urlpatterns = [
     # ---------- Core / Home ----------
@@ -66,6 +68,7 @@ urlpatterns = [
     path("app/admin/instructors/new/", app_admin.admin_instructor_new, name="admin_instructor_new"),
     path("app/admin/instructors/<uuid:pk>/", app_admin.admin_instructor_edit, name="admin_instructor_edit"),
     path("app/admin/instructors/<uuid:pk>/delete/", app_admin.instructor_delete, name="admin_instructor_delete"),
+    path("app/instructor/booking/<uuid:pk>/invoice/preview/", views_instructor.invoice_preview, name="instructor_invoice_preview"),
 
     # Bookings (admin)
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
@@ -74,6 +77,7 @@ urlpatterns = [
     path("app/admin/bookings/<uuid:pk>/delete/", app_admin.booking_delete, name="admin_booking_delete"),
     path("app/admin/bookings/<uuid:pk>/cancel/", app_admin.booking_cancel, name="admin_booking_cancel"),
     path("app/admin/bookings/<uuid:pk>/reinstate/", app_admin.booking_reinstate, name="admin_booking_reinstate"),
+    path("app/admin/bookings/<uuid:pk>/unlock/", app_admin.booking_unlock, name="admin_booking_unlock"),
 
     # Users (admin) – ints
     path("app/admin/users/", app_admin.admin_user_list, name="admin_user_list"),
@@ -107,4 +111,6 @@ urlpatterns = [
     path("app/instructor/feedback/<uuid:pk>/", instv.instructor_feedback_view, name="instructor_feedback_view"),
     path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/all/", instv.instructor_feedback_pdf_all, name="instructor_feedback_pdf_all"),
     path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/summary/", instv.instructor_feedback_pdf_summary, name="instructor_feedback_pdf_summary"),
+
+    
 ]

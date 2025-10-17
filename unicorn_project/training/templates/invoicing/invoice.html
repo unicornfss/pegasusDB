@@ -1,0 +1,152 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Invoice</title>
+  <style>
+    /* Page + base */
+    @page { margin: 20mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 12pt; color: #111; }
+
+    h1 {
+      text-align: right;
+      letter-spacing: 1px;
+      margin: 0 0 12mm 0;
+      font-size: 28pt;
+    }
+
+    /* Two-column header (From | To) */
+    .addr-table { width: 100%; border-collapse: collapse; margin-bottom: 10mm; }
+    .addr-table td { vertical-align: top; width: 50%; }
+    .addr-to   { text-align: right; }
+    .label { font-weight: 700; display: inline-block; margin-bottom: 2mm; }
+
+    /* Meta lines */
+    .meta { margin: 6mm 0 8mm 0; }
+    .meta .line { margin: 2mm 0; }
+
+    /* Items table */
+    table.items { width: 100%; border-collapse: collapse; margin-top: 2mm; }
+    .items th, .items td { border: 1px solid #bbb; padding: 6px 8px; }
+    .items th { background: #efefef; text-align: left; }
+    .items td.amount { width: 120px; text-align: right; white-space: nowrap; }
+
+    /* Tight total row (label snug to number) */
+    .totals-wrap { width: 100%; margin-top: 2mm; }
+    .totals-table {
+      margin-left: auto; /* push to the right */
+      border-collapse: collapse;
+      border-top: 2px solid #000; /* separator above total */
+    }
+    .totals-table td { padding: 6px 0; }
+    .totals-table .label {
+      padding-right: 8px; /* << closer to figure */
+      font-weight: 700;
+    }
+    .totals-table .value {
+      min-width: 120px;
+      text-align: right;
+      font-weight: 700;
+    }
+
+    /* Bank details */
+    .bank { width: 100%; border-collapse: collapse; margin-top: 12mm; }
+    .bank th, .bank td { border: 1px solid #bbb; padding: 6px 8px; }
+    .bank th { width: 170px; background: #f7f7f7; text-align: left; }
+
+    /* Signature */
+    .thanks { margin-top: 12mm; }
+    .sig {
+      font-family: "Brush Script MT","Segoe Script","Lucida Handwriting",cursive;
+      font-size: 22pt;
+      color: #1f6feb;
+      margin-top: 2mm;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>INVOICE</h1>
+
+  <!-- From | To -->
+  <table class="addr-table">
+    <tr>
+      <td>
+        <div class="label">From:</div><br>
+        {{ instructor_name }}<br>
+        {{ from_address|linebreaksbr }}
+      </td>
+      <td class="addr-to">
+        <div class="label">To:</div><br>
+        Unicorn Fire and Safety Solutions,<br>
+        Unicorn House,<br>
+        6 Salendine,<br>
+        Shrewsbury,<br>
+        SY1 3XJ
+      </td>
+    </tr>
+  </table>
+
+  <!-- Date (right) -->
+  <div style="text-align:right; margin-bottom: 6mm;">{{ invoice_date }}</div>
+
+  <!-- Meta -->
+  <div class="meta">
+    <div class="line"><strong>Invoice ref:</strong> {{ course_ref }}</div>
+    {% if instructor_ref %}
+    <div class="line"><strong>Instructor ref:</strong> {{ instructor_ref }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Items -->
+  <table class="items">
+    <thead>
+      <tr>
+        <th>Item description</th>
+        <th class="amount">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>{{ it.description }}</td>
+        <td class="amount">£{{ it.amount }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <!-- Tight total to the right -->
+  <div class="totals-wrap">
+    <table class="totals-table">
+      <tr>
+        <td class="label">Total:</td>
+        <td class="value">£{{ invoice_total }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Bank details -->
+  <table class="bank">
+    <tr>
+      <th>Name on account:</th>
+      <td>{{ account_name }}</td>
+    </tr>
+    <tr>
+      <th>Sort-code:</th>
+      <td>{{ sort_code }}</td>
+    </tr>
+    <tr>
+      <th>Account number:</th>
+      <td>{{ account_number }}</td>
+    </tr>
+  </table>
+
+  <!-- Signature -->
+  <div class="thanks">
+    Many thanks
+    <div class="sig">{{ instructor_name }}</div>
+  </div>
+
+</body>
+</html>

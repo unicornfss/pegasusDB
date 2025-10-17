@@ -140,3 +140,29 @@ BOOKING_AUTO_UPDATE_ON_PAGE = False
 # APScheduler test mode: run every N minutes (0 = use 15-minute cron)
 BOOKING_TEST_INTERVAL_MIN = 1  # set to 0 (or remove) to go back to 00,15,30,45
 
+# Who we send invoices from
+DEFAULT_FROM_EMAIL = "no-reply@unicornsafety.co.uk"
+
+# Admin inbox logic (used by utils/invoice.py)
+# In development, always send to Jon:
+DEV_CATCH_ALL_EMAIL = "jon.ostrowski@hotmail.com"
+
+# In production, admin invoices go here:
+ADMIN_INBOX_EMAIL = "info@unicornsafety.co.uk"
+
+# --- HTML invoice rendering & wkhtmltopdf --------------------
+# Prefer environment variable; fall back to common Windows location if present.
+WKHTMLTOPDF_CMD = os.getenv("WKHTMLTOPDF_CMD", "")
+if not WKHTMLTOPDF_CMD and os.name == "nt":
+    # Try both Program Files locations
+    candidates = [
+        r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe",
+        r"C:\Program Files (x86)\wkhtmltopdf\bin\wkhtmltopdf.exe",
+    ]
+    for c in candidates:
+        if Path(c).exists():
+            WKHTMLTOPDF_CMD = c
+            break
+# In production (Linux on Render, etc.) set WKHTMLTOPDF_CMD via env or leave blank to skip PDF conversion.
+
+

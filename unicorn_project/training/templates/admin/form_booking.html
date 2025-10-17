@@ -3,24 +3,39 @@
 
 {% block content %}
 
-<h3 class="mb-2">{{ title }}</h3>
+<h3 class="mb-2 d-flex align-items-center gap-2">
+  {{ title }}
+  {% if booking %}
+    {% with st=booking.status %}
+      {% if st == "scheduled" %}
+        <span class="badge bg-info text-dark">Scheduled</span>
+      {% elif st == "in_progress" %}
+        <span class="badge bg-dark">In progress</span>
+      {% elif st == "awaiting_closure" %}
+        <span class="badge" style="background-color:#6f42c1;color:#fff">Awaiting instructor closure</span>
+      {% elif st == "completed" %}
+        <span class="badge bg-success">Completed</span>
+      {% elif st == "cancelled" %}
+        <span class="badge bg-warning text-dark">Cancelled</span>
+      {% else %}
+        <span class="badge bg-secondary">{{ booking.get_status_display|default:booking.status }}</span>
+      {% endif %}
+    {% endwith %}
+  {% endif %}
+</h3>
 
-{% if booking %}
-  {% with st=booking.status %}
-    {% if st == "scheduled" %}
-      <span class="badge bg-info text-dark mb-3">Scheduled</span>
-    {% elif st == "in_progress" %}
-      <span class="badge bg-dark mb-3">In progress</span>
-    {% elif st == "awaiting_closure" %}
-      <span class="badge mb-3" style="background-color:#6f42c1;color:#fff">Awaiting instructor closure</span>
-    {% elif st == "completed" %}
-      <span class="badge bg-success mb-3">Completed</span>
-    {% elif st == "cancelled" %}
-      <span class="badge bg-warning text-dark mb-3">Cancelled</span>
-    {% else %}
-      <span class="badge bg-secondary mb-3">{{ booking.get_status_display|default:booking.status }}</span>
-    {% endif %}
-  {% endwith %}
+{% if unlock_url and booking %}
+  {% if booking.status == "completed" %}
+    <div class="alert alert-info d-flex justify-content-between align-items-center">
+      <div>
+        <strong>Booking is completed.</strong> Instructors cannot edit registers/assessments.
+        You can unlock it to return the status to <em>Awaiting instructor closure</em>.
+      </div>
+      <a href="{{ unlock_url }}" class="btn btn-warning">
+        <i class="bi bi-unlock"></i> Unlock for instructor editing
+      </a>
+    </div>
+  {% endif %}
 {% endif %}
 
 <form id="booking-form" method="post" class="card p-3">
@@ -257,6 +272,11 @@
   const LOCATIONS     = {{ location_map_json|default:"{}"|safe }};
   const EXISTING_DAYS = {{ booking_days_initial_json|default:"[]"|safe }};
 
+  /* NEW: capture initial values to protect existing references */
+  const INIT_CT  = "{{ form.instance.course_type_id|default:'' }}";
+  const INIT_REF = "{{ form.instance.course_reference|default:'' }}";
+  let currentCT  = INIT_CT;
+
   /* ---- Small utilities ---- */
   const byName = (n) => document.querySelector(`[name="${n}"]`);
   const pad2   = (n) => String(n).padStart(2,'0');
@@ -382,7 +402,7 @@
       noteI.type = 'text';
       noteI.className = 'form-control form-control-sm';
       noteI.placeholder = '(optional)';
-      noteI.id = `day-${i}-note`;  /* <-- so we can read it */
+      noteI.id = `day-${i}-note`;
 
       const td0 = document.createElement('td'); td0.textContent = `Day ${i}`;
       const td1 = document.createElement('td'); td1.appendChild(dateI);
@@ -509,21 +529,37 @@
     if (inf && (force || inf.value.trim()==="")) inf.value = info.instructorFee || '';
   }
 
-  function maybeGenerateReference(force=false){
-    const info=getCTInfo(), ref=byName('course_reference');
-    if(!info || !ref) return;
-    if (!force && ref.value.trim()!=="") return;
+  /* NEW: safe reference generation */
+  function buildRef(code){
     const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     const rand = Array.from({length:6},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
-    const code = info.code || 'COURSE';
-    ref.value = `${code}-${rand}`;
+    return `${(code || 'COURSE').toUpperCase()}-${rand}`;
+  }
+
+  function maybeGenerateReferenceOnCTChange(){
+    const sel = getCourseSelect();
+    const ref = byName('course_reference');
+    if (!sel || !ref) return;
+
+    const newCT   = sel.value || '';
+    const newCode = (sel.options[sel.selectedIndex]?.dataset?.code || 'COURSE').toUpperCase();
+    if (newCT === currentCT) return;  // no change
+
+    const val = (ref.value || '').trim();
+    const looksAuto = /^[A-Z]+-[A-Z0-9]{6}$/.test(val);
+
+    if (val === '' || looksAuto) {
+      ref.value = buildRef(newCode);
+    }
+    currentCT = newCT;
   }
 
   function handleCourseChanged(){
     rebuildDaysUI();
     populateFromHeader();
     applyCourseFeesFromType(true);
-    maybeGenerateReference(true);
+    // Only (maybe) regenerate reference when CT actually changes
+    maybeGenerateReferenceOnCTChange();
   }
 
   function rebuildDaysUI(){
@@ -546,7 +582,7 @@
     if (n > 0) buildRows(n);
     populateFromHeader();
     applyCourseFeesFromType();
-    maybeGenerateReference();
+    // NOTE: DO NOT auto-generate reference here; we only do it on CT change when safe.
   }
 
   /* ---- Global listeners ---- */
@@ -566,8 +602,10 @@
     const courseSel = getCourseSelect();
     if (courseSel) courseSel.addEventListener('change', handleCourseChanged);
 
-    // Run once on load
-    handleCourseChanged();
+    // Initial build; DO NOT regenerate course reference here
+    rebuildDaysUI();
+    populateFromHeader();
+    applyCourseFeesFromType();
 
     // Keep the payload in sync and ensure it’s written before submit
     const form = document.getElementById('booking-form');

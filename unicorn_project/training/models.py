@@ -145,6 +145,8 @@ class Booking(models.Model):
         return self.status == "cancelled"
 
     comments      = models.TextField(blank=True)
+    closure_register_manual = models.BooleanField(default=False)
+    closure_assess_manual   = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
@@ -400,3 +402,47 @@ class FeedbackResponse(models.Model):
     def __str__(self):
         ref = self.course_type.code if self.course_type_id else "Course"
         return f"Feedback {ref} {self.date} ({self.id})"
+
+class Invoice(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Awaiting completion and sending"),
+        ("sent", "Sent"),
+        ("viewed", "Viewed"),
+        ("paid", "Paid"),
+        ("awaiting_review", "Awaiting instructor review"),
+        ("rejected", "Rejected"),
+    ]
+    booking = models.OneToOneField("Booking", on_delete=models.CASCADE, related_name="invoice")
+    instructor = models.ForeignKey("Instructor", on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+
+    invoice_date = models.DateField(null=True, blank=True)
+    instructor_ref = models.CharField(max_length=100, blank=True)
+
+    # Bank details (pre-filled from Instructor; editable on draft)
+    account_name = models.CharField(max_length=200, blank=True)
+    sort_code = models.CharField(max_length=20, blank=True)
+    account_number = models.CharField(max_length=30, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @property
+    def is_locked(self):
+        # cannot edit after sent unless admin sets awaiting_review
+        return self.status not in ("draft", "awaiting_review")
+
+    @property
+    def base_amount(self):
+        return self.booking.instructor_fee or 0
+
+    @property
+    def total(self):
+        add = sum(x.amount for x in self.items.all())
+        return (self.base_amount or 0) + add
+
+
+class InvoiceItem(models.Model):
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
