@@ -113,5 +113,6 @@ urlpatterns = [
     path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/all/", instv.instructor_feedback_pdf_all, name="instructor_feedback_pdf_all"),
     path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/summary/", instv.instructor_feedback_pdf_summary, name="instructor_feedback_pdf_summary"),
 
-    
+    path("diag/email/", instv.email_diagnostics, name="email_diagnostics"),
+
 ]

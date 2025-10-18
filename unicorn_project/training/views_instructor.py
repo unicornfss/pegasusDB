@@ -1,12 +1,12 @@
 from pathlib import Path
-import io
+import io, smtplib, ssl, contextlib
 import os
 from decimal import Decimal
 from datetime import timedelta
 from django.contrib import messages
 from django.conf import settings
 from django.core.mail import EmailMessage
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
 from django.forms import modelformset_factory
@@ -1904,3 +1904,56 @@ def send_course_docs(request, pk):
     else:
         messages.warning(request, "No documents were generated to send.")
     return redirect("instructor_booking_detail", pk=booking.pk)
+
+
+
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def email_diagnostics(request):
+    """
+    TEMP endpoint to debug SMTP on Render. Plain-text output.
+    Only accessible to logged-in superusers.
+    """
+    mask = lambda s: (s[:3] + "…" + s[-3:]) if s else ""
+    lines = []
+    lines.append("== EMAIL SETTINGS SEEN BY DJANGO ==")
+    lines.append(f"EMAIL_BACKEND        = {settings.EMAIL_BACKEND}")
+    lines.append(f"EMAIL_HOST           = {getattr(settings, 'EMAIL_HOST', '')}")
+    lines.append(f"EMAIL_PORT           = {getattr(settings, 'EMAIL_PORT', '')}")
+    lines.append(f"EMAIL_USE_TLS        = {getattr(settings, 'EMAIL_USE_TLS', '')}")
+    lines.append(f"EMAIL_HOST_USER      = {getattr(settings, 'EMAIL_HOST_USER', '')}")
+    pw = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+    lines.append(f"EMAIL_HOST_PASSWORD  = {mask(pw)}")
+    lines.append(f"DEFAULT_FROM_EMAIL   = {getattr(settings, 'DEFAULT_FROM_EMAIL', '')}")
+    lines.append(f"ADMIN_INBOX_EMAIL    = {getattr(settings, 'ADMIN_INBOX_EMAIL', '')}")
+    lines.append(f"DEV_CATCH_ALL_EMAIL  = {getattr(settings, 'DEV_CATCH_ALL_EMAIL', '')}")
+    lines.append("")
+
+    # Try a real SMTP handshake
+    lines.append("== SMTP HANDSHAKE ==")
+    host = getattr(settings, 'EMAIL_HOST', 'smtp.gmail.com')
+    port = int(getattr(settings, 'EMAIL_PORT', 587) or 587)
+    user = getattr(settings, 'EMAIL_HOST_USER', '')
+    pwd  = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            s = smtplib.SMTP(host, port, timeout=30)
+            s.set_debuglevel(1)  # print SMTP conversation
+            s.ehlo()
+            if getattr(settings, 'EMAIL_USE_TLS', True):
+                s.starttls(context=ssl.create_default_context())
+                s.ehlo()
+            if user:
+                s.login(user, pwd)
+            s.quit()
+        lines.append("SMTP handshake: OK")
+        lines.append("")
+        lines.append("Raw SMTP dialogue:")
+        lines.append(buf.getvalue())
+    except Exception as e:
+        lines.append(f"SMTP handshake: FAILED -> {type(e).__name__}: {e}")
+
+    return HttpResponse("\n".join(lines), content_type="text/plain; charset=utf-8")
