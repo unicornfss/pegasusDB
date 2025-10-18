@@ -56,7 +56,6 @@ if _is_postgres(DB_URL):
     }
 else:
     # Development: SQLite (no sslmode arguments)
-    # Accept DATABASE_URL=sqlite:///... if provided, otherwise default path
     sqlite_url = DB_URL or f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
     DATABASES = {
         "default": dj_database_url.parse(sqlite_url, conn_max_age=0)
@@ -134,48 +133,57 @@ LOGIN_URL = "/accounts/login/"
 LOGIN_REDIRECT_URL = "/post-login/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
-# stop views from auto-updating unless you flip this to True
+# Feature flags
 BOOKING_AUTO_UPDATE_ON_PAGE = False
+BOOKING_TEST_INTERVAL_MIN = 0
 
-# APScheduler test mode: run every N minutes (0 = use 15-minute cron)
-BOOKING_TEST_INTERVAL_MIN = 0  # set to 0 (or remove) to go back to 00,15,30,45
-
-# Who we send invoices from
-DEFAULT_FROM_EMAIL = "no-reply@unicornsafety.co.uk"
-
-# Admin inbox logic (used by utils/invoice.py)
-# In development, always send to Jon:
-DEV_CATCH_ALL_EMAIL = "jon.ostrowski@hotmail.com"
-
-# In production, admin invoices go here:
-ADMIN_INBOX_EMAIL = "jon.ostrowski@hotmail.com"
+# --- Email destinations --------------------------------------
+# Always present and overridable by env on both dev/prod
+DEV_CATCH_ALL_EMAIL = os.getenv("DEV_CATCH_ALL_EMAIL", "jon.ostrowski@hotmail.com")
+ADMIN_INBOX_EMAIL = os.getenv("ADMIN_INBOX_EMAIL", "info@unicornsafety.co.uk")
 
 # --- HTML invoice rendering & wkhtmltopdf --------------------
-# Prefer environment variable; fall back to common Windows location if present.
 WKHTMLTOPDF_CMD = os.getenv("WKHTMLTOPDF_CMD", "")
 if not WKHTMLTOPDF_CMD and os.name == "nt":
-    # Try both Program Files locations
-    candidates = [
+    from pathlib import Path as _P
+    for c in [
         r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe",
         r"C:\Program Files (x86)\wkhtmltopdf\bin\wkhtmltopdf.exe",
-    ]
-    for c in candidates:
-        if Path(c).exists():
+    ]:
+        if _P(c).exists():
             WKHTMLTOPDF_CMD = c
             break
-# In production (Linux on Render, etc.) set WKHTMLTOPDF_CMD via env or leave blank to skip PDF conversion.
 
-# settings.py
-import os
+# --- Email transport -----------------------------------------
+# Choose how to send: "prod" (SMTP), "console" (log/print), or "dummy" (drop).
+EMAIL_MODE = os.getenv("EMAIL_MODE", "prod").lower()
 
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))        # 587 for STARTTLS
-EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"  # "1" or "0"
-EMAIL_USE_SSL = False                                   # must be False if using TLS
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER)
+if DEBUG or EMAIL_MODE in {"console", "dev"}:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@unicornsafety.co.uk")
+elif EMAIL_MODE == "dummy":
+    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@unicornsafety.co.uk")
+else:
+    # Real SMTP (Gmail/Office365/other SMTP)
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))        # 587 for STARTTLS
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"  # "1" or "0"
+    EMAIL_USE_SSL = False                                   # must be False if using TLS
+    EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@unicornsafety.co.uk")
 
-
-
+# Handy to render on the diagnostics page if you add one
+SETTINGS_EMAIL_SUMMARY = {
+    "backend": locals().get("EMAIL_BACKEND"),
+    "mode": EMAIL_MODE,
+    "host": locals().get("EMAIL_HOST", "(console/dummy)"),
+    "port": locals().get("EMAIL_PORT", "(n/a)"),
+    "user": locals().get("EMAIL_HOST_USER", ""),
+    "default_from": DEFAULT_FROM_EMAIL,
+    "admin_inbox": ADMIN_INBOX_EMAIL,
+    "dev_catch_all": DEV_CATCH_ALL_EMAIL,
+}
