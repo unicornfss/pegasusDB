@@ -1,7 +1,12 @@
+{% if not is_locked %}
+<div class="alert alert-warning mb-0">Not available until course closed.</div>
+{% else %}
 {% load static %}
 <form method="post" id="invoice-form" class="row g-3">
   {% csrf_token %}
-  <input type="hidden" name="action" id="invoice-action" value="">
+{% with inv_lower=invoice.status|default:"draft"|lower %}
+{% now "Y-m-d" as today_iso %}
+{% now "d/m/Y" as today_human %}
 
   <div class="col-12 col-lg-8">
     <div class="card">
@@ -20,15 +25,20 @@
         <div class="row g-3">
           <div class="col-md-7">
             <label class="form-label">Instructor reference (optional)</label>
-            <input class="form-control" name="instructor_ref"
-                   value="{{ invoice.instructor_ref|default_if_none:'' }}">
+            <input class="form-control"
+                   name="instructor_ref"
+                   value="{{ invoice.instructor_ref|default_if_none:'' }}"
+                   {% if inv_lower == "sent" %}readonly disabled{% endif %}>
           </div>
 
           <div class="col-md-5">
-            <label class="form-label">Invoice date</label>
-            <input type="text" class="form-control" value="{{ invoice_date|date:'d/m/Y' }}" readonly>
-            <input type="hidden" name="invoice_date" value="{{ invoice_date|date:'Y-m-d' }}">
-          </div>
+  <label class="form-label">Invoice date</label>
+  <input type="date"
+         name="invoice_date"
+         class="form-control"
+         value="{% if invoice.invoice_date %}{{ invoice.invoice_date|date:'Y-m-d' }}{% else %}{{ today_iso }}{% endif %}"
+         {% if inv_lower == "sent" %}readonly disabled{% endif %}>
+</div>
         </div>
 
         <div class="mt-4">
@@ -49,7 +59,9 @@
                 <tr class="table-light">
                   <td><span class="fw-semibold">Instructor fee</span></td>
                   <td>
-                    <input class="form-control text-end" value="{{ base_instructor_fee|floatformat:2 }}" readonly>
+                    <input class="form-control text-end"
+                           value="{{ booking.instructor_fee|default_if_none:0|floatformat:2 }}"
+                           readonly>
                   </td>
                   <td class="text-end"></td>
                 </tr>
@@ -57,29 +69,57 @@
 
               <!-- Dynamic extras; grows/shrinks based on items -->
               <tbody id="extras-body">
-                {% for it in invoice_items %}
+                {% for it in invoice.items.all %}
                   <tr>
                     <td>
-                      <input class="form-control" name="item_desc" value="{{ it.description }}">
+                      <input class="form-control"
+                             name="item_desc"
+                             value="{{ it.description|default_if_none:'' }}"
+                             {% if inv_lower == "sent" %}readonly disabled{% endif %}>
                     </td>
                     <td>
-                      <input class="form-control text-end" name="item_amount" type="number" step="0.01"
-                             value="{{ it.amount }}">
+                      <input class="form-control text-end"
+                             name="item_amount"
+                             type="number" step="0.01"
+                             value="{{ it.amount|default_if_none:0 }}"
+                             {% if inv_lower == "sent" %}readonly disabled{% endif %}>
                     </td>
                     <td class="text-end">
-                      <button class="btn btn-outline-danger btn-sm remove-row" type="button">
+                      <button class="btn btn-outline-danger btn-sm remove-row"
+                              type="button"
+                              {% if inv_lower == "sent" %}disabled aria-disabled="true"{% endif %}>
                         <i class="bi bi-x"></i>
                       </button>
                     </td>
                   </tr>
                 {% empty %}
-                  <!-- No extras initially; nothing rendered here -->
+                  {# if no extras, start with one empty row #}
+                  <tr>
+                    <td>
+                      <input class="form-control" name="item_desc"
+                             {% if inv_lower == "sent" %}readonly disabled{% endif %}>
+                    </td>
+                    <td>
+                      <input class="form-control text-end" name="item_amount"
+                             type="number" step="0.01"
+                             {% if inv_lower == "sent" %}readonly disabled{% endif %}>
+                    </td>
+                    <td class="text-end">
+                      <button class="btn btn-outline-danger btn-sm remove-row"
+                              type="button"
+                              {% if inv_lower == "sent" %}disabled aria-disabled="true"{% endif %}>
+                        <i class="bi bi-x"></i>
+                      </button>
+                    </td>
+                  </tr>
                 {% endfor %}
               </tbody>
             </table>
           </div>
 
-          <button class="btn btn-outline-primary btn-sm" id="btn-add-item" type="button">
+          <button class="btn btn-outline-primary btn-sm" id="btn-add-item"
+                  type="button"
+                  {% if inv_lower == "sent" %}disabled aria-disabled="true"{% endif %}>
             <i class="bi bi-plus-circle"></i> Add item
           </button>
         </div>
@@ -88,7 +128,9 @@
           <div class="col-md-12">
             <div class="d-flex justify-content-end align-items-center">
               <div class="me-2 text-muted">Invoice total:</div>
-              <div class="fw-semibold" id="invoice-total-display">£{{ invoice_total|floatformat:2 }}</div>
+              <div class="fw-semibold" id="invoice-total-display">
+                £0.00
+              </div>
             </div>
           </div>
         </div>
@@ -98,18 +140,24 @@
         <div class="row g-3">
           <div class="col-md-6">
             <label class="form-label">Account name</label>
-            <input class="form-control" name="account_name"
-                   value="{{ bank_account_name }}">
+            <input class="form-control"
+                   name="account_name"
+                   value="{{ invoice.account_name|default:booking.instructor.name_on_account }}"
+                   {% if inv_lower == "sent" %}readonly disabled{% endif %}>
           </div>
           <div class="col-md-3">
             <label class="form-label">Sort code</label>
-            <input class="form-control" name="sort_code"
-                   value="{{ bank_sort_code }}">
+            <input class="form-control"
+                   name="sort_code"
+                   value="{{ invoice.sort_code|default:booking.instructor.bank_sort_code }}"
+                   {% if inv_lower == "sent" %}readonly disabled{% endif %}>
           </div>
           <div class="col-md-3">
             <label class="form-label">Account number</label>
-            <input class="form-control" name="account_number"
-                   value="{{ bank_account_number }}">
+            <input class="form-control"
+                   name="account_number"
+                   value="{{ invoice.account_number|default:booking.instructor.bank_account_number }}"
+                   {% if inv_lower == "sent" %}readonly disabled{% endif %}>
           </div>
         </div>
 
@@ -117,14 +165,14 @@
     </div>
 
     <div class="mt-3 d-flex flex-wrap gap-2">
-      <button type="submit" class="btn btn-primary" onclick="document.getElementById('invoice-action').value='save_invoice'">
-        <i class="bi bi-check2"></i> Save draft
-      </button>
-
-      <button type="submit" class="btn btn-success" onclick="document.getElementById('invoice-action').value='send_invoice'">
-        <i class="bi bi-send"></i> Send invoice to admin
-      </button>
-
+      {% if inv_lower != "sent" %}
+        <button type="submit" class="btn btn-primary" name="action" value="save_draft">
+          <i class="bi bi-check2"></i> Save draft
+        </button>
+        <button type="submit" class="btn btn-success" name="action" value="send_admin">
+          <i class="bi bi-send"></i> Send invoice to admin
+        </button>
+      {% endif %}
       <a class="btn btn-outline-secondary" href="{% url 'instructor_invoice_preview' booking.pk %}">
         <i class="bi bi-file-earmark-pdf"></i> Download preview (PDF)
       </a>
@@ -137,7 +185,16 @@
       <div class="card-body">
         <ul class="list-unstyled mb-0 small">
           <li><span class="text-muted">Instructor:</span> {{ booking.instructor.name }}</li>
-          <li><span class="text-muted">Address:</span> {{ instructor_address|default:'—' }}</li>
+          <li><span class="text-muted">Address:</span>
+            {% if instructor_address %}
+              {{ instructor_address }}
+            {% else %}
+              {% firstof booking.instructor.address_line "" %}{% if booking.instructor.address_line %},{% endif %}
+              {% firstof booking.instructor.town "" %}{% if booking.instructor.town %},{% endif %}
+              {% firstof booking.instructor.postcode "" %}
+              {% if not booking.instructor.address_line and not booking.instructor.town and not booking.instructor.postcode %}—{% endif %}
+            {% endif %}
+          </li>
           <li><span class="text-muted">Course ref:</span> {{ booking.course_reference|default:'—' }}</li>
           <li><span class="text-muted">Course type:</span> {{ booking.course_type.name }}</li>
           <li><span class="text-muted">Location:</span> {{ booking.training_location.name|default:'—' }}</li>
@@ -146,11 +203,13 @@
               {{ booking.course_date|date:"d M Y" }}
             {% else %}—{% endif %}
           </li>
-          <li><span class="text-muted">Instructor fee:</span> £{{ base_instructor_fee|floatformat:2 }}</li>
+          <li><span class="text-muted">Instructor fee:</span> £{{ booking.instructor_fee|default_if_none:0|floatformat:2 }}</li>
         </ul>
       </div>
     </div>
   </div>
+
+{% endwith %}
 </form>
 
 <script>
@@ -159,12 +218,16 @@
   const addBtn = document.getElementById('btn-add-item');
   const totalEl = document.getElementById('invoice-total-display');
 
+  // Server-side flag: is the invoice locked (sent)?
+  const INVOICE_SENT = {% if inv_lower == "sent" %}true{% else %}false{% endif %};
+
+
   function parseAmount(v){
-    const n = parseFloat((v||'').replace(',', ''));
+    const n = parseFloat((v||'').toString().replace(',', ''));
     return isNaN(n) ? 0 : n;
   }
   function currentBase(){
-    const txt = "{{ base_instructor_fee|default:0 }}";
+    const txt = "{{ booking.instructor_fee|default_if_none:0 }}";
     const n = parseFloat(txt);
     return isNaN(n) ? 0 : n;
   }
@@ -177,23 +240,36 @@
     });
     totalEl.textContent = '£' + sum.toFixed(2);
   }
+
   function addRow(desc='', amount=''){
+    const ro  = INVOICE_SENT ? 'readonly disabled' : '';
+    const dis = INVOICE_SENT ? 'disabled aria-disabled="true"' : '';
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td><input class="form-control" name="item_desc" value="${desc}"></td>
-      <td><input class="form-control text-end" name="item_amount" type="number" step="0.01" value="${amount}"></td>
+      <td><input class="form-control" name="item_desc" value="${desc}" ${ro}></td>
+      <td><input class="form-control text-end" name="item_amount" type="number" step="0.01" value="${amount}" ${ro}></td>
       <td class="text-end">
-        <button class="btn btn-outline-danger btn-sm remove-row" type="button"><i class="bi bi-x"></i></button>
+        <button class="btn btn-outline-danger btn-sm remove-row" type="button" ${dis}><i class="bi bi-x"></i></button>
       </td>
     `;
     extrasBody.appendChild(tr);
+
+    // Live total updates
     tr.addEventListener('input', recalc);
-    tr.querySelector('.remove-row').addEventListener('click', function(){
+
+    // Remove row
+    const del = tr.querySelector('.remove-row');
+    if (del) del.addEventListener('click', function(){
       tr.remove();
       recalc();
     });
   }
-  if (addBtn){ addBtn.addEventListener('click', function(){ addRow(); }); }
+
+  // “Add item” creates a new row (unless locked)
+  if (addBtn){
+    addBtn.addEventListener('click', function(){ if (!INVOICE_SENT) addRow(); });
+  }
 
   // Hook up existing rows for live total
   extrasBody.querySelectorAll('tr').forEach(tr => {
@@ -204,6 +280,10 @@
       recalc();
     });
   });
+
   recalc();
 })();
 </script>
+
+
+{% endif %}

@@ -2,10 +2,11 @@ from pathlib import Path
 import io, smtplib, ssl, contextlib
 import os
 from decimal import Decimal
-from datetime import timedelta
+from datetime import timedelta, datetime
 from django.contrib import messages
 from django.conf import settings
 from django.core.mail import EmailMessage
+from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
@@ -101,20 +102,50 @@ def post_login(request):
     return redirect("instructor_bookings")
 
 
+
+def _invoicing_tab_context(booking):
+    """Build context keys that _invoicing_tab.html expects."""
+    inv = _get_or_create_invoice(booking)
+    instr = booking.instructor
+
+    inv_date = inv.invoice_date or now().date()
+
+    try:
+        base_fee = booking.instructor_fee
+        if base_fee in (None, ""):
+            base_fee = getattr(booking.course_type, "default_instructor_fee", 0)
+    except Exception:
+        base_fee = 0
+
+    bank_name = (inv.account_name or (getattr(instr, "name_on_account", "") if instr else "") or "")
+    bank_sort = (inv.sort_code or (getattr(instr, "bank_sort_code", "") if instr else "") or "")
+    bank_num  = (inv.account_number or (getattr(instr, "bank_account_number", "") if instr else "") or "")
+
+    addr_parts = []
+    if instr:
+        for f in ["address_line", "town", "postcode"]:
+            addr_parts.append(getattr(instr, f, "") or "")
+    instructor_address = ", ".join([x for x in addr_parts if x.strip()])
+
+    return {
+        "invoice": inv,
+        "invoice_date": inv_date,
+        "base_instructor_fee": base_fee or 0,
+        "invoice_items": list(getattr(inv, "items", []).all()) if hasattr(inv, "items") else [],
+        "bank_account_name": bank_name,
+        "bank_sort_code": bank_sort,
+        "bank_account_number": bank_num,
+        "instructor_address": instructor_address or "—",
+    }
+
 @login_required
 def instructor_bookings(request):
     """
-    Instructor’s upcoming bookings:
-    Order & limit:
-      1) in_progress (all)
-      2) awaiting_closure (all)
-      3) scheduled (up to 10, from today onwards)
-    Cancelled are excluded.
+    Instructor’s bookings dashboard.
     """
     inst = _get_instructor(request.user)
     if not inst:
         messages.error(request, "Your user account isn’t linked to an instructor record.")
-        # Send non-instructors somewhere sensible (admin if staff, else home)
         return redirect("app_admin_dashboard" if request.user.is_staff else "home")
 
     today = timezone.localdate()
@@ -130,14 +161,42 @@ def instructor_bookings(request):
         base_qs.filter(status="in_progress")
         .order_by("course_date", "start_time")
     )
+
     awaiting = (
         base_qs.filter(status="awaiting_closure")
         .order_by("course_date", "start_time")
     )
+
     scheduled = (
         base_qs.filter(status="scheduled", course_date__gte=today)
         .order_by("course_date", "start_time")[:10]
     )
+
+    # --- CLOSED (completed/closed) ---
+    closed_qs = (
+        base_qs.filter(status__in=["completed", "closed"])
+        .order_by("-course_date", "-id")
+    )
+    closed_total = closed_qs.count()
+
+    p = Paginator(closed_qs, 10)
+    closed_page = p.get_page(request.GET.get("closed_page") or 1)
+
+    # Copy the page’s rows so we can annotate them
+    closed_rows = list(closed_page.object_list)
+
+    # Map of booking_id -> invoice status
+    inv_map = {
+        inv.booking_id: (inv.status or "").lower()
+        for inv in Invoice.objects.filter(booking_id__in=[b.id for b in closed_rows])
+    }
+
+    # Attach invoice_status directly to each booking row
+    for b in closed_rows:
+        b.invoice_status = inv_map.get(b.id, "")
+
+    # Simple list fallback (first page items) for older templates
+    closed = list(closed_qs[:10])
 
     return render(request, "instructor/bookings.html", {
         "title": "My bookings",
@@ -145,8 +204,11 @@ def instructor_bookings(request):
         "in_progress": in_progress,
         "awaiting": awaiting,
         "scheduled": scheduled,
+        "closed_page": closed_page,
+        "closed_rows": closed_rows,      # <— use this for rendering closed rows
+        "closed_total": closed_total,    # <— correct badge count
+        "closed": closed,                 # fallback if needed
     })
-
 @login_required
 def whoami(request):
     user = request.user
@@ -255,9 +317,9 @@ def _get_or_create_invoice(booking):
         booking=booking,
         instructor=booking.instructor,
         invoice_date=now().date(),
-        account_name=getattr(booking.instructor, "account_name", "") or "",
-        sort_code=getattr(booking.instructor, "sort_code", "") or "",
-        account_number=getattr(booking.instructor, "account_number", "") or "",
+        account_name=getattr(booking.instructor, "name_on_account", "") or "",
+        sort_code=getattr(booking.instructor, "bank_sort_code", "") or "",
+        account_number=getattr(booking.instructor, "bank_account_number", "") or "",
     )
 
 
@@ -276,10 +338,112 @@ def instructor_booking_detail(request, pk):
 
     is_locked = (getattr(booking, "status", "") == "completed")
 
+    
     if request.method == "POST":
         action = request.POST.get("action")
 
+        # ---- NEW: Save/Send invoice from Invoicing tab ----
+        if action in ("save_draft", "send_admin"):
+            inv = _get_or_create_invoice(booking)
+
+            # Update invoice header fields
+            inv.instructor_ref = request.POST.get("instructor_ref", "") or ""
+            inv_date_str = request.POST.get("invoice_date") or ""
+            try:
+                from datetime import datetime
+                inv.invoice_date = datetime.strptime(inv_date_str, "%Y-%m-%d").date()
+            except Exception:
+                from django.utils.timezone import now
+                inv.invoice_date = now().date()
+
+            inv.account_name   = request.POST.get("account_name", "") or ""
+            inv.sort_code      = request.POST.get("sort_code", "") or ""
+            inv.account_number = request.POST.get("account_number", "") or ""
+            inv.status = "draft"
+            inv.save()
+
+            # Base instructor fee editable -> stored on Booking
+            base_amount = request.POST.get("base_amount")
+            if base_amount is not None and base_amount != "":
+                try:
+                    from decimal import Decimal
+                    booking.instructor_fee = Decimal(str(base_amount))
+                    booking.save(update_fields=["instructor_fee"])
+                except Exception:
+                    pass
+
+            # Replace additional items
+            try:
+                descs = request.POST.getlist("item_desc")
+                amts  = request.POST.getlist("item_amount")
+            except Exception:
+                descs, amts = [], []
+            inv.items.all().delete()
+            from decimal import Decimal
+            for d, a in zip(descs, amts):
+                d = (d or "").strip()
+                if not d and (a is None or a == ""):
+                    continue
+                try:
+                    amt = Decimal(str(a or 0))
+                except Exception:
+                    amt = Decimal("0")
+                inv.items.create(description=d or "", amount=amt)
+
+            if action == "send_admin":
+                # Render the same PDF the preview uses
+                resp = invoice_preview(request, pk=booking.pk)
+
+                # Extract bytes from HttpResponse (works for normal or streaming responses)
+                try:
+                    pdf_bytes = bytes(resp.content)
+                except Exception:
+                    try:
+                        pdf_bytes = b"".join(resp.streaming_content)
+                    except Exception:
+                        pdf_bytes = b""
+
+                if not pdf_bytes:
+                    messages.error(request, "Failed to generate invoice PDF.")
+                    return redirect("instructor_booking_detail", pk=booking.pk)
+
+                # Figure out recipient (same logic you used elsewhere)
+                to_addr = (getattr(settings, "DEV_CATCH_ALL_EMAIL", None) if settings.DEBUG else
+                        (getattr(settings, "ADMIN_EMAIL", None) or getattr(settings, "ADMIN_INBOX_EMAIL", None)))
+                if not to_addr:
+                    messages.error(request, "No admin email configured; could not send invoice.")
+                    return redirect("instructor_booking_detail", pk=booking.pk)
+
+                # Email it
+                subj = f"Invoice – {booking.course_type.name} ({booking.course_reference or booking.pk})"
+                body = (
+                    "Hi,\n\n"
+                    "Please find attached the instructor invoice for this course.\n\n"
+                    f"Course: {booking.course_type.name}\n"
+                    f"Reference: {booking.course_reference or booking.pk}\n"
+                    f"Instructor: {booking.instructor.name}\n\n"
+                    "Regards,\nUnicorn Training System"
+                )
+                email = EmailMessage(
+                    subject=subj,
+                    body=body,
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
+                    to=[to_addr],
+                )
+                filename = f"invoice-{booking.course_reference or booking.pk}.pdf"
+                email.attach(filename, pdf_bytes, "application/pdf")
+                email.send(fail_silently=False)
+
+                inv.status = "sent"  # or "awaiting_review" if you prefer
+                inv.save(update_fields=["status"])
+
+                messages.success(request, "Invoice emailed to admin.")
+                return redirect("instructor_booking_detail", pk=booking.pk)
+
+
+
         if action == "close_course":
+
             reg_manual    = request.POST.get("reg_manual") == "1"
             assess_manual = request.POST.get("assess_manual") == "1"
             booking.status = "completed"
@@ -416,6 +580,11 @@ def instructor_booking_detail(request, pk):
         "registers_manual": getattr(booking, "closure_register_manual", False),
         "assessments_manual": getattr(booking, "closure_assess_manual", False),
     }
+
+    try:
+        ctx.update(_invoicing_tab_context(booking))
+    except Exception:
+        pass
 
     try:
         ctx.update(_assessment_context(booking, request.user))

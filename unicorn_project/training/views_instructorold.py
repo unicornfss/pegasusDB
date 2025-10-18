@@ -1,11 +1,12 @@
 from pathlib import Path
-import io
+import io, smtplib, ssl, contextlib
 import os
 from decimal import Decimal
 from datetime import timedelta
 from django.contrib import messages
 from django.conf import settings
-from django.contrib.auth.decorators import login_required
+from django.core.mail import EmailMessage
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
 from django.forms import modelformset_factory
@@ -16,8 +17,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.timezone import now
-# from .utils.invoice import get_invoice_template_path, render_invoice_file
 from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
+from .utils.course_docs import email_all_course_docs_to_admin
 
 from io import BytesIO
 from reportlab.lib.pagesizes import A4, landscape
@@ -37,7 +38,6 @@ from .utils.invoice import (
     render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
     send_invoice_email,      # email helper with dev/admin routing
 )
-
 
 def get_invoice_template_path():
     """
@@ -100,6 +100,42 @@ def post_login(request):
         return redirect("app_admin_dashboard")
     return redirect("instructor_bookings")
 
+
+
+def _invoicing_tab_context(booking):
+    """Build context keys that _invoicing_tab.html expects."""
+    inv = _get_or_create_invoice(booking)
+    instr = booking.instructor
+
+    inv_date = inv.invoice_date or now().date()
+
+    try:
+        base_fee = booking.instructor_fee
+        if base_fee in (None, ""):
+            base_fee = getattr(booking.course_type, "default_instructor_fee", 0)
+    except Exception:
+        base_fee = 0
+
+    bank_name = (inv.account_name or (getattr(instr, "name_on_account", "") if instr else "") or "")
+    bank_sort = (inv.sort_code or (getattr(instr, "bank_sort_code", "") if instr else "") or "")
+    bank_num  = (inv.account_number or (getattr(instr, "bank_account_number", "") if instr else "") or "")
+
+    addr_parts = []
+    if instr:
+        for f in ["address_line", "town", "postcode"]:
+            addr_parts.append(getattr(instr, f, "") or "")
+    instructor_address = ", ".join([x for x in addr_parts if x.strip()])
+
+    return {
+        "invoice": inv,
+        "invoice_date": inv_date,
+        "base_instructor_fee": base_fee or 0,
+        "invoice_items": list(getattr(inv, "items", []).all()) if hasattr(inv, "items") else [],
+        "bank_account_name": bank_name,
+        "bank_sort_code": bank_sort,
+        "bank_account_number": bank_num,
+        "instructor_address": instructor_address or "—",
+    }
 
 @login_required
 def instructor_bookings(request):
@@ -255,129 +291,110 @@ def _get_or_create_invoice(booking):
         booking=booking,
         instructor=booking.instructor,
         invoice_date=now().date(),
-        account_name=getattr(booking.instructor, "account_name", "") or "",
-        sort_code=getattr(booking.instructor, "sort_code", "") or "",
-        account_number=getattr(booking.instructor, "account_number", "") or "",
+        account_name=getattr(booking.instructor, "name_on_account", "") or "",
+        sort_code=getattr(booking.instructor, "bank_sort_code", "") or "",
+        account_number=getattr(booking.instructor, "bank_account_number", "") or "",
     )
 
 
 @login_required
 def instructor_booking_detail(request, pk):
-    """
-    Instructor course detail with:
-      - day list and delegate counts
-      - notes form
-      - assessments context (if available)
-      - feedback tab context (responses for the booking's dates + course type)
-      - course close action -> lock page except "Invoicing"
-      - INVOICING: save draft (items + bank details + instructor ref + date), send, preview context
-    """
+    """Instructor booking detail with tabs (registers, assessments, feedback, closure, invoicing).
+    On close, automatically email PDFs to admin (DEV -> DEV_CATCH_ALL_EMAIL)."""
     instr = getattr(request.user, "instructor", None)
     booking = get_object_or_404(
         Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
         pk=pk,
     )
-
-    # Only the assigned instructor may view
     if not instr or booking.instructor_id != instr.id:
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
-    # Helper: ensure we have an invoice row for this booking
-    def _ensure_invoice_row(b):
-        inv = getattr(b, "invoice", None)
-        if inv:
-            return inv
-        try:
-            return Invoice.objects.create(booking=b, status="draft")
-        except Exception:
-            return None
+    is_locked = (getattr(booking, "status", "") == "completed")
 
-    # Lock flag once completed
-    is_locked = (booking.status == "completed")
-
-    # ---------- POST (notes, close, invoice) ----------
     if request.method == "POST":
         action = request.POST.get("action")
 
-        # ----- Close course -----
         if action == "close_course":
-            reg_manual = request.POST.get("reg_manual") == "1"
+            reg_manual    = request.POST.get("reg_manual") == "1"
             assess_manual = request.POST.get("assess_manual") == "1"
-
-            fields_to_update = ["status"]
             booking.status = "completed"
-
+            fields = ["status"]
             if hasattr(booking, "closure_register_manual"):
-                booking.closure_register_manual = reg_manual
-                fields_to_update.append("closure_register_manual")
-
+                booking.closure_register_manual = reg_manual;  fields.append("closure_register_manual")
             if hasattr(booking, "closure_assess_manual"):
-                booking.closure_assess_manual = assess_manual
-                fields_to_update.append("closure_assess_manual")
+                booking.closure_assess_manual = assess_manual; fields.append("closure_assess_manual")
+            booking.save(update_fields=fields)
 
-            booking.save(update_fields=fields_to_update)
-            messages.success(request, "Course closed. You can now prepare the invoice.")
+            # ---- assemble PDFs and email ----
+            def _resp_bytes(resp):
+                try:
+                    if hasattr(resp, "content"):
+                        return bytes(resp.content)
+                    if hasattr(resp, "streaming_content"):
+                        return b"".join(resp.streaming_content)
+                except Exception:
+                    return b""
+                return b""
+
+            attachments = []
+            notes = []
+
+            # Registers PDFs (per day)
+            try:
+                for d in BookingDay.objects.filter(booking=booking).order_by("date"):
+                    r = instructor_day_registers_pdf(request, pk=d.id)
+                    b = _resp_bytes(r)
+                    if b:
+                        attachments.append((f"registers_{d.date:%Y%m%d}.pdf", b, "application/pdf"))
+            except Exception as e:
+                notes.append(f"Registers: {e}")
+
+            # Feedback PDF
+            try:
+                r = instructor_feedback_pdf_all(request, booking.id)
+                b = _resp_bytes(r)
+                if b:
+                    attachments.append(("feedback_all.pdf", b, "application/pdf"))
+            except Exception as e:
+                notes.append(f"Feedback: {e}")
+
+            # Assessment matrix PDF (best-effort)
+            try:
+                r = instructor_assessment_pdf(request, booking.id)
+                b = _resp_bytes(r)
+                if b:
+                    attachments.append(("assessments.pdf", b, "application/pdf"))
+            except Exception as e:
+                notes.append(f"Assessments: {e}")
+
+            try:
+                to_addr = getattr(settings, "DEV_CATCH_ALL_EMAIL", None) if settings.DEBUG else (
+                    getattr(settings, "ADMIN_EMAIL", None) or getattr(settings, "ADMIN_INBOX_EMAIL", None)
+                ) or "info@unicornsafety.co.uk"
+
+                subject = f"Course documents – {booking.course_type.name} ({booking.course_reference or booking.pk})"
+                body = (
+                    "Hi,\n\nAttached are the course documents for the booking that has just been closed.\n\n"
+                    f"Course: {booking.course_type.name}\n"
+                    f"Reference: {booking.course_reference or booking.pk}\n"
+                    f"Location: {getattr(booking.training_location, 'name', '')}\n"
+                    f"Instructor: {booking.instructor.name}\n\n"
+                    "Regards,\nUnicorn Training System"
+                )
+                email = EmailMessage(subject, body, getattr(settings, "DEFAULT_FROM_EMAIL", None), [to_addr])
+                for fname, data, ctype in attachments:
+                    email.attach(fname, data, ctype)
+                email.send(fail_silently=False)
+                if notes:
+                    messages.warning(request, "Course closed and emailed, with notes: " + "; ".join(notes))
+                else:
+                    messages.success(request, "Course closed and documents emailed to admin.")
+            except Exception as e:
+                messages.warning(request, f"Course closed but email failed: {e}")
+
             return redirect("instructor_booking_detail", pk=booking.pk)
 
-        # ----- Save invoice (draft) OR send invoice -----
-        if action in {"save_invoice", "send_invoice"}:
-            inv = _ensure_invoice_row(booking)
-            if not inv:
-                messages.error(request, "Could not create or load the invoice record.")
-                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
-
-            # Block edits if invoice is locked and user is only saving
-            if getattr(inv, "is_locked", False) and action == "save_invoice":
-                messages.error(request, "Invoice has been sent and cannot be edited unless admin re-opens it.")
-                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
-
-            # Main fields from the form (fallback to existing values)
-            inv.instructor_ref = request.POST.get("instructor_ref", inv.instructor_ref) or ""
-            inv.account_name   = request.POST.get("account_name",   inv.account_name)   or ""
-            inv.sort_code      = request.POST.get("sort_code",      inv.sort_code)      or ""
-            inv.account_number = request.POST.get("account_number", inv.account_number) or ""
-            # Ensure invoice_date always has a value (today by default); we will render it read-only in the template
-            inv.invoice_date   = request.POST.get("invoice_date") or inv.invoice_date or now().date()
-            inv.save()
-
-            # Rebuild items
-            inv.items.all().delete()
-
-            # Dynamic arrays (used when sending)
-            descs = request.POST.getlist("items_desc[]")
-            amts  = request.POST.getlist("items_amount[]")
-
-            # Draft rows (used by Save draft)
-            if not descs:
-                descs = request.POST.getlist("item_desc")
-                amts  = request.POST.getlist("item_amount")
-
-            for d, a in zip(descs, amts):
-                d = (d or "").strip()
-                a = (a or "").strip()
-                if not d and not a:
-                    continue
-                try:
-                    amount = Decimal(a.replace(",", "")) if a else Decimal("0")
-                except Exception:
-                    amount = Decimal("0")
-                InvoiceItem.objects.create(invoice=inv, description=d, amount=amount)
-
-            # If just saving draft, set status (unless in special review state)
-            if action == "save_invoice":
-                if hasattr(inv, "status") and inv.status not in ("awaiting_review",):
-                    inv.status = "draft"
-                    inv.save(update_fields=["status"])
-                messages.success(request, "Invoice details saved.")
-                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
-
-            # If action == "send_invoice": the actual rendering & emailing usually happens elsewhere;
-            # leave it to your existing send handler / separate view. We still persist the latest inputs.
-            messages.success(request, "Invoice saved. Use 'Send invoice to admin' to email it.")
-            return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#invoicing-pane")
-
-        # ----- Notes form (only if not locked) -----
         if not is_locked:
             notes_form = BookingNotesForm(request.POST, instance=booking)
             if notes_form.is_valid():
@@ -389,9 +406,6 @@ def instructor_booking_detail(request, pk):
     else:
         notes_form = BookingNotesForm(instance=booking)
 
-    # ---------- READ-ONLY DATA FOR TABS ----------
-
-    # Course days summary
     days_qs = (
         BookingDay.objects
         .filter(booking=booking)
@@ -406,59 +420,21 @@ def instructor_booking_detail(request, pk):
         "edit_url": redirect("instructor_day_registers", pk=d.id).url,
     } for d in days_qs]
 
-    # Registers status: OK if each day has at least one register
     day_counts = list(days_qs.values_list("n", flat=True))
     registers_all_days = bool(day_counts) and all((n or 0) > 0 for n in day_counts)
 
-    # Assessments completion status (complete = all outcomes in pass/fail/dnf)
-    delegate_outcomes = list(
-        DelegateRegister.objects
-        .filter(booking_day__booking=booking)
-        .values_list("outcome", flat=True)
-    )
+    delegate_outcomes = list(DelegateRegister.objects.filter(booking_day__booking=booking).values_list("outcome", flat=True))
     completed_outcomes = {"pass", "fail", "dnf"}
     has_any = bool(delegate_outcomes)
     assessments_all_complete = has_any and all(((o or "").lower() in completed_outcomes) for o in delegate_outcomes)
 
-    # Feedback responses for this booking
     booking_dates = list(days_qs.values_list("date", flat=True))
     if booking_dates:
-        fb_qs = (
-            FeedbackResponse.objects
-            .filter(
-                course_type_id=booking.course_type_id,
-                date__in=booking_dates,
-                instructor_id=booking.instructor_id,
-            )
-            .order_by("-date", "-created_at")
-        )
+        fb_qs = (FeedbackResponse.objects.filter(course_type_id=booking.course_type_id, date__in=booking_dates, instructor_id=booking.instructor_id).order_by("-date", "-created_at"))
     else:
         fb_qs = FeedbackResponse.objects.none()
-
     fb_count = fb_qs.count()
     fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
-
-    # ---------- Invoicing context ----------
-    invoice = _ensure_invoice_row(booking)
-    invoice_items = list(invoice.items.all()) if invoice else []
-    base_fee = booking.instructor_fee or 0
-
-    # Compute total for display: base instructor fee + sum(items)
-    total = Decimal(str(base_fee))
-    for it in invoice_items:
-        total += (it.amount or Decimal("0"))
-
-    # Instructor one-line address
-    instructor_address = ", ".join([
-        getattr(instr, "address_line", "") or "",
-        getattr(instr, "town", "") or "",
-        getattr(instr, "postcode", "") or "",
-    ]).replace(" ,", ",").strip(" ,")
-
-    # Bank details (prefer invoice overrides, else instructor defaults)
-    bank_account_name   = (getattr(invoice, "account_name", None)   or getattr(instr, "name_on_account", "") or "")
-    bank_sort_code      = (getattr(invoice, "sort_code", None)      or getattr(instr, "bank_sort_code", "") or "")
-    bank_account_number = (getattr(invoice, "account_number", None) or getattr(instr, "bank_account_number", "") or "")
 
     ctx = {
         "title": booking.course_type.name,
@@ -467,35 +443,21 @@ def instructor_booking_detail(request, pk):
         "back_url": redirect("instructor_bookings").url,
         "notes_form": notes_form,
         "has_exam": getattr(booking.course_type, "has_exam", False),
-
-        # Feedback tab context
         "fb_qs": fb_qs,
         "fb_count": fb_count,
         "fb_avg": fb_avg,
-
-        # Course closure helpers
         "registers_all_days": registers_all_days,
         "assessments_all_complete": assessments_all_complete,
-
-        # Lock & persisted manual flags
         "is_locked": is_locked,
         "registers_manual": getattr(booking, "closure_register_manual", False),
         "assessments_manual": getattr(booking, "closure_assess_manual", False),
-
-        # Invoicing tab
-        "invoice": invoice,
-        "invoice_items": invoice_items,
-        "base_instructor_fee": base_fee,
-        "invoice_total": total,
-        "instructor_address": instructor_address,
-        "bank_account_name": bank_account_name,
-        "bank_sort_code": bank_sort_code,
-        "bank_account_number": bank_account_number,
-        "today": now().date(),
-        "invoice_date": (getattr(invoice, "invoice_date", None) or now().date()),
     }
 
-    # Assessment context (best-effort)
+    try:
+        ctx.update(_invoicing_tab_context(booking))
+    except Exception:
+        pass
+
     try:
         ctx.update(_assessment_context(booking, request.user))
     except Exception:
@@ -1962,3 +1924,77 @@ def instructor_feedback_pdf_summary(request, booking_id):
     buf.seek(0)
     filename = f"feedback_summary_{booking.course_reference or booking.pk}.pdf"
     return FileResponse(buf, as_attachment=True, filename=filename)
+
+@login_required
+def send_course_docs(request, pk):
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
+        pk=pk,
+    )
+    instr = getattr(request.user, "instructor", None)
+    if not instr or instr.id != booking.instructor_id:
+        messages.error(request, "You do not have access to this booking.")
+        return redirect("instructor_bookings")
+
+    if request.method != "POST":
+        return redirect("instructor_booking_detail", pk=booking.pk)
+
+    n = email_all_course_docs_to_admin(booking)
+    if n:
+        messages.success(request, f"Sent {n} PDF document(s) to admin.")
+    else:
+        messages.warning(request, "No documents were generated to send.")
+    return redirect("instructor_booking_detail", pk=booking.pk)
+
+
+
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def email_diagnostics(request):
+    """
+    TEMP endpoint to debug SMTP on Render. Plain-text output.
+    Only accessible to logged-in superusers.
+    """
+    mask = lambda s: (s[:3] + "…" + s[-3:]) if s else ""
+    lines = []
+    lines.append("== EMAIL SETTINGS SEEN BY DJANGO ==")
+    lines.append(f"EMAIL_BACKEND        = {settings.EMAIL_BACKEND}")
+    lines.append(f"EMAIL_HOST           = {getattr(settings, 'EMAIL_HOST', '')}")
+    lines.append(f"EMAIL_PORT           = {getattr(settings, 'EMAIL_PORT', '')}")
+    lines.append(f"EMAIL_USE_TLS        = {getattr(settings, 'EMAIL_USE_TLS', '')}")
+    lines.append(f"EMAIL_HOST_USER      = {getattr(settings, 'EMAIL_HOST_USER', '')}")
+    pw = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+    lines.append(f"EMAIL_HOST_PASSWORD  = {mask(pw)}")
+    lines.append(f"DEFAULT_FROM_EMAIL   = {getattr(settings, 'DEFAULT_FROM_EMAIL', '')}")
+    lines.append(f"ADMIN_INBOX_EMAIL    = {getattr(settings, 'ADMIN_INBOX_EMAIL', '')}")
+    lines.append(f"DEV_CATCH_ALL_EMAIL  = {getattr(settings, 'DEV_CATCH_ALL_EMAIL', '')}")
+    lines.append("")
+
+    # Try a real SMTP handshake
+    lines.append("== SMTP HANDSHAKE ==")
+    host = getattr(settings, 'EMAIL_HOST', 'smtp.gmail.com')
+    port = int(getattr(settings, 'EMAIL_PORT', 587) or 587)
+    user = getattr(settings, 'EMAIL_HOST_USER', '')
+    pwd  = getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+
+    try:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            s = smtplib.SMTP(host, port, timeout=30)
+            s.set_debuglevel(1)  # print SMTP conversation
+            s.ehlo()
+            if getattr(settings, 'EMAIL_USE_TLS', True):
+                s.starttls(context=ssl.create_default_context())
+                s.ehlo()
+            if user:
+                s.login(user, pwd)
+            s.quit()
+        lines.append("SMTP handshake: OK")
+        lines.append("")
+        lines.append("Raw SMTP dialogue:")
+        lines.append(buf.getvalue())
+    except Exception as e:
+        lines.append(f"SMTP handshake: FAILED -> {type(e).__name__}: {e}")
+
+    return HttpResponse("\n".join(lines), content_type="text/plain; charset=utf-8")

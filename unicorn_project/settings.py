@@ -6,6 +6,23 @@ from dotenv import load_dotenv
 # --- Paths ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+# --- Load .env early (and overwrite OS env if needed) ------------------------
+try:
+    import environ, os as _os
+    _env = environ.Env()
+    # Ensure the project .env is loaded and can override stale OS env vars
+    environ.Env.read_env(str(BASE_DIR / ".env"), overwrite=True)
+except Exception as _e:
+    # Fallback: try python-dotenv if available
+    try:
+        from dotenv import load_dotenv as _load_dotenv
+        _load_dotenv(BASE_DIR / ".env", override=True)
+    except Exception:
+        pass
+
+
+
 # --- Env (.env) ----------------------------------------------
 # Local dev: values from .env ; Render/Prod: env vars from dashboard
 load_dotenv(BASE_DIR / ".env", override=True)
@@ -139,8 +156,8 @@ BOOKING_TEST_INTERVAL_MIN = 0
 
 # --- Email destinations --------------------------------------
 # Always present and overridable by env on both dev/prod
-DEV_CATCH_ALL_EMAIL = os.getenv("DEV_CATCH_ALL_EMAIL", "jon.ostrowski@hotmail.com")
-ADMIN_INBOX_EMAIL = os.getenv("ADMIN_INBOX_EMAIL", "info@unicornsafety.co.uk")
+DEV_CATCH_ALL_EMAIL = os.getenv("DEV_CATCH_ALL_EMAIL", "unicornfss@gmail.com")
+ADMIN_INBOX_EMAIL = os.getenv("ADMIN_INBOX_EMAIL", "unicornfss@gmail.com")
 
 # --- HTML invoice rendering & wkhtmltopdf --------------------
 WKHTMLTOPDF_CMD = os.getenv("WKHTMLTOPDF_CMD", "")
@@ -155,22 +172,59 @@ if not WKHTMLTOPDF_CMD and os.name == "nt":
             break
 
 # --- Email transport -----------------------------------------
-# Choose how to send: "prod" (SMTP), "console" (log/print), or "dummy" (drop).
-EMAIL_MODE = os.getenv("EMAIL_MODE", "prod").lower()
+# EMAIL_MODE controls behaviour. Options:
+#   - "console": log emails to console (good for dev)
+#   - "dummy":   drop all emails (no-op)
+#   - "gmail":   send via Gmail SMTP (App Password / OAuth)
+#   - "mailersend": send via MailerSend SMTP
+#   - "smtp":    generic SMTP using EMAIL_HOST/PORT/USER/PASS
+#   - "auto":    (default) -> console in DEBUG, else generic SMTP
+EMAIL_MODE = os.getenv("EMAIL_MODE", "auto").lower()
 
-if DEBUG or EMAIL_MODE in {"console", "dev"}:
+if EMAIL_MODE in {"console", "dev"} or (EMAIL_MODE == "auto" and DEBUG):
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
     DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@unicornsafety.co.uk")
+
 elif EMAIL_MODE == "dummy":
     EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
     DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@unicornsafety.co.uk")
+
+
+
+elif EMAIL_MODE == "gmail":
+    # Gmail SMTP (use App Password if 2FA enabled). Safer than "less secure apps".
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))  # STARTTLS
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+    EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")           # your Gmail address
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")   # 16-char App Password
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "no-reply@unicornsafety.co.uk")
+    SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
+
+elif EMAIL_MODE == "mailersend":
+    # MailerSend SMTP: https://www.mailersend.com/help/smtp
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = "smtp.mailersend.net"
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))  # TLS port
+    EMAIL_USE_TLS = True
+    EMAIL_USE_SSL = False
+    EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
+    # Username must literally be "apikey"; password is the API key
+    EMAIL_HOST_USER = os.getenv("MAILERSEND_USERNAME", "apikey")
+    EMAIL_HOST_PASSWORD = os.getenv("MAILERSEND_API_KEY", "")
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "no-reply@unicornsafety.co.uk")
+
 else:
-    # Real SMTP (Gmail/Office365/other SMTP)
+    # Generic SMTP (e.g. Gmail/Outlook) driven by env
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
     EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
     EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))        # 587 for STARTTLS
     EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"  # "1" or "0"
-    EMAIL_USE_SSL = False                                   # must be False if using TLS
+    EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "0") == "1"  # rarely needed
     EMAIL_TIMEOUT = int(os.getenv("EMAIL_TIMEOUT", "30"))
     EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
     EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
