@@ -1,11 +1,10 @@
 from pathlib import Path
-import io, smtplib, ssl, contextlib
+import io, contextlib
 import os
 from decimal import Decimal
 from datetime import timedelta, datetime
 from django.contrib import messages
 from django.conf import settings
-from django.core.mail import EmailMessage
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
@@ -18,6 +17,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.timezone import now
+from django.views.decorators.http import require_POST
+from .utils.emailing import send_admin_email
 from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
 from .utils.course_docs import email_all_course_docs_to_admin
 
@@ -414,7 +415,7 @@ def instructor_booking_detail(request, pk):
                     messages.error(request, "No admin email configured; could not send invoice.")
                     return redirect("instructor_booking_detail", pk=booking.pk)
 
-                # Email it
+                # Email it via MailerSend API
                 subj = f"Invoice – {booking.course_type.name} ({booking.course_reference or booking.pk})"
                 body = (
                     "Hi,\n\n"
@@ -424,15 +425,14 @@ def instructor_booking_detail(request, pk):
                     f"Instructor: {booking.instructor.name}\n\n"
                     "Regards,\nUnicorn Training System"
                 )
-                email = EmailMessage(
+                filename = f"invoice-{booking.course_reference or booking.pk}.pdf"
+                send_admin_email(
                     subject=subj,
                     body=body,
-                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-                    to=[to_addr],
+                    attachments=[(filename, pdf_bytes, "application/pdf")],
+                    reply_to=["unicorn@unicorn.adminforge.co.uk"],
+                    html=False,
                 )
-                filename = f"invoice-{booking.course_reference or booking.pk}.pdf"
-                email.attach(filename, pdf_bytes, "application/pdf")
-                email.send(fail_silently=False)
 
                 inv.status = "sent"  # or "awaiting_review" if you prefer
                 inv.save(update_fields=["status"])
@@ -510,10 +510,14 @@ def instructor_booking_detail(request, pk):
                     f"Instructor: {booking.instructor.name}\n\n"
                     "Regards,\nUnicorn Training System"
                 )
-                email = EmailMessage(subject, body, getattr(settings, "DEFAULT_FROM_EMAIL", None), [to_addr])
-                for fname, data, ctype in attachments:
-                    email.attach(fname, data, ctype)
-                email.send(fail_silently=False)
+                send_admin_email(
+                    subject,
+                    body,
+                    attachments=attachments,  # your list of (filename, bytes, mimetype)
+                    reply_to=["unicorn@unicorn.adminforge.co.uk"],
+                    html=False,
+                )
+
                 if notes:
                     messages.warning(request, "Course closed and emailed, with notes: " + "; ".join(notes))
                 else:
@@ -2126,3 +2130,17 @@ def email_diagnostics(request):
         lines.append(f"SMTP handshake: FAILED -> {type(e).__name__}: {e}")
 
     return HttpResponse("\n".join(lines), content_type="text/plain; charset=utf-8")
+
+@require_POST
+def send_booking_email(request, booking_id):
+    booking = get_object_or_404(Booking, pk=booking_id)
+    subject = f"Docs for {booking.course_name} — {booking.ref_code} ({now().strftime('%Y-%m-%d %H:%M')})"
+    body = "Please find the documents attached."
+    attachments = []  # e.g., [booking.generated_pdf.path] or [("notes.txt","hello","text/plain")]
+
+    try:
+        send_admin_email(subject, body, attachments=attachments, reply_to=["unicorn@adminforge.co.uk"])
+        messages.success(request, "Email sent ✅")
+    except Exception as e:
+        messages.error(request, f"Email failed: {e}")
+    return redirect("booking_detail", booking_id=booking.id)
