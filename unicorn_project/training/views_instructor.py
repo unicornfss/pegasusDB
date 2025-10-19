@@ -16,7 +16,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
-from django.utils.timezone import now
+from django.utils.timezone import now, localtime
 from django.views.decorators.http import require_POST
 from .utils.emailing import send_admin_email
 from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
@@ -72,6 +72,46 @@ HEALTH_BADGE = {
     "not_fit":        ("✖", "bg-danger", "Not fit to take part"),
 }
 # Note: Bootstrap has no orange by default; we re-use warning (yellow).
+
+def _time_greeting():
+    hour = localtime().hour
+    if hour < 12:
+        return "Good morning"
+    if hour < 18:
+        return "Good afternoon"
+    return "Good evening"
+
+def _business_name(booking):
+    return (
+        getattr(getattr(booking, "business", None), "name", None)
+        or getattr(getattr(booking, "company", None), "name", None)
+        or getattr(getattr(booking, "customer", None), "name", None)
+        or getattr(booking, "business_name", None)
+        or "N/A"
+    )
+
+def _course_dates(booking):
+    dt_fmt = "%d %b %Y"
+    start = getattr(booking, "start_date", None) or getattr(booking, "date", None) or getattr(booking, "course_date", None)
+    end = getattr(booking, "end_date", None)
+    try:
+        if start and end and start != end:
+            return f"{start.strftime(dt_fmt)} – {end.strftime(dt_fmt)}"
+        if start:
+            return start.strftime(dt_fmt)
+    except Exception:
+        pass
+    # Optional: derive from BookingDay dates if you have that model
+    try:
+        from .models import BookingDay
+        ds = list(BookingDay.objects.filter(booking=booking).order_by("date").values_list("date", flat=True))
+        if ds:
+            if len(ds) == 1:
+                return ds[0].strftime(dt_fmt)
+            return f"{ds[0].strftime(dt_fmt)} – {ds[-1].strftime(dt_fmt)}"
+    except Exception:
+        pass
+    return "N/A"
 
 def _health_badge_tuple(code: str):
     return HEALTH_BADGE.get(code or "", ("–", "bg-secondary", "Not provided"))
@@ -415,17 +455,25 @@ def instructor_booking_detail(request, pk):
                     messages.error(request, "No admin email configured; could not send invoice.")
                     return redirect("instructor_booking_detail", pk=booking.pk)
 
-                # Email it via MailerSend API
-                subj = f"Invoice – {booking.course_type.name} ({booking.course_reference or booking.pk})"
-                body = (
-                    "Hi,\n\n"
-                    "Please find attached the instructor invoice for this course.\n\n"
-                    f"Course: {booking.course_type.name}\n"
-                    f"Reference: {booking.course_reference or booking.pk}\n"
-                    f"Instructor: {booking.instructor.name}\n\n"
-                    "Regards,\nUnicorn Training System"
-                )
+                # Email it via email helper (provider from settings)
+                subj = f"Invoice: {booking.course_type.name}, {_business_name(booking)}"
+
+                body = "\n".join([
+                    _time_greeting(),
+                    "",
+                    "Please find attached invoice for the below course.",
+                    "",
+                    f"Course type: {booking.course_type.name}",
+                    f"Reference number: {booking.course_reference or booking.pk}",
+                    f"Course date(s): {_course_dates(booking)}",
+                    f"Business: {_business_name(booking)}",
+                    "",
+                    "Kind regards",
+                    f"{getattr(booking.instructor, 'name', 'Instructor')}",
+                ])
+
                 filename = f"invoice-{booking.course_reference or booking.pk}.pdf"
+
                 send_admin_email(
                     subject=subj,
                     body=body,
@@ -433,6 +481,7 @@ def instructor_booking_detail(request, pk):
                     reply_to=["unicorn@unicorn.adminforge.co.uk"],
                     html=False,
                 )
+
 
                 inv.status = "sent"  # or "awaiting_review" if you prefer
                 inv.save(update_fields=["status"])
@@ -501,22 +550,30 @@ def instructor_booking_detail(request, pk):
                     getattr(settings, "ADMIN_EMAIL", None) or getattr(settings, "ADMIN_INBOX_EMAIL", None)
                 ) or "info@unicornsafety.co.uk"
 
-                subject = f"Course documents – {booking.course_type.name} ({booking.course_reference or booking.pk})"
-                body = (
-                    "Hi,\n\nAttached are the course documents for the booking that has just been closed.\n\n"
-                    f"Course: {booking.course_type.name}\n"
-                    f"Reference: {booking.course_reference or booking.pk}\n"
-                    f"Location: {getattr(booking.training_location, 'name', '')}\n"
-                    f"Instructor: {booking.instructor.name}\n\n"
-                    "Regards,\nUnicorn Training System"
-                )
+                subject = f"Course documents: {booking.course_type.name}, {_business_name(booking)}"
+
+                body = "\n".join([
+                    _time_greeting(),
+                    "",
+                    "Attached are the attendance log(s), assessment matrix and feedback documents for the course below.",
+                    "",
+                    f"Course type: {booking.course_type.name}",
+                    f"Reference number: {booking.course_reference or booking.pk}",
+                    f"Course date(s): {_course_dates(booking)}",
+                    f"Business: {_business_name(booking)}",
+                    "",
+                    "Kind regards",
+                    f"{getattr(booking.instructor, 'name', 'Instructor')}",
+                ])
+
                 send_admin_email(
                     subject,
                     body,
-                    attachments=attachments,  # your list of (filename, bytes, mimetype)
+                    attachments=attachments,  # your existing list of (filename, bytes, mimetype)
                     reply_to=["unicorn@unicorn.adminforge.co.uk"],
                     html=False,
                 )
+
 
                 if notes:
                     messages.warning(request, "Course closed and emailed, with notes: " + "; ".join(notes))
