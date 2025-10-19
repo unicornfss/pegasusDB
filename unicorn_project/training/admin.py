@@ -7,7 +7,8 @@ from import_export.admin import ImportExportModelAdmin
 
 from .models import (
     Business, TrainingLocation, CourseType,
-    Instructor, Booking, BookingDay, Attendance, CourseCompetency
+    Instructor, Booking, BookingDay, Attendance, CourseCompetency,
+    Invoice, InvoiceItem
 )
 
 # ---------- Forms ----------
@@ -30,6 +31,11 @@ class CourseTypeAdminForm(forms.ModelForm):
         model = CourseType
         fields = "__all__"
 
+class InvoiceItemInline(admin.TabularInline):
+    model = InvoiceItem
+    extra = 0
+    fields = ("description", "amount")   # <- your actual fields
+    # no readonly_fields needed
 
 # ---------- Inlines ----------
 
@@ -159,3 +165,29 @@ class CourseCompetencyAdmin(ImportExportModelAdmin):
     list_display = ("course_type", "code", "name", "sort_order", "is_active")
     list_filter = ("course_type", "is_active")
     search_fields = ("code", "name", "course_type__code", "course_type__name")
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = (
+        "booking",          # OneToOne to Booking
+        "business_name",    # derived from booking.business.name
+        "instructor",
+        "status",
+        "invoice_date",
+        "total",            # @property on model
+        "created_at",
+    )
+    list_filter = ("status", "invoice_date", "created_at")
+    search_fields = (
+        "booking__course_reference",
+        "booking__business__name",
+        "instructor__name",
+    )
+    date_hierarchy = "created_at"
+    inlines = [InvoiceItemInline]
+    readonly_fields = ("created_at", "updated_at")
+
+    def business_name(self, obj):
+        b = getattr(getattr(obj.booking, "business", None), "name", None)
+        return b or "—"
+    business_name.short_description = "Business"
