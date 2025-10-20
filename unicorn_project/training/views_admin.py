@@ -26,11 +26,13 @@ from .services.booking_status import auto_update_booking_statuses
 
 from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
-    StaffProfile, BookingDay, DelegateRegister, CourseCompetency
+    StaffProfile, BookingDay, DelegateRegister, CourseCompetency,
+    Exam, ExamQuestion,
 )
 from .forms import (
     BusinessForm, CourseTypeForm, TrainingLocationForm,
-    InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm
+    InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
+    CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm,
 )
 
 # =========================
@@ -387,15 +389,42 @@ def course_form(request, pk=None):
     if request.method == "POST":
         form = CourseTypeForm(request.POST, instance=ct)
         formset = CourseCompetencyFormSet(request.POST, instance=ct, prefix="comps")
+
         if form.is_valid() and formset.is_valid():
             ct = form.save()
             formset.instance = ct
             formset.save()
 
-            # ✅ Add ONE success message only
+            # ⬇️ REPLACED BLOCK: auto-sync exams (create missing, delete extras, clear if unticked)
+            try:
+                from .models import Exam
+            except Exception:
+                Exam = None
+
+            if Exam and hasattr(ct, "exams"):
+                if getattr(ct, "has_exam", False) and getattr(ct, "number_of_exams", None):
+                    desired = int(ct.number_of_exams)
+                    deleted = ct.exams.filter(sequence__gt=desired).delete()[0]
+                    existing = set(ct.exams.values_list("sequence", flat=True))
+                    created = 0
+                    for seq in range(1, desired + 1):
+                        if seq not in existing:
+                            Exam.objects.create(course_type=ct, sequence=seq, title=f"Exam {seq}")
+                            created += 1
+                    if created or deleted:
+                        bits = []
+                        if created: bits.append(f"created {created}")
+                        if deleted: bits.append(f"removed {deleted}")
+                        messages.info(request, f"Exam rows synced: {', '.join(bits)}.")
+                else:
+                    removed_all = ct.exams.count()
+                    if removed_all:
+                        ct.exams.all().delete()
+                        messages.info(request, f"Removed {removed_all} exam(s) because 'Has exam?' is not ticked.")
+            # ⬆️ END REPLACED BLOCK
+
             messages.success(request, "Course type saved.")
 
-            # ✅ Branch by which button was pressed
             if "save_return" in request.POST:
                 return redirect("admin_course_list")
             return redirect("admin_course_edit", pk=ct.pk)
@@ -409,6 +438,7 @@ def course_form(request, pk=None):
         "title": title,
         "form": form,
         "formset": formset,
+        "object": ct,
     })
 
 
@@ -1222,4 +1252,95 @@ def delegate_register_delete(request, pk: int):
         "object": reg.name or "Unnamed delegate",
         "back_url": back,
     })
+
+@admin_required
+def exam_form(request, pk):
+    exam = get_object_or_404(Exam.objects.select_related("course_type"), pk=pk)
+    course = exam.course_type
+
+    if request.method == "POST":
+        eform = ExamForm(request.POST, instance=exam)
+        qset  = QuestionFormSet(request.POST, instance=exam, prefix="q")
+
+        # Build answer formsets; bind only if management keys exist for that prefix
+        answer_sets = []
+        for i, qf in enumerate(qset.forms):
+            prefix = f"a-{i}"
+            if f"{prefix}-TOTAL_FORMS" in request.POST:
+                afs = AnswerFormSet(request.POST, instance=qf.instance, prefix=prefix)
+            else:
+                afs = AnswerFormSet(instance=qf.instance, prefix=prefix)  # unbound (no answers posted)
+            answer_sets.append(afs)
+
+        # Validate: only bound answer sets participate in validation
+        is_valid = eform.is_valid() and qset.is_valid()
+        for afs in answer_sets:
+            if afs.is_bound:
+                is_valid = is_valid and afs.is_valid()
+
+        if is_valid:
+            eform.save()
+            qset.save()   # ensure new questions get PKs
+
+            # NOW save answers for any indices that were posted
+            for i, qf in enumerate(qset.forms):
+                prefix = f"a-{i}"
+                if f"{prefix}-TOTAL_FORMS" in request.POST:
+                    # make sure we have a persisted FK
+                    if qf.instance.pk:
+                        qf.instance.refresh_from_db()
+                    afs = AnswerFormSet(request.POST, instance=qf.instance, prefix=prefix)
+                    if afs.is_valid():
+                        afs.save()
+
+            messages.success(request, "Exam updated.")
+            if "save_return" in request.POST:
+                return redirect("admin_course_edit", pk=course.pk)
+            return redirect("admin_exam_edit", pk=exam.pk)
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        eform = ExamForm(instance=exam)
+        qset  = QuestionFormSet(instance=exam, prefix="q")
+        answer_sets = [
+            AnswerFormSet(instance=qf.instance, prefix=f"a-{i}")
+            for i, qf in enumerate(qset.forms)
+        ]
+
+    qa_pairs = [{"qform": qf, "aformset": afs} for qf, afs in zip(qset.forms, answer_sets)]
+
+    return render(request, "admin/exam_form.html", {
+        "title": f"Edit exam — {course.name}",
+        "exam": exam,
+        "course": course,
+        "exam_form": eform,
+        "q_formset": qset,
+        "qa_pairs": qa_pairs,
+        "cancel_url": reverse("admin_course_edit", args=[course.pk]),
+    })
+    
+
+def _provision_exams_for_course(ct):
+    """
+    Create missing Exam(sequence=1..N) rows for this CourseType.
+    Returns the number of exams created. Safe to call repeatedly.
+    """
+    try:
+        from .models import Exam
+    except Exception:
+        return 0
+
+    if not getattr(ct, "has_exam", False) or not getattr(ct, "number_of_exams", None):
+        return 0
+
+    if not hasattr(ct, "exams"):
+        return 0
+
+    existing = set(ct.exams.values_list("sequence", flat=True))
+    created = 0
+    for seq in range(1, int(ct.number_of_exams) + 1):
+        if seq not in existing:
+            Exam.objects.create(course_type=ct, sequence=seq, title=f"Exam {seq}")
+            created += 1
+    return created
 

@@ -2,8 +2,10 @@
 import uuid
 from datetime import date
 from decimal import Decimal
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator 
 from django.db import models
+from django.db.models import Q
 from django.db.models.signals import post_save
 from django.contrib.auth.models import User
 from django.dispatch import receiver
@@ -64,11 +66,34 @@ class CourseType(models.Model):
     default_course_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     default_instructor_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
 
-    # single flag for “this course has any theoretical exam(s)”
+    # exams
     has_exam = models.BooleanField(
         default=False,
-        verbose_name="This course contains theoretical exam(s)"
+        verbose_name="This course contains theoretical exam(s)",
     )
+    number_of_exams = models.PositiveIntegerField(
+        null=True, blank=True,
+        help_text="Required if 'This course contains theoretical exam(s)' is ticked.",
+        validators=[MinValueValidator(1)],
+    )
+
+    def clean(self):
+        # Enforce conditional requirement
+        if self.has_exam and not self.number_of_exams:
+            raise ValidationError({"number_of_exams": "Please enter how many exams this course has (whole number ≥ 1)."})
+        # Keep field tidy when exams are disabled
+        if not self.has_exam:
+            self.number_of_exams = None
+
+    class Meta:
+        constraints = [
+            # DB-level safety: either no exams -> number_of_exams must be NULL,
+            # or has_exam -> number_of_exams >= 1
+            models.CheckConstraint(
+                name="course_type_exam_consistency",
+                check=Q(has_exam=False, number_of_exams__isnull=True) | Q(has_exam=True, number_of_exams__gte=1),
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.code})"
@@ -446,3 +471,48 @@ class InvoiceItem(models.Model):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+class Exam(models.Model):
+    course_type = models.ForeignKey("CourseType", on_delete=models.CASCADE, related_name="exams")
+    sequence = models.PositiveIntegerField(default=1, help_text="Order of this exam within the course.")
+    title = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        unique_together = ("course_type", "sequence")
+        ordering = ["sequence"]
+
+    def __str__(self):
+        return f"{self.course_type} · {(self.title or f'Exam {self.sequence}')}"
+
+
+class ExamQuestion(models.Model):
+    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name="questions")
+    order = models.PositiveIntegerField(default=1)
+    text = models.TextField()
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return f"Q{self.order}: {self.text[:60]}"
+
+
+class ExamAnswer(models.Model):
+    question = models.ForeignKey(ExamQuestion, on_delete=models.CASCADE, related_name="answers")
+    order = models.PositiveIntegerField(default=1)
+    text = models.CharField(max_length=500)
+    is_correct = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["order", "id"]
+        constraints = [
+            # at most one correct answer per question (DB-level)
+            models.UniqueConstraint(
+                fields=["question"],
+                condition=Q(is_correct=True),
+                name="unique_correct_answer_per_question",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.text}{' (correct)' if self.is_correct else ''}"

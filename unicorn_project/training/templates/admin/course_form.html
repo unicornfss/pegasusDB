@@ -1,20 +1,36 @@
 {% extends "base.html" %}
-{% block title %}{{ title }}{% endblock %}
+{% load static %}
+
+{% block title %}{{ title|default:"Course Type" }}{% endblock %}
 
 {% block content %}
-<h3 class="mb-3">{{ title }}</h3>
-
-{% if messages %}
-  {% for m in messages %}
-    <div class="alert alert-{{ m.tags|default:'info' }}">{{ m }}</div>
-  {% endfor %}
-{% endif %}
-
 <form method="post" novalidate>
   {% csrf_token %}
 
-  <!-- ===== CourseType main fields ===== -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">{{ title|default:"Course Type" }}</h1>
+    <div class="d-flex gap-2">
+      <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline-secondary">Cancel</a>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+      </div>
+    {% endfor %}
+  {% endif %}
+
+  {% if form.non_field_errors %}
+    <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+  {% endif %}
+
+  <!-- Course details -->
   <div class="card mb-3">
+    <div class="card-header">Course details</div>
     <div class="card-body">
       <div class="row g-3">
         <div class="col-md-6">
@@ -22,26 +38,23 @@
           {{ form.name }}
           {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-
         <div class="col-md-3">
           <label class="form-label">Code</label>
           {{ form.code }}
           {% for e in form.code.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-
         <div class="col-md-3">
           <label class="form-label">Duration (days)</label>
           {{ form.duration_days }}
           {% for e in form.duration_days.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
 
-        <div class="col-md-6">
+        <div class="col-md-3">
           <label class="form-label">Default course fee</label>
           {{ form.default_course_fee }}
           {% for e in form.default_course_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-
-        <div class="col-md-6">
+        <div class="col-md-3">
           <label class="form-label">Default instructor fee</label>
           {{ form.default_instructor_fee }}
           {% for e in form.default_instructor_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
@@ -54,154 +67,233 @@
           </div>
           {% for e in form.has_exam.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
+
+        <!-- Show only when has_exam is ticked -->
+        <div class="col-md-3" id="number-of-exams-wrapper"
+             {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
+          <label class="form-label">Number of exams</label>
+          {{ form.number_of_exams }}
+          {% for e in form.number_of_exams.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          <div class="form-text">Required when “Has exam?” is ticked.</div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- ===== Competencies inline formset ===== -->
-  <div class="card mb-3">
-    <div class="card-body">
-      <h5 class="mb-2">Competencies</h5>
+  <!-- Collapsible sections -->
+  <div class="accordion mb-3" id="course-accordion">
 
-      {{ formset.management_form }}
-
-      <div class="table-responsive">
-        <table class="table table-sm align-middle">
-          <thead>
-            <tr>
-              <th style="width:8rem">Order</th>
-              <th>Competency</th>
-              <th style="width:12rem" class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="comp-body">
-            {% for f in formset.forms %}
-              <tr class="comp-row">
-                <td>
-                  {{ f.sort_order }}
-                  {% for e in f.sort_order.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-                  <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
-                    <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
-                    <button type="button" class="btn btn-outline-secondary js-move" data-dir="1"  title="Move down">▼</button>
-                  </div>
-                </td>
-                <td>
-                  {{ f.name }}
-                  {% for e in f.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-                </td>
-                <td class="text-end">
-                  {% if formset.can_delete %}
-                    <label class="btn btn-outline-danger btn-sm mb-0">
-                      {{ f.DELETE }} Delete
-                    </label>
-                  {% endif %}
-                  {{ f.id }} {# keep hidden id #}
-                </td>
-              </tr>
-            {% empty %}
-              <tr class="text-muted"><td colspan="3">No competencies yet.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Add button at the bottom-left -->
-      <div class="d-flex justify-content-start">
-        <button type="button" class="btn btn-outline-primary btn-sm" id="add-row">
-          <i class="bi bi-plus-lg"></i> Add competency
+    <!-- Competencies -->
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="heading-comps">
+        <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                data-bs-target="#collapse-comps" aria-expanded="true" aria-controls="collapse-comps">
+          Competencies
         </button>
+      </h2>
+      <div id="collapse-comps" class="accordion-collapse collapse show" aria-labelledby="heading-comps"
+           data-bs-parent="#course-accordion">
+        <div class="accordion-body">
+          {{ formset.management_form }}
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle">
+              <thead>
+                <tr>
+                  <th style="width:8rem">Order</th>
+                  <th>Competency</th>
+                  <th style="width:12rem" class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="comp-body">
+                {% for f in formset.forms %}
+                  <tr class="comp-row">
+                    <td>
+                      {% if f.sort_order %}{{ f.sort_order }}{% endif %}
+                      <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
+                        <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
+                        <button type="button" class="btn btn-outline-secondary js-move" data-dir="1"  title="Move down">▼</button>
+                      </div>
+                    </td>
+                    <td>
+                      {% if f.name %}
+                        {{ f.name }}
+                      {% else %}
+                        {% for field in f.visible_fields %}{{ field }}{% endfor %}
+                      {% endif %}
+                      {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </td>
+                    <td class="text-end">
+                      {% if formset.can_delete and f.DELETE %}
+                        <label class="btn btn-outline-danger btn-sm mb-0">{{ f.DELETE }} Delete</label>
+                      {% endif %}
+                      {{ f.id }}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr class="text-muted"><td colspan="3">No competencies yet.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <button type="button" class="btn btn-outline-primary btn-sm" id="add-row">
+            <i class="bi bi-plus-lg"></i> Add competency
+          </button>
+
+          <!-- Empty row template -->
+          <template id="empty-form-template">
+            <tr class="comp-row">
+              <td>
+                {% if formset.empty_form.sort_order %}{{ formset.empty_form.sort_order.as_widget }}{% endif %}
+                <div class="btn-group btn-group-sm mt-1">
+                  <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1">▲</button>
+                  <button type="button" class="btn btn-outline-secondary js-move" data-dir="1">▼</button>
+                </div>
+              </td>
+              <td>
+                {% if formset.empty_form.name %}
+                  {{ formset.empty_form.name.as_widget }}
+                {% else %}
+                  {% for field in formset.empty_form.visible_fields %}{{ field.as_widget }}{% endfor %}
+                {% endif %}
+              </td>
+              <td class="text-end">
+                {% if formset.can_delete and formset.empty_form.DELETE %}
+                  <label class="btn btn-outline-danger btn-sm mb-0">{{ formset.empty_form.DELETE.as_widget }} Delete</label>
+                {% endif %}
+                {{ formset.empty_form.id.as_widget }}
+              </td>
+            </tr>
+          </template>
+        </div>
       </div>
-
-      <!-- Empty form template for cloning -->
-      <template id="empty-row">
-        <tr class="comp-row">
-          <td>
-            __SORT__
-            <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
-              <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
-              <button type="button" class="btn btn-outline-secondary js-move" data-dir="1"  title="Move down">▼</button>
-            </div>
-          </td>
-          <td>__NAME__</td>
-          <td class="text-end">__DEL__ __ID__</td>
-        </tr>
-      </template>
     </div>
+
+    <!-- Exams -->
+    <div class="accordion-item" id="exams-accordion-item"
+         {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
+      <h2 class="accordion-header" id="heading-exams">
+        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                data-bs-target="#collapse-exams" aria-expanded="false" aria-controls="collapse-exams">
+          Exams
+        </button>
+      </h2>
+      <div id="collapse-exams" class="accordion-collapse collapse" aria-labelledby="heading-exams"
+           data-bs-parent="#course-accordion">
+        <div class="accordion-body">
+
+          {% if form.has_exam.value %}
+            {% if form.number_of_exams.value %}
+              <p class="mb-3">This course will have <strong>{{ form.number_of_exams.value }}</strong> exam(s).</p>
+            {% else %}
+              <p class="text-muted mb-3">Enter the number of exams above and click Save to create them.</p>
+            {% endif %}
+
+            {% if object %}
+              {% with exams=object.exams.all %}
+                {% if exams %}
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width:8rem">Seq</th>
+                          <th>Title</th>
+                          <th style="width:10rem">Questions</th>
+                          <th style="width:10rem" class="text-end">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for ex in exams %}
+                          <tr>
+                            <td>{{ ex.sequence }}</td>
+                            <td>{{ ex.title|default:"Exam " |add:ex.sequence }}</td>
+                            <td>{{ ex.questions.count }}</td>
+                            <td class="text-end">
+                              <a class="btn btn-sm btn-outline-primary"
+                                 href="{% url 'admin_exam_edit' ex.id %}">Edit</a>
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                {% else %}
+                  <div class="text-muted">No exams yet. Set “Number of exams” and Save.</div>
+                {% endif %}
+              {% endwith %}
+            {% endif %}
+
+          {% else %}
+            <p class="text-muted mb-0">Enable “Has exam?” above to configure exams.</p>
+          {% endif %}
+
+        </div>
+      </div>
+    </div>
+
   </div>
 
-  <!-- Save / Cancel -->
-  <div class="d-flex gap-2 mt-3">
-    <button type="submit" name="save_continue" class="btn btn-primary">
-      <i class="bi bi-check2"></i> Save and continue
-    </button>
-    <button type="submit" name="save_return" class="btn btn-success">
-      <i class="bi bi-check2-circle"></i> Save and return
-    </button>
-    <a href="{% url 'admin_course_list' %}" class="btn btn-secondary">Cancel</a>
+  <div class="d-flex justify-content-end gap-2">
+    <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline-secondary">Cancel</a>
+    <button type="submit" class="btn btn-primary">Save</button>
   </div>
+</form>
 
-
-</form>  {# ← THIS closes the form #}
-
+<!-- Small inline scripts so they always run -->
 <script>
 (function(){
-  const total = document.getElementById("id_comps-TOTAL_FORMS");
-  const body  = document.getElementById("comp-body");
-  const tmpl  = document.getElementById("empty-row");
-  const addBtn= document.getElementById("add-row");
-  if (!total || !tmpl || !body || !addBtn) return;
-
-  function renumberSortOrder() {
-    const rows = Array.from(body.querySelectorAll("tr.comp-row"));
-    rows.forEach((tr, idx) => {
-      const input = tr.querySelector('input[name$="-sort_order"]');
-      if (input) input.value = String(idx);
-    });
+  // toggle Number of exams + Exams accordion
+  function q(sel){ return document.querySelector(sel); }
+  function syncExamFields(){
+    var has = q('input[name="has_exam"]') || q('#id_has_exam');
+    var numWrap = document.getElementById('number-of-exams-wrapper');
+    var examsItem = document.getElementById('exams-accordion-item');
+    var num = q('input[name="number_of_exams"]') || q('#id_number_of_exams');
+    if(!has) return;
+    var show = !!has.checked;
+    if (numWrap) numWrap.style.display = show ? '' : 'none';
+    if (examsItem) examsItem.style.display = show ? '' : 'none';
+    if (num) { if (show) num.setAttribute('required','required'); else num.removeAttribute('required'); }
   }
+  document.addEventListener('DOMContentLoaded', function(){
+    var has = q('input[name="has_exam"]') || q('#id_has_exam');
+    if (has){ has.addEventListener('change', syncExamFields); syncExamFields(); }
+  });
+})();
 
-  function wireMoveButtons(tr) {
-    tr.querySelectorAll(".js-move").forEach(btn => {
-      btn.addEventListener("click", function(){
-        const dir = parseInt(this.dataset.dir, 10);
-        const current = tr;
-        if (dir < 0 && current.previousElementSibling) {
-          body.insertBefore(current, current.previousElementSibling);
-        } else if (dir > 0 && current.nextElementSibling) {
-          body.insertBefore(current.nextElementSibling, current);
-        }
-        renumberSortOrder();
-      });
+// add competency row from empty_form
+(function(){
+  function updateAttrs(el, idx){
+    ['id','name','for'].forEach(function(attr){
+      var v = el.getAttribute(attr); if (v) el.setAttribute(attr, v.replace(/__prefix__/g, idx));
     });
+    if (el.name && el.name.includes('__prefix__')) el.name = el.name.replace(/__prefix__/g, idx);
   }
+  document.addEventListener('DOMContentLoaded', function(){
+    var addBtn = document.getElementById('add-row');
+    var body = document.getElementById('comp-body');
+    var tpl = document.getElementById('empty-form-template');
+    var total = document.querySelector('input[name="{{ formset.prefix }}-TOTAL_FORMS"]');
+    if (!addBtn || !body || !tpl || !total) return;
 
-  // Wire existing rows + normalize their order numbers immediately
-  Array.from(body.querySelectorAll("tr.comp-row")).forEach(wireMoveButtons);
-  renumberSortOrder();
+    addBtn.addEventListener('click', function(){
+      var idx = parseInt(total.value, 10);
+      var tmp = document.createElement('tbody'); tmp.innerHTML = tpl.innerHTML.trim();
+      var row = tmp.firstElementChild;
+      row.querySelectorAll('input, textarea, select, label').forEach(function(el){ updateAttrs(el, idx); });
+      total.value = idx + 1;
+      body.appendChild(row);
+    });
 
-  addBtn.addEventListener("click", function(){
-    const idx = parseInt(total.value, 10);
-
-    const ef = {
-      sort:  `{{ formset.empty_form.sort_order|escapejs }}`.replace(/__prefix__/g, idx),
-      name:  `{{ formset.empty_form.name|escapejs }}`.replace(/__prefix__/g, idx),
-      del:   `{{ formset.empty_form.DELETE|escapejs }}`.replace(/__prefix__/g, idx),
-      id:    `{{ formset.empty_form.id|escapejs }}`.replace(/__prefix__/g, idx),
-    };
-
-    let html = tmpl.innerHTML
-      .replace("__SORT__",   ef.sort)
-      .replace("__NAME__",   ef.name)
-      .replace("__DEL__",    `<label class="btn btn-outline-danger btn-sm mb-0">${ef.del} Delete</label>`)
-      .replace("__ID__",     ef.id);
-
-    const wrap = document.createElement("tbody");
-    wrap.innerHTML = html.trim();
-    const row = wrap.firstElementChild;
-    body.appendChild(row);
-
-    renumberSortOrder();
-    wireMoveButtons(row);
-    total.value = String(idx + 1);
+    body.addEventListener('click', function(e){
+      var btn = e.target.closest('.js-move');
+      if (!btn) return;
+      var dir = parseInt(btn.dataset.dir, 10) || 0;
+      var tr = btn.closest('tr'); if (!tr) return;
+      if (dir < 0 && tr.previousElementSibling) tr.parentNode.insertBefore(tr, tr.previousElementSibling);
+      if (dir > 0 && tr.nextElementSibling) tr.parentNode.insertBefore(tr.nextElementSibling, tr);
+    });
   });
 })();
 </script>

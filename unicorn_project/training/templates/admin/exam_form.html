@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  {# ===== Top action bar ===== #}
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h4 mb-0">{{ title }}</h1>
+    <div class="d-flex gap-2">
+      <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Back to course</a>
+      <button type="submit" name="save_return" value="1" class="btn btn-outline-primary">Save & return</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+
+  {% if messages %}
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  {% endif %}
+
+  {% if exam_form.non_field_errors %}
+    <div class="alert alert-danger">{{ exam_form.non_field_errors }}</div>
+  {% endif %}
+
+  <div class="card mb-3">
+    <div class="card-header">Exam details</div>
+    <div class="card-body row g-3">
+      <div class="col-md-2">
+        <label class="form-label">Sequence</label>
+        {{ exam_form.sequence }}
+        {% for e in exam_form.sequence.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Title</label>
+        {{ exam_form.title }}
+        {% for e in exam_form.title.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Questions & answers</span>
+      {# top add-question #}
+      <button type="button" class="btn btn-outline-primary btn-sm add-question">Add question</button>
+    </div>
+
+    <div class="card-body">
+      {{ q_formset.management_form }}
+
+      {% if q_formset.non_form_errors %}
+        <div class="alert alert-danger py-2">{{ q_formset.non_form_errors }}</div>
+      {% endif %}
+
+      <div id="questions">
+        {% for pair in qa_pairs %}
+          {% with qform=pair.qform aformset=pair.aformset idx=forloop.counter0 %}
+
+          <div class="border rounded p-3 mb-3 q-item" data-q-idx="{{ idx }}">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <strong class="mb-0">Question {{ forloop.counter }}</strong>
+              <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                {% if q_formset.can_delete and qform.DELETE %}
+                  <label class="btn btn-sm btn-outline-danger mb-0">{{ qform.DELETE }} Delete question</label>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="row g-3 align-items-end">
+              <div class="col-md-2">
+                <label class="form-label">Order</label>
+                {{ qform.order }}
+                {% for e in qform.order.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+              </div>
+              <div class="col-md-10">
+                <label class="form-label">Question</label>
+                {{ qform.text }}
+                {% for e in qform.text.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+              </div>
+            </div>
+
+            {% if aformset.non_form_errors %}
+              <div class="alert alert-danger py-2 mt-3">{{ aformset.non_form_errors }}</div>
+            {% endif %}
+
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <strong class="mb-0">Answers</strong>
+              <button type="button"
+                      class="btn btn-outline-secondary btn-sm add-answer"
+                      data-af-prefix="a-{{ idx }}">
+                Add answer
+              </button>
+            </div>
+
+            {{ aformset.management_form }}
+
+            <div class="table-responsive mt-2">
+              <table class="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th style="width:8rem">Order</th>
+                    <th>Answer text</th>
+                    <th style="width:8rem">Correct?</th>
+                    <th style="width:8rem" class="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="a-rows-{{ idx }}">
+                  {% for af in aformset.forms %}
+                    <tr>
+                      <td>{{ af.order }}</td>
+                      <td>{{ af.text }}</td>
+                      <td>{{ af.is_correct }}</td>
+                      <td class="text-end">
+                        {% if aformset.can_delete and af.DELETE %}
+                          <label class="btn btn-outline-danger btn-sm mb-0">{{ af.DELETE }} Delete</label>
+                        {% endif %}
+                        {{ af.id }}
+                      </td>
+                    </tr>
+                  {% empty %}
+                    {# with extra=0 we start empty; JS will seed rows #}
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {{ qform.id }}
+
+            <template id="a-empty-{{ idx }}">
+              <tr>
+                <td>{{ aformset.empty_form.order.as_widget }}</td>
+                <td>{{ aformset.empty_form.text.as_widget }}</td>
+                <td>{{ aformset.empty_form.is_correct.as_widget }}</td>
+                <td class="text-end">
+                  {% if aformset.can_delete and aformset.empty_form.DELETE %}
+                    <label class="btn btn-outline-danger btn-sm mb-0">{{ aformset.empty_form.DELETE.as_widget }} Delete</label>
+                  {% endif %}
+                  {{ aformset.empty_form.id.as_widget }}
+                </td>
+              </tr>
+            </template>
+          </div>
+          {% endwith %}
+        {% empty %}
+          <div class="text-muted">No questions yet. Click “Add question”.</div>
+        {% endfor %}
+      </div>
+
+      {# bottom add-question #}
+      <div class="d-flex justify-content-end mt-2">
+        <button type="button" class="btn btn-outline-primary btn-sm add-question">Add question</button>
+      </div>
+
+      {# Empty question template for “Add question” #}
+      <template id="q-empty">
+        <div class="border rounded p-3 mb-3 q-item">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <strong class="mb-0">New question</strong>
+            <button type="submit" class="btn btn-sm btn-primary">Save</button>
+          </div>
+          <div class="row g-3 align-items-end">
+            <div class="col-md-2">
+              <label class="form-label">Order</label>
+              {{ q_formset.empty_form.order.as_widget }}
+            </div>
+            <div class="col-md-10">
+              <label class="form-label">Question</label>
+              {{ q_formset.empty_form.text.as_widget }}
+            </div>
+          </div>
+          {{ q_formset.empty_form.id.as_widget }}
+          <div class="text-muted small mt-2">Save this page, then add answers for the new question.</div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  {# ===== Bottom action bar ===== #}
+  <div class="d-flex justify-content-between align-items-center mt-3">
+    <div></div>
+    <div class="d-flex gap-2">
+      <a href="{{ cancel_url }}" class="btn btn-outline-secondary">Back to course</a>
+      <button type="submit" name="save_return" value="1" class="btn btn-outline-primary">Save & return</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </div>
+</form>
+
+<script>
+(function () {
+  document.addEventListener('DOMContentLoaded', function () {
+
+    // ---------- QUESTIONS ----------
+    const qList  = document.getElementById('questions');
+    const qTpl   = document.getElementById('q-empty');
+    const qTotal = document.querySelector('input[name="q-TOTAL_FORMS"]');
+
+    function setQuestionOrder(container, n) {
+      const input = container.querySelector('input[name$="-order"]');
+      if (input) input.value = n;
+    }
+
+    // Event delegation for BOTH add-question buttons
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('.add-question');
+      if (!btn) return;
+      e.preventDefault();
+      if (!qList || !qTpl || !qTotal) return;
+
+      const idx  = parseInt(qTotal.value || '0', 10);
+      const html = qTpl.innerHTML.replace(/__prefix__/g, idx);
+      const wrap = document.createElement('div');
+      wrap.innerHTML = html.trim();
+      const node = wrap.firstElementChild;
+      setQuestionOrder(node, idx + 1);
+      qList.appendChild(node);
+      qTotal.value = (idx + 1).toString();
+    });
+
+    // ---------- ANSWERS ----------
+    function addAnswerRow(prefix) {
+      const idx   = prefix.split('-')[1];
+      const tpl   = document.getElementById('a-empty-' + idx);
+      const tbody = document.getElementById('a-rows-' + idx);
+      const total = document.querySelector('input[name="' + prefix + '-TOTAL_FORMS"]');
+      if (!tpl || !tbody || !total) return;
+
+      const i    = parseInt(total.value || '0', 10);
+      const html = tpl.innerHTML.replace(/__prefix__/g, i);
+      const tmp  = document.createElement('tbody');
+      tmp.innerHTML = html.trim();
+      const row  = tmp.firstElementChild;
+
+      const orderInput = row.querySelector('input[name$="-order"]');
+      if (orderInput) orderInput.value = i + 1;
+
+      tbody.appendChild(row);
+      total.value = (i + 1).toString();
+    }
+
+    // Delegated handler for ".add-answer" (works for dynamic questions too)
+    document.addEventListener('click', function (e) {
+      const btn = e.target.closest('.add-answer');
+      if (!btn) return;
+      e.preventDefault();
+      addAnswerRow(btn.getAttribute('data-af-prefix'));
+    });
+
+    // Seed 2 answers when TOTAL_FORMS == 0
+    document.querySelectorAll('[id^="a-rows-"]').forEach(function (tbody) {
+      const idx    = tbody.id.replace('a-rows-', '');
+      const prefix = 'a-' + idx;
+      const total  = document.querySelector('input[name="' + prefix + '-TOTAL_FORMS"]');
+      if (total && (parseInt(total.value || '0', 10) === 0)) {
+        addAnswerRow(prefix);
+        addAnswerRow(prefix);
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

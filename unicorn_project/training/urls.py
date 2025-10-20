@@ -44,6 +44,8 @@ urlpatterns = [
 
     # ---------- Admin dashboard ----------
     path("app/admin/", app_admin.dashboard, name="app_admin_dashboard"),
+    path("app/admin/courses/<uuid:pk>/", app_admin.course_form, name="admin_course_edit"),
+    path("app/admin/exams/<int:pk>/", app_admin.exam_form, name="admin_exam_edit"),
 
     # Businesses
     path("app/admin/businesses/", app_admin.business_list, name="admin_business_list"),

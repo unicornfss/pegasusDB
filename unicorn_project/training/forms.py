@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 from django.db.models import Q
-from django.forms import inlineformset_factory
+from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils import timezone
 from . import models as m
 
@@ -17,7 +17,10 @@ from .models import (
     Attendance,
     DelegateRegister,
     CourseCompetency,
-    FeedbackResponse
+    FeedbackResponse,
+    Exam,
+    ExamQuestion,
+    ExamAnswer
 )
 
 import string, secrets
@@ -240,12 +243,9 @@ class CourseTypeForm(forms.ModelForm):
     class Meta:
         model = CourseType
         fields = [
-            "name",
-            "code",
-            "duration_days",
-            "default_course_fee",
-            "default_instructor_fee",
-            "has_exam",  # <-- include this so the checkbox renders
+            "name", "code", "duration_days",
+            "default_course_fee", "default_instructor_fee",
+            "has_exam", "number_of_exams",
         ]
 
 class CourseCompetencyForm(forms.ModelForm):
@@ -563,3 +563,46 @@ class FeedbackForm(forms.ModelForm):
             "wants_callback": forms.CheckboxInput(),
             "date":           forms.DateInput(attrs={"type": "date"}),
         }
+
+class ExamForm(forms.ModelForm):
+    class Meta:
+        model = Exam
+        fields = ["sequence", "title"]
+
+# ...imports above...
+
+class BaseAnswerFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        alive = 0
+        correct = 0
+        for f in self.forms:
+            if not getattr(f, "cleaned_data", None) or f.cleaned_data.get("DELETE"):
+                continue
+            if f.cleaned_data.get("text"):
+                alive += 1
+                if f.cleaned_data.get("is_correct"):
+                    correct += 1
+        if alive:
+            if alive < 2:
+                raise forms.ValidationError("Each question must have at least two answers.")
+            if correct != 1:
+                raise forms.ValidationError("Exactly one answer must be marked correct.")
+
+AnswerFormSet = inlineformset_factory(
+    parent_model=ExamQuestion,
+    model=ExamAnswer,
+    fields=["order", "text", "is_correct"],
+    extra=0,           # <<< important: JS adds the rows
+    can_delete=True,
+    formset=BaseAnswerFormSet,
+)
+
+
+QuestionFormSet = inlineformset_factory(
+    parent_model=Exam,
+    model=ExamQuestion,
+    fields=["order", "text"],
+    extra=0,              # add via “Add question” button (empty_form)
+    can_delete=True,
+)
