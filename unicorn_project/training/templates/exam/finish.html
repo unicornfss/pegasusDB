@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ course_type.name }} — Results{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 760px;">
+  <h1 class="h5 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} results</h1>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <p class="mb-2">
+        <strong>{{ attempt.delegate_name }}</strong> — {{ attempt.date_of_birth }}
+      </p>
+      <p class="mb-0">
+        Score: <strong>{{ attempt.score_correct }}</strong> / {{ attempt.total_questions }}
+      </p>
+      <p class="mb-0">
+        Pass mark: <strong>{{ exam.pass_mark_percent }}%</strong> (need {{ required_correct }})
+        {% if viva_required %}
+          <br>Viva threshold: <strong>{{ exam.viva_pass_percent }}%</strong> (need {{ viva_required }})
+        {% endif %}
+      </p>
+    </div>
+  </div>
+
+  {% if attempt.passed %}
+    <div class="alert alert-success">✅ Congratulations — you passed.</div>
+  {% elif attempt.viva_eligible %}
+    <div class="alert alert-warning">ℹ️ You did not reach the pass mark, but you are <strong>eligible for viva</strong>.</div>
+  {% else %}
+    <div class="alert alert-danger">❌ Unfortunately, you did not meet the pass or viva thresholds.</div>
+  {% endif %}
+
+  <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_start' %}?examcode={{ exam.exam_code }}">Back</a>
+</div>
+{% endblock %}

@@ -120,4 +120,7 @@ urlpatterns = [
 
     path("exam/", views_public.delegate_exam_start, name="delegate_exam_start"),
     path("exam/rules/", views_public.delegate_exam_rules, name="delegate_exam_rules"),
+    path("exam/run/", views_public.delegate_exam_run, name="delegate_exam_run"),
+    path("exam/review/", views_public.delegate_exam_review, name="delegate_exam_review"),
+    path("exam/finish/", views_public.delegate_exam_finish, name="delegate_exam_finish"),
 ]

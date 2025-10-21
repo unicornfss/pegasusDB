@@ -596,3 +596,38 @@ class ExamAnswer(models.Model):
 
     def __str__(self):
         return f"{self.text}{' (correct)' if self.is_correct else ''}"
+    
+from django.utils import timezone
+
+class ExamAttempt(models.Model):
+    exam = models.ForeignKey("Exam", on_delete=models.CASCADE, related_name="attempts")
+    # Snapshot of who started (from the start page)
+    delegate_name = models.CharField(max_length=120)
+    date_of_birth = models.DateField()
+    instructor = models.ForeignKey("Instructor", null=True, blank=True, on_delete=models.SET_NULL)
+    exam_date = models.DateField()
+
+    started_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    score_correct = models.PositiveIntegerField(default=0)
+    total_questions = models.PositiveIntegerField(default=0)
+
+    passed = models.BooleanField(default=False)
+    viva_eligible = models.BooleanField(default=False)
+
+    def remaining_seconds(self) -> int:
+        if self.finished_at:
+            return 0
+        now = timezone.now()
+        return max(0, int((self.expires_at - now).total_seconds()))
+
+class ExamAttemptAnswer(models.Model):
+    attempt = models.ForeignKey("ExamAttempt", on_delete=models.CASCADE, related_name="answers")
+    question = models.ForeignKey("ExamQuestion", on_delete=models.CASCADE)
+    answer = models.ForeignKey("ExamAnswer", null=True, blank=True, on_delete=models.SET_NULL)
+    is_correct = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("attempt", "question")

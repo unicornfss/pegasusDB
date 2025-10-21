@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+  <div class="alert alert-warning">
+    This exam has no questions configured yet.
+  </div>
+  <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_rules' %}?examcode={{ exam.exam_code }}">Back</a>
+</div>
+{% endblock %}

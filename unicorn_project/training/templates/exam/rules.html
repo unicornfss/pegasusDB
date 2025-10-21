@@ -28,9 +28,15 @@
     </a>
 
     {# Placeholder for the real exam start route you’ll add next #}
-    <a class="btn btn-primary" href="#">
-      I understand — start the exam
+    <a class="btn btn-primary"
+        href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}
+                {% if request.GET.name %}&name={{ request.GET.name|urlencode }}{% endif %}
+                {% if request.GET.dob %}&dob={{ request.GET.dob|urlencode }}{% endif %}
+                {% if request.GET.instructor %}&instructor={{ request.GET.instructor }}{% endif %}
+                {% if request.GET.date %}&date={{ request.GET.date|urlencode }}{% endif %}">
+        I understand — start the exam
     </a>
+
   </div>
 </div>
 {% endblock %}

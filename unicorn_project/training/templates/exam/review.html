@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}{{ course_type.name }} — Review{% endblock %}
+
+{% load dict_extras %}
+
+{% block content %}
+<div class="container" style="max-width: 860px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h5 mb-0">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} review</h1>
+    <div class="badge bg-dark" id="timer">--:--</div>
+  </div>
+
+  <div class="alert alert-info">
+    Review your answers below. You can go back to any question to change your choice.
+  </div>
+
+  {% for q in questions %}
+    {% with sel=chosen|get_item:q.id %}
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <div><strong>Q{{ forloop.counter }}.</strong> {{ q.text }}</div>
+        <div>
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q={{ forloop.counter }}">
+            Edit
+          </a>
+        </div>
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush review-answers">
+          {% for a in q.answers.all %}
+            <li class="list-group-item d-flex justify-content-between align-items-center
+                       {% if sel and sel.answer_id == a.id %}selected{% endif %}">
+              <span>{{ a.text }}</span>
+              {% if sel and sel.answer_id == a.id %}
+                <span class="badge bg-primary">Chosen</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% if not sel %}
+        <div class="card-footer text-danger">No answer selected.</div>
+      {% endif %}
+    </div>
+    {% endwith %}
+  {% endfor %}
+
+  <form method="post" class="d-flex justify-content-between align-items-center">
+    {% csrf_token %}
+    <a class="btn btn-outline-secondary"
+       href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q=1">Back to questions</a>
+    <button class="btn btn-success">Submit and see results</button>
+  </form>
+</div>
+
+<script>
+(function(){
+  // simple countdown display
+  let remaining = {{ remaining|default:0 }};
+  const timerEl = document.getElementById('timer');
+  function render(){
+    const m = Math.floor(remaining/60);
+    const s = remaining%60;
+    timerEl.textContent = m + ':' + (s<10?'0':'') + s;
+  }
+  render();
+  const tick = setInterval(function(){
+    remaining -= 1; render();
+    if (remaining <= 0) {
+      clearInterval(tick);
+      window.location.href = "{% url 'delegate_exam_finish' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}";
+    }
+  }, 1000);
+})();
+</script>
+
+<style>
+/* Light hover on review list too */
+.review-answers .list-group-item:hover {
+  background: rgba(0,0,0,.03);
+}
+.review-answers .list-group-item.selected {
+  background: rgba(13,110,253,.08); /* bs-primary with opacity */
+  border-left: 3px solid #0d6efd;
+}
+</style>
+{% endblock %}

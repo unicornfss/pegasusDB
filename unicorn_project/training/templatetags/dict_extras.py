@@ -9,17 +9,17 @@ def get_item(mapping, key):
     Returns "" if not a mapping or key missing.
     """
     try:
-        return mapping.get(key, "")
+        return mapping.get(key)
     except Exception:
-        return ""
+        return None
 
 # Alias so templates can use {{ mydict|get_item:key }} as well.
 @register.filter(name="get_item")
 def get_item_alias(mapping, key):
     try:
-        return mapping.get(key, "")
+        return mapping.get(key)
     except Exception:
-        return ""
+        return None
 
 @register.filter(name="dot")
 def dot(obj, attr):
