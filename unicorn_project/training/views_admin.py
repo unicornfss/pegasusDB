@@ -409,7 +409,7 @@ def course_form(request, pk=None):
                     created = 0
                     for seq in range(1, desired + 1):
                         if seq not in existing:
-                            Exam.objects.create(course_type=ct, sequence=seq, title=f"Exam {seq}")
+                            Exam.objects.create(course_type=ct, sequence=seq)  # model.save() will set title + code
                             created += 1
                     if created or deleted:
                         bits = []
@@ -1279,14 +1279,38 @@ def exam_form(request, pk):
                 is_valid = is_valid and afs.is_valid()
 
         if is_valid:
-            eform.save()
+            # Save exam fields (including our new raw inputs)
+            exam_obj = eform.save(commit=False)
+
+            # NEW: collect pass/viva inputs regardless of whether ExamForm has them
+            try:
+                exam_obj.pass_mark_percent = int(request.POST.get("pass_mark_percent") or 80)
+            except (TypeError, ValueError):
+                exam_obj.pass_mark_percent = 80
+
+            allow_viva = (request.POST.get("allow_viva") in ("on", "true", "1", "True"))
+            exam_obj.allow_viva = allow_viva
+
+            v_raw = request.POST.get("viva_pass_percent")
+            if allow_viva and v_raw not in (None, "",):
+                try:
+                    exam_obj.viva_pass_percent = int(v_raw)
+                except (TypeError, ValueError):
+                    exam_obj.viva_pass_percent = None
+            else:
+                exam_obj.viva_pass_percent = None
+
+            # model.save() will run clean() and enforce ranges + compute title/code
+            exam_obj.save()
+
+            # Save questions
+            qset.instance = exam_obj
             qset.save()   # ensure new questions get PKs
 
-            # NOW save answers for any indices that were posted
+            # Save answers for any indices that were posted
             for i, qf in enumerate(qset.forms):
                 prefix = f"a-{i}"
                 if f"{prefix}-TOTAL_FORMS" in request.POST:
-                    # make sure we have a persisted FK
                     if qf.instance.pk:
                         qf.instance.refresh_from_db()
                     afs = AnswerFormSet(request.POST, instance=qf.instance, prefix=prefix)
@@ -1296,7 +1320,7 @@ def exam_form(request, pk):
             messages.success(request, "Exam updated.")
             if "save_return" in request.POST:
                 return redirect("admin_course_edit", pk=course.pk)
-            return redirect("admin_exam_edit", pk=exam.pk)
+            return redirect("admin_exam_edit", pk=exam_obj.pk)
         else:
             messages.error(request, "Please correct the errors below.")
     else:
@@ -1310,7 +1334,7 @@ def exam_form(request, pk):
     qa_pairs = [{"qform": qf, "aformset": afs} for qf, afs in zip(qset.forms, answer_sets)]
 
     return render(request, "admin/exam_form.html", {
-        "title": f"Edit exam — {course.name}",
+        "title": f"Edit exam — {course.name} ({exam.exam_code or ''})",
         "exam": exam,
         "course": course,
         "exam_form": eform,
@@ -1318,7 +1342,7 @@ def exam_form(request, pk):
         "qa_pairs": qa_pairs,
         "cancel_url": reverse("admin_course_edit", args=[course.pk]),
     })
-    
+
 
 def _provision_exams_for_course(ct):
     """
@@ -1340,7 +1364,7 @@ def _provision_exams_for_course(ct):
     created = 0
     for seq in range(1, int(ct.number_of_exams) + 1):
         if seq not in existing:
-            Exam.objects.create(course_type=ct, sequence=seq, title=f"Exam {seq}")
+            Exam.objects.create(course_type=ct, sequence=seq)  # let model compute title/code
             created += 1
     return created
 

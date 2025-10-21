@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} (Rules){% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 760px;">
+  <h1 class="h4 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
+
+  <div class="card mb-3">
+    <div class="card-header">Before you begin</div>
+    <div class="card-body">
+      <ul class="mb-0">
+        <li>This is an individual assessment. No talking or collaboration.</li>
+        <li>No phones, notes, or reference materials.</li>
+        <li>You have a total of <strong>{{ minutes }}:{% if seconds < 10 %}0{% endif %}{{ seconds }}</strong> to complete {{ num_questions }} questions.</li>
+        <li>Pass mark: <strong>{{ pass_mark_percent }}%</strong> (you must answer at least <strong>{{ required_correct }}</strong> correctly).</li>
+        {% if viva_required %}
+          <li>Viva threshold: <strong>{{ viva_percent }}%</strong> (you must answer at least <strong>{{ viva_required }}</strong> correctly).</li>
+        {% endif %}
+        <li>Once you start the exam, the timer will not pause.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center">
+    <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_start' %}?examcode={{ exam.exam_code }}">
+      Back
+    </a>
+
+    {# Placeholder for the real exam start route you’ll add next #}
+    <a class="btn btn-primary" href="#">
+      I understand — start the exam
+    </a>
+  </div>
+</div>
+{% endblock %}

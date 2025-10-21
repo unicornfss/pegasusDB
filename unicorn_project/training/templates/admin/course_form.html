@@ -195,25 +195,31 @@
                 {% if exams %}
                   <div class="table-responsive">
                     <table class="table table-sm align-middle">
+                    <table class="table table-sm table-hover">
                       <thead>
                         <tr>
                           <th style="width:8rem">Seq</th>
+                          <th style="width:10rem">Code</th>
                           <th>Title</th>
                           <th style="width:10rem">Questions</th>
-                          <th style="width:10rem" class="text-end">Actions</th>
+                          <th style="width:10rem" class="text-end">Actions</th>  <!-- keep this -->
                         </tr>
                       </thead>
                       <tbody>
                         {% for ex in exams %}
-                          <tr>
+                          <tr class="clickable-row" data-href="{% url 'admin_exam_edit' ex.id %}" tabindex="0">
                             <td>{{ ex.sequence }}</td>
-                            <td>{{ ex.title|default:"Exam " |add:ex.sequence }}</td>
+                            <td>{{ ex.exam_code }}</td>
+                            <td>{{ ex.title }}</td>  {# <-- just show the title #}
                             <td>{{ ex.questions.count }}</td>
                             <td class="text-end">
-                              <a class="btn btn-sm btn-outline-primary"
-                                 href="{% url 'admin_exam_edit' ex.id %}">Edit</a>
+                              <a href="{% url 'admin_exam_edit' ex.id %}" class="btn btn-sm btn-outline-primary" data-no-row-nav="1">
+                                Edit
+                              </a>
                             </td>
                           </tr>
+                        {% empty %}
+                          <tr><td colspan="5" class="text-muted">No exams yet.</td></tr>
                         {% endfor %}
                       </tbody>
                     </table>
@@ -297,4 +303,30 @@
   });
 })();
 </script>
+<script>
+  (function () {
+    const rows = document.querySelectorAll('tr.clickable-row[data-href]');
+    rows.forEach(tr => {
+      // Mouse click
+      tr.addEventListener('click', e => {
+        // Don’t hijack clicks on interactive elements inside the row
+        if (e.target.closest('a, button, input, select, label')) return;
+        const url = tr.dataset.href;
+        if (!url) return;
+        if (e.ctrlKey || e.metaKey) { window.open(url, '_blank'); }
+        else { window.location.href = url; }
+      });
+
+      // Keyboard (Enter/Space)
+      tr.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          const url = tr.dataset.href;
+          if (url) window.location.href = url;
+        }
+      });
+    });
+  })();
+</script>
+
 {% endblock %}

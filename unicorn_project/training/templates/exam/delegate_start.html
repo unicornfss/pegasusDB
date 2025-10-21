@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 720px;">
+  <h1 class="h4 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
+
+  {% if message is not None %}
+    <div class="alert {% if match_ok %}alert-success{% else %}alert-warning{% endif %} mb-3">
+      {{ message }}
+    </div>
+  {% endif %}
+
+  {% if match_ok %}
+    <div class="d-flex justify-content-between">
+      <a class="btn btn-outline-secondary" href="?examcode={{ exam.exam_code }}">Reset</a>
+      <a class="btn btn-success" href="{% url 'delegate_exam_rules' %}?examcode={{ exam.exam_code }}">
+        Continue to exam rules
+      </a>
+    </div>
+  {% else %}
+    <form method="post" class="card" novalidate>
+      {% csrf_token %}
+      <!-- Keep exam code across POSTs -->
+      <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
+
+      <div class="card-body row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Exam code</label>
+          {{ form.exam_code }}
+          <div class="form-text">This is set from the QR/link.</div>
+        </div>
+
+        <div class="col-md-8">
+          <label class="form-label">Your full name</label>
+          {{ form.name }}
+          <div class="form-text">Enter your name exactly as on the register.</div>
+          {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Date of birth</label>
+          {{ form.date_of_birth }}
+          {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="col-md-8">
+          <label class="form-label">Instructor</label>
+          {{ form.instructor }}
+          {% for e in form.instructor.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="col-md-4">
+          <label class="form-label">Exam date</label>
+          {{ form.exam_date }}
+          {% for e in form.exam_date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+      </div>
+
+      <div class="card-footer d-flex justify-content-between gap-2">
+        <a class="btn btn-outline-secondary" href="?examcode={{ exam.exam_code }}">Reset</a>
+        <button class="btn btn-primary">Check my details</button>
+      </div>
+    </form>
+
+    <p class="small text-muted mt-3">
+      If your details don’t match, please confirm the spelling and date format with your instructor.
+    </p>
+  {% endif %}
+</div>
+{% endblock %}

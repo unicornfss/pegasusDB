@@ -3,7 +3,7 @@ import uuid
 from datetime import date
 from decimal import Decimal
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, MaxValueValidator 
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.db.models import Q
 from django.db.models.signals import post_save
@@ -472,18 +472,98 @@ class InvoiceItem(models.Model):
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+# models.py
+
 class Exam(models.Model):
     course_type = models.ForeignKey("CourseType", on_delete=models.CASCADE, related_name="exams")
-    sequence = models.PositiveIntegerField(default=1, help_text="Order of this exam within the course.")
+    sequence = models.PositiveIntegerField(default=1)
     title = models.CharField(max_length=200, blank=True)
+
+    exam_code = models.CharField(
+        max_length=40,
+        unique=True,
+        editable=False,
+        db_index=True,
+        blank=True,
+    )
+
+    # --- NEW: pass mark + viva options ---
+    pass_mark_percent = models.PositiveSmallIntegerField(
+        default=80,  # was 70; now default 80%
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="Passing threshold as a percentage (1–100).",
+    )
+    allow_viva = models.BooleanField(default=False)
+    viva_pass_percent = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        help_text="If enabled, viva threshold (must be between pass−10 and pass−1).",
+    )
+    # -------------------------------------
 
     class Meta:
         unique_together = ("course_type", "sequence")
         ordering = ["sequence"]
 
-    def __str__(self):
-        return f"{self.course_type} · {(self.title or f'Exam {self.sequence}')}"
+    def _computed_exam_code(self) -> str:
+        base = (self.course_type.code or "").upper()
+        return f"{base}{int(self.sequence):02d}"
 
+    def _computed_title(self) -> str:
+        return f"{self.course_type.name}: Exam {int(self.sequence):02d}"
+
+    # Validation for viva rules
+    def clean(self):
+        super().clean()
+
+        p = int(self.pass_mark_percent or 0)
+
+        if not self.allow_viva:
+            # If viva disabled, ensure field is cleared
+            self.viva_pass_percent = None
+            return
+
+        # Viva enabled → enforce range [pass−10, pass−1]
+        min_viva = max(1, p - 10)
+        max_viva = max(1, p - 1)
+
+        # If not provided, default to pass−10 (clamped just in case)
+        if self.viva_pass_percent is None:
+            self.viva_pass_percent = min(max_viva, max(min_viva, p - 10))
+            return
+
+        v = int(self.viva_pass_percent)
+        if not (min_viva <= v <= max_viva):
+            raise ValidationError({
+                "viva_pass_percent": (
+                    f"Viva must be between {min_viva}% and {max_viva}% "
+                    f"(given {v}%, pass mark is {p}%)."
+                )
+            })
+
+    def save(self, *args, **kwargs):
+        if self.course_type_id and self.sequence:
+            self.exam_code = self._computed_exam_code()
+
+            auto_title = self._computed_title()
+            simple_default = f"Exam {int(self.sequence)}"
+
+            if not self.pk:
+                if not (self.title or "").strip() or (self.title or "").strip() == simple_default:
+                    self.title = auto_title
+            else:
+                try:
+                    old = type(self).objects.get(pk=self.pk)
+                    old_auto = f"{old.course_type.name}: Exam {int(old.sequence):02d}"
+                    if (self.title or "").strip() in ("", simple_default, old_auto):
+                        self.title = auto_title
+                except type(self).DoesNotExist:
+                    if not (self.title or "").strip() or (self.title or "").strip() == simple_default:
+                        self.title = auto_title
+
+        # Run validators (incl. viva rules) before saving
+        self.full_clean()
+        super().save(*args, **kwargs)
 
 class ExamQuestion(models.Model):
     exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name="questions")

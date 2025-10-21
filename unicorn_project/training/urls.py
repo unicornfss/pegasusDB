@@ -6,6 +6,7 @@ from . import views
 from . import views_admin as app_admin
 from . import views_instructor as instv
 from . import views_instructor
+from . import views_public
 
 
 urlpatterns = [
@@ -117,4 +118,6 @@ urlpatterns = [
 
     path("diag/email/", instv.email_diagnostics, name="email_diagnostics"),
 
+    path("exam/", views_public.delegate_exam_start, name="delegate_exam_start"),
+    path("exam/rules/", views_public.delegate_exam_rules, name="delegate_exam_rules"),
 ]

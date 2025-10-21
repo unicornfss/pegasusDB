@@ -148,3 +148,8 @@
   .sidebar { width: 100%; }          /* offcanvas controls width */
   .sidebar.border-end { border-right: 0; }
 }
+
+/* Make table rows that we mark as clickable look/feel clickable */
+.clickable-row { cursor: pointer; }
+.clickable-row:focus { outline: 2px solid var(--bs-primary); outline-offset: -2px; }
+

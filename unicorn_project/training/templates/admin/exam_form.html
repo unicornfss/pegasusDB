@@ -35,11 +35,58 @@
         {{ exam_form.sequence }}
         {% for e in exam_form.sequence.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
+      <!-- read-only display -->
+      <div class="col-md-3">
+        <label class="form-label">Exam code</label>
+        <input type="text" class="form-control" value="{{ exam.exam_code }}" readonly>
+      </div>
       <div class="col-md-6">
         <label class="form-label">Title</label>
         {{ exam_form.title }}
         {% for e in exam_form.title.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
+
+      {# --- NEW: pass mark + viva controls --- #}
+      <div class="col-12"></div> {# spacer to keep on next row #}
+
+      <div class="col-md-3">
+        <label class="form-label" for="id_pass_mark_percent">Pass mark (%)</label>
+        <input type="number"
+               class="form-control"
+               id="id_pass_mark_percent"
+               name="pass_mark_percent"
+               min="1" max="100" required
+               value="{{ exam.pass_mark_percent|default:80 }}">
+        <div class="form-text">Whole percent (e.g. 80).</div>
+      </div>
+
+      <div class="col-md-3 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input"
+                 type="checkbox"
+                 id="id_allow_viva"
+                 name="allow_viva"
+                 {% if exam.allow_viva %}checked{% endif %}>
+          <label class="form-check-label" for="id_allow_viva">
+            Allow viva threshold
+          </label>
+        </div>
+      </div>
+
+      <div class="col-md-3" id="viva_wrap">
+        <label class="form-label" for="id_viva_pass_percent">Viva (%)</label>
+        <input type="number"
+               class="form-control"
+               id="id_viva_pass_percent"
+               name="viva_pass_percent"
+               {% if not exam.allow_viva %}
+                 value=""
+               {% else %}
+                 value="{{ exam.viva_pass_percent }}"
+               {% endif %}>
+        <div class="form-text">Must be between (pass − 10) and (pass − 1).</div>
+      </div>
+      {# --- /NEW --- #}
     </div>
   </div>
 
@@ -262,6 +309,41 @@
         addAnswerRow(prefix);
       }
     });
+
+    // ---------- NEW: viva UI helpers ----------
+    const passEl  = document.getElementById('id_pass_mark_percent');
+    const allowEl = document.getElementById('id_allow_viva');
+    const vivaWrap= document.getElementById('viva_wrap');
+    const vivaEl  = document.getElementById('id_viva_pass_percent');
+
+    function clampViva() {
+      if (!passEl || !vivaEl) return;
+      const p = parseInt(passEl.value || 0, 10);
+      const min = Math.max(1, p - 10);
+      const max = Math.max(1, p - 1);
+      vivaEl.min = String(min);
+      vivaEl.max = String(max);
+
+      const v = parseInt(vivaEl.value || NaN, 10);
+      if (!Number.isFinite(v)) {
+        vivaEl.value = Math.min(max, Math.max(min, p - 10));
+      } else if (v < min || v > max) {
+        vivaEl.value = Math.min(max, Math.max(min, v));
+      }
+    }
+
+    function toggleViva() {
+      const show = allowEl && allowEl.checked;
+      if (vivaWrap) vivaWrap.style.display = show ? '' : 'none';
+      if (!show && vivaEl) vivaEl.value = '';
+      if (show) clampViva();
+    }
+
+    if (passEl)  passEl.addEventListener('input', clampViva);
+    if (allowEl) allowEl.addEventListener('change', toggleViva);
+
+    // Initialise on load
+    toggleViva();
   });
 })();
 </script>
