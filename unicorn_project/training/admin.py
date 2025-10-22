@@ -235,12 +235,14 @@ class ExamAttemptAdmin(admin.ModelAdmin):
         "started_at_admin", "completed_at_admin",
     )
     list_filter = ("exam", "exam__course_type", "exam_date", "instructor")
-    search_fields = ("name", "delegate_name", "first_name", "last_name",
-                     "exam__exam_code", "exam__title", "instructor__name")
+    search_fields = (
+        "name", "delegate_name", "first_name", "last_name",
+        "exam__exam_code", "exam__title", "instructor__name",
+    )
     ordering = ("-started_at", "-pk")
     autocomplete_fields = ("exam", "instructor")
 
-    # include ALL computed fields in readonly_fields
+    # All computed values must be in readonly_fields (use callables for viva*)
     readonly_fields = (
         "display_name",
         "score_admin",
@@ -249,22 +251,37 @@ class ExamAttemptAdmin(admin.ModelAdmin):
         "seconds_used_admin",
         "started_at_admin",
         "completed_at_admin",
-        "expires_at",  # real field (keep if you have it)
+        "expires_at",
+        # viva shown via callables -> avoids admin system check errors
+        "viva_decided_at_admin",
+        "viva_decided_by_admin",
     )
 
     fieldsets = (
         ("Attempt", {
-            "fields": ("exam", "exam_date", "instructor", "display_name", "date_of_birth")
+            "fields": (
+                "exam", "exam_date", "instructor",
+                "display_name", "date_of_birth",
+            )
         }),
-        ("Timing",  {
-            "fields": ("seconds_total_admin", "seconds_used_admin", "started_at_admin", "completed_at_admin", "expires_at")
+        ("Timing", {
+            "fields": (
+                "seconds_total_admin", "seconds_used_admin",
+                "started_at_admin", "completed_at_admin",
+                "expires_at",
+            )
         }),
         ("Outcome", {
-            "fields": ("score_admin", "result_badge")
+            "fields": (
+                "result_badge",
+                "viva_notes",
+                "viva_decided_at_admin",
+                "viva_decided_by_admin",
+            )
         }),
     )
 
-    # computed columns / helpers
+    # ----- Display helpers -----
     def display_name(self, obj):
         return (
             getattr(obj, "name", None)
@@ -279,19 +296,24 @@ class ExamAttemptAdmin(admin.ModelAdmin):
         )
     display_name.short_description = "Delegate"
 
-    def score_admin(self, obj: ExamAttempt):
+    def score_admin(self, obj):
         correct = obj.answers.filter(is_correct=True).count()
-        total = getattr(getattr(obj, "exam", None), "questions", None)
-        total = total.count() if total is not None else 0
+        total_rel = getattr(getattr(obj, "exam", None), "questions", None)
+        total = total_rel.count() if total_rel is not None else 0
         return f"{correct}/{total}"
     score_admin.short_description = "Score"
 
-    def result_badge(self, obj: ExamAttempt):
+    def result_badge(self, obj):
         res = (getattr(obj, "result", "") or "").lower()
-        label = "Fail"; css = "background:#dc3545;color:#fff;"   # red
-        if res == "pass":   label, css = "Pass", "background:#198754;color:#fff;"  # green
-        elif res == "viva": label, css = "Viva", "background:#ffc107;color:#111;"  # yellow
-        return format_html('<span style="padding:2px 8px;border-radius:12px;{}">{}</span>', css, label)
+        label = "Fail"; css = "background:#dc3545;color:#fff;"     # red
+        if res == "pass":
+            label, css = "Pass", "background:#198754;color:#fff;"  # green
+        elif res == "viva":
+            label, css = "Viva", "background:#ffc107;color:#111;"  # yellow
+        return format_html(
+            '<span style="padding:2px 8px;border-radius:12px;{}">{}</span>',
+            css, label
+        )
     result_badge.short_description = "Result"
 
     def seconds_total_admin(self, obj):
@@ -307,7 +329,7 @@ class ExamAttemptAdmin(admin.ModelAdmin):
         if isinstance(v, int):
             return v
         start = getattr(obj, "started_at", None)
-        end   = getattr(obj, "completed_at", None) or getattr(obj, "finished_at", None)
+        end = getattr(obj, "completed_at", None) or getattr(obj, "finished_at", None)
         if start and end:
             return int((end - start).total_seconds())
         return "—"
@@ -316,10 +338,26 @@ class ExamAttemptAdmin(admin.ModelAdmin):
     def started_at_admin(self, obj):
         return getattr(obj, "started_at", None)
     started_at_admin.short_description = "Started at"
+    started_at_admin.admin_order_field = "started_at"
 
     def completed_at_admin(self, obj):
         return getattr(obj, "completed_at", None) or getattr(obj, "finished_at", None)
     completed_at_admin.short_description = "Completed at"
+    completed_at_admin.admin_order_field = "completed_at"
+
+    # ----- Viva read-only callables (safe for admin system check) -----
+    def viva_decided_at_admin(self, obj):
+        return getattr(obj, "viva_decided_at", None)
+    viva_decided_at_admin.short_description = "Viva decided at"
+    viva_decided_at_admin.admin_order_field = "viva_decided_at"
+
+    def viva_decided_by_admin(self, obj):
+        user = getattr(obj, "viva_decided_by", None)
+        # if your User has .name use that, else fallback to username / repr
+        return getattr(user, "name", None) or getattr(user, "username", None) or user
+    viva_decided_by_admin.short_description = "Viva decided by"
+    viva_decided_by_admin.admin_order_field = "viva_decided_by"
+
 @admin.register(Exam)
 class ExamAdmin(admin.ModelAdmin):
     inlines = [ExamAttemptInline]

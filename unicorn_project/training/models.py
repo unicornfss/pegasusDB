@@ -617,6 +617,18 @@ class ExamAttempt(models.Model):
     passed = models.BooleanField(default=False)
     viva_eligible = models.BooleanField(default=False)
 
+    viva_notes = models.TextField(blank=True)
+    viva_decided_at = models.DateTimeField(null=True, blank=True)
+    viva_decided_by = models.ForeignKey(
+        "Instructor",  # or settings.AUTH_USER_MODEL if you prefer
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="viva_decisions",
+    )
+
+    def is_viva_pending(self) -> bool:
+        return (self.result or "").lower() == "viva" and not self.viva_decided_at
+
     def remaining_seconds(self) -> int:
         if self.finished_at:
             return 0

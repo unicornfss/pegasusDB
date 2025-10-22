@@ -39,109 +39,80 @@ from .utils.invoice import (
     send_invoice_email,      # email helper with dev/admin routing
 )
 
-def _can_view_attempt(user, attempt: ExamAttempt) -> bool:
-    """
-    Permit viewing an ExamAttempt if:
-      - user is staff/superuser, OR
-      - user has an Instructor profile AND any of:
-          * attempt.instructor is the same instructor, OR
-          * attempt.instructor is NULL (legacy/unassigned), OR
-          * user has a booking for the same course type where a booking day
-            is within ±7 days of the attempt.exam_date
-    """
-    # Must be authenticated
-    if not getattr(user, "is_authenticated", False):
-        return False
-
-    # Staff/superusers can always view
+def _can_view_attempt(user, attempt) -> bool:
+    # staff/superusers: always allowed
     if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
         return True
-
-    # Must have an instructor profile to continue
+    # instructors can see their own attempts, and attempts not assigned
     instr = getattr(user, "instructor", None)
     if not instr:
         return False
+    a_instr_id = getattr(attempt, "instructor_id", None)
+    return (a_instr_id is None) or (a_instr_id == instr.id)
 
-    # Direct match (or legacy attempts with no instructor stored)
-    if attempt.instructor_id in (None, instr.id):
-        return True
-
-    # Relaxed window so instructors can still review attempts taken near the course dates
-    exam_ct_id = getattr(attempt.exam, "course_type_id", None)
-    exam_day = getattr(attempt, "exam_date", None)
-    if not exam_ct_id or not exam_day:
-        return False
-
-    return BookingDay.objects.filter(
-        booking__instructor_id=instr.id,
-        booking__course_type_id=exam_ct_id,
-        date__gte=exam_day - timedelta(days=7),
-        date__lte=exam_day + timedelta(days=7),
-    ).exists()
-
-def _display_name_for_attempt(attempt):
-    """
-    Return some sensible display name for the attempt. We try several
-    common field names, then fall back to empty string.
-    """
-    for f in ("name", "full_name", "delegate_name"):
-        if hasattr(attempt, f):
-            val = getattr(attempt, f) or ""
-            if str(val).strip():
-                return str(val).strip()
-    return ""
+def _display_name_for_attempt(attempt) -> str:
+    # Try common name fields; return em dash if missing
+    for f in ("name", "delegate_name"):
+        val = getattr(attempt, f, None)
+        if val:
+            return str(val)
+    first = getattr(attempt, "first_name", "") or ""
+    last  = getattr(attempt, "last_name", "") or ""
+    full = f"{first} {last}".strip()
+    return full or "—"
 
 def _attempt_result_badge(attempt):
     """
-    Return (label, bootstrap_color) = ('Pass'|'Viva'|'Fail', 'success'|'warning'|'danger')
-    Adjust field names as needed for your model.
+    Returns (label, bootstrap_color):
+      ('Pass'|'Viva'|'Fail', 'success'|'warning'|'danger')
     """
-    # Try several common flags/fields
-    for attr in ("passed", "is_pass", "has_passed"):
-        if getattr(attempt, attr, False):
-            return ("Pass", "success")
-    for attr in ("viva_awarded", "is_viva", "viva"):
-        if getattr(attempt, attr, False):
-            return ("Viva", "warning")
+    if getattr(attempt, "passed", False):
+        return ("Pass", "success")
+    if getattr(attempt, "viva_eligible", False):
+        return ("Viva", "warning")
     return ("Fail", "danger")
 
 def _counts_for_attempt(attempt):
-    from .models import ExamAttemptAnswer  # local import avoids circulars
+    from .models import ExamAttemptAnswer
     correct = ExamAttemptAnswer.objects.filter(attempt=attempt, is_correct=True).count()
-    total = attempt.exam.questions.count()
+    # prefer exam.questions.count(); fall back to distinct questions answered
+    try:
+        total = attempt.exam.questions.count()
+    except Exception:
+        from .models import ExamAttemptAnswer as AAA
+        total = AAA.objects.filter(attempt=attempt).values("question_id").distinct().count()
     return correct, total
 
-def _back_url_for_attempt(request, attempt):
+def _back_url_for_attempt(request, attempt) -> str:
     """
-    Best-effort back target to the booking detail if we can infer one;
-    otherwise fall back to instructor bookings.
+    Prefer an explicit ?back=<booking_uuid> if provided.
+    Else, best-effort link back to the relevant booking’s Exams tab.
+    Else, instructor bookings list.
     """
+    back = request.GET.get("back") or request.POST.get("back")
+    if back:
+        return f"{reverse('instructor_booking_detail', kwargs={'pk': back})}?tab=exams"
+
     try:
-        booking = (
-            Booking.objects.filter(
-                course_type=attempt.exam.course_type,
-                instructor=getattr(request.user, "instructor", None),
-                bookingday__date=attempt.exam_date,
+        day = (
+            BookingDay.objects.select_related("booking")
+            .filter(
+                booking__course_type=attempt.exam.course_type,
+                booking__instructor=attempt.instructor,
+                date=attempt.exam_date,
             )
-            .distinct()
+            .order_by("date")
             .first()
         )
-        if booking:
-            return reverse("instructor_booking_detail", kwargs={"pk": booking.pk})
+        if day and day.booking_id:
+            return f"{reverse('instructor_booking_detail', args=[day.booking_id])}?tab=exams"
     except Exception:
         pass
+
     return reverse("instructor_bookings")
 
-def _instructor_can_view_attempt(user, attempt):
-    """Back-compat alias; some views call this name."""
-    return _can_view_attempt(user, attempt)
-
-def _can_authorise_retest(user, attempt):
-    """
-    Very light policy: allow if the user can view this attempt and
-    attempt number is 1 (i.e., authorise one re-test).
-    Adjust if you store attempt numbers differently.
-    """
+def _can_authorise_retest(user, attempt) -> bool:
+    """Allow re-test authorisation for attempt #1 only, by the instructor who can view it."""
     if not _can_view_attempt(user, attempt):
         return False
     number = getattr(attempt, "attempt_no", None) or getattr(attempt, "attempt_number", None) or 1
@@ -149,34 +120,67 @@ def _can_authorise_retest(user, attempt):
         number = int(number)
     except Exception:
         number = 1
-    return number <= 1  # allow authorisation when this is the first sitting
+    return number <= 1
 
-def _attempt_header_stats(attempt: ExamAttempt) -> tuple[int, int, str]:
+def _attempt_header_stats(attempt):
     """
-    Returns (score_correct, score_total, result_text).
-    Works whether the attempt already has score fields or not.
+    Returns a dict for the header:
+      - display_name
+      - correct_count
+      - total_questions
+      - result_label ('Pass' | 'Viva' | 'Fail')
+      - result_class ('success' | 'warning' | 'danger')
+    Uses recorded viva decision when present; otherwise computes from thresholds.
     """
-    # total = number of questions on the exam
-    try:
-        total = attempt.exam.questions.count()
-    except Exception:
-        total = ExamAttemptAnswer.objects.filter(attempt=attempt).values("question_id").distinct().count()
+    from django.db.models import Count
 
-    # correct = count of correct answers recorded
+    # Score
     correct = ExamAttemptAnswer.objects.filter(attempt=attempt, is_correct=True).count()
+    total   = ExamAttemptAnswer.objects.filter(attempt=attempt).aggregate(n=Count("id"))["n"] or 0
 
-    # result text – use existing field if present; infer otherwise
-    result_text = getattr(attempt, "result", None)
-    if not result_text:
-        # If pass-mark is available, decide; otherwise just show Pass/Fail by >=80%
-        try:
-            threshold = int(getattr(attempt.exam, "pass_mark_percent", 80))
-        except Exception:
-            threshold = 80
-        pct = (correct * 100.0 / total) if total else 0.0
-        result_text = "Pass" if pct >= threshold else "Fail"
+    # Helper for name
+    def _name(a):
+        for f in ("name", "delegate_name"):
+            v = getattr(a, f, None)
+            if v:
+                return str(v)
+        first = getattr(a, "first_name", "") or ""
+        last  = getattr(a, "last_name", "") or ""
+        full = f"{first} {last}".strip()
+        return full or "—"
 
-    return correct, total, result_text
+    # If viva has already been decided, show final outcome
+    if hasattr(attempt, "viva_eligible") and not getattr(attempt, "viva_eligible", False):
+        decided_pass = bool(getattr(attempt, "passed", False))
+        return {
+            "display_name": _name(attempt),
+            "correct_count": correct,
+            "total_questions": total,
+            "result_label": "Pass" if decided_pass else "Fail",
+            "result_class": "success" if decided_pass else "danger",
+        }
+
+    # Otherwise compute by thresholds
+    exam = getattr(attempt, "exam", None)
+    passp = getattr(exam, "pass_mark_percent", 70) or 70
+    viva_p = getattr(exam, "viva_threshold_percent", None)
+    pct = (correct * 100.0 / total) if total else 0.0
+
+    if pct >= passp:
+        label, klass = "Pass", "success"
+    elif viva_p and pct >= viva_p:
+        label, klass = "Viva", "warning"
+    else:
+        label, klass = "Fail", "danger"
+
+    return {
+        "display_name": _name(attempt),
+        "correct_count": correct,
+        "total_questions": total,
+        "result_label": label,
+        "result_class": klass,
+    }
+
 
 def _back_to_booking_url(attempt: ExamAttempt) -> str:
     """
@@ -2361,6 +2365,9 @@ def _attempt_header_bits(attempt):
 
 @login_required
 def instructor_attempt_review(request, attempt_id: int):
+    """
+    Full review: show all answers in original order.
+    """
     attempt = get_object_or_404(
         ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor"),
         pk=attempt_id,
@@ -2368,59 +2375,120 @@ def instructor_attempt_review(request, attempt_id: int):
     if not _can_view_attempt(request.user, attempt):
         return HttpResponseForbidden("Not allowed.")
 
-    back_id = request.GET.get("back") or request.GET.get("booking") or ""
+    answers = (
+        ExamAttemptAnswer.objects
+        .select_related("question", "answer")
+        .filter(attempt=attempt)
+        .order_by("question__order", "question_id")
+    )
 
-    answers = (ExamAttemptAnswer.objects
-               .select_related("question", "answer")
-               .filter(attempt=attempt)
-               .order_by("question__order", "question_id"))
-
-    header = _attempt_header_bits(attempt)
+    correct_count, total_questions, result_text, result_class = _attempt_header_stats(attempt)
 
     ctx = {
         "attempt": attempt,
-        "answers": answers,
         "exam": attempt.exam,
         "course_type": attempt.exam.course_type,
-        **header,           # <-- inject display_name, counts, result_* safely
-        "back_id": back_id,
+        "answers": answers,
+        "display_name": _display_name_for_attempt(attempt) or "—",
+        "correct_count": correct_count,
+        "total_questions": total_questions,
+        "result_label": result_text,
+        "result_class": result_class,
+        "back_url": _back_url_for_attempt(request, attempt),
     }
     return render(request, "instructor/exams/attempt_review.html", ctx)
 
 @login_required
 def instructor_attempt_incorrect(request, attempt_id: int):
+    """Show incorrect answers. Allow recording a viva decision and authorising a re-test."""
     attempt = get_object_or_404(
         ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor"),
-        pk=attempt_id,
+        pk=attempt_id
     )
     if not _can_view_attempt(request.user, attempt):
         return HttpResponseForbidden("Not allowed.")
 
-    back_id = request.GET.get("back") or request.GET.get("booking") or ""
+    # --- Handle POSTs -------------------------------------------------------
+    # Save viva decision (pass/fail + notes)
+    if request.method == "POST" and request.POST.get("save_viva") == "1":
+        if bool(getattr(attempt, "viva_eligible", False)):
+            outcome = (request.POST.get("viva_outcome") or "").strip().lower()
+            notes   = (request.POST.get("viva_notes") or "").strip()
 
-    if request.method == "POST" and request.POST.get("authorise"):
-        if _can_authorise_retest(request.user, attempt):
+            if outcome in ("pass", "fail"):
+                # Persist to real fields you have
+                if hasattr(attempt, "passed"):
+                    attempt.passed = (outcome == "pass")
+                if hasattr(attempt, "viva_eligible"):
+                    attempt.viva_eligible = False  # decision made, no longer viva-eligible
+
+                # Optional finished timestamp if not already set
+                if not getattr(attempt, "finished_at", None):
+                    from django.utils.timezone import now
+                    attempt.finished_at = now()
+
+                # If your model has these, they’ll get filled; otherwise ignored
+                if hasattr(attempt, "viva_notes"):
+                    attempt.viva_notes = notes
+                if hasattr(attempt, "viva_decided_at"):
+                    from django.utils.timezone import now
+                    attempt.viva_decided_at = now()
+                if hasattr(attempt, "viva_decided_by"):
+                    attempt.viva_decided_by = getattr(request.user, "instructor", None) or request.user
+
+                attempt.save()
+
+        # redirect (PRG) and preserve back/tab
+        return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
+                        f"{'?' + request.GET.urlencode() if request.GET else ''}")
+
+    # Authorise a re-test (if your model has such a flag)
+    if request.method == "POST" and request.POST.get("authorise") == "1":
+        if hasattr(attempt, "retest_authorised"):
             attempt.retest_authorised = True
             attempt.save(update_fields=["retest_authorised"])
-            messages.success(request, "Re-test authorised for this delegate.")
-        else:
-            messages.error(request, "You’re not allowed to authorise a re-test.")
+        return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
+                        f"{'?' + request.GET.urlencode() if request.GET else ''}")
 
-    wrong = (ExamAttemptAnswer.objects
-             .select_related("question", "answer")
-             .filter(attempt=attempt, is_correct=False)
-             .order_by("question__order", "question_id"))
+    # --- Build data for display ---------------------------------------------
+    wrong = (
+        ExamAttemptAnswer.objects
+        .select_related("question", "answer")
+        .filter(attempt=attempt, is_correct=False)
+        .order_by("question__order", "question_id")
+    )
 
-    header = _attempt_header_bits(attempt)
+    stats = _attempt_header_stats(attempt)
+
+    # Whether to show viva form; expose decided_at if present
+    viva_eligible = bool(getattr(attempt, "viva_eligible", False))
+    viva_decided_at = getattr(attempt, "viva_decided_at", None)
+
+    # Simple rule for retest button (tweak to your rules)
+    can_authorise_retest = not bool(getattr(attempt, "passed", False))
 
     ctx = {
         "attempt": attempt,
-        "wrong": wrong,
         "exam": attempt.exam,
         "course_type": attempt.exam.course_type,
-        **header,                     # display_name, correct_count, total_questions, result_*
-        "can_authorise_retest": _can_authorise_retest(request.user, attempt),
-        "back_id": back_id,
+
+        "back_id": request.GET.get("back") or request.GET.get("booking") or "",
+
+        # header figures
+        "display_name": stats["display_name"],
+        "correct_count": stats["correct_count"],
+        "total_questions": stats["total_questions"],
+        "result_label": stats["result_label"],
+        "result_class": stats["result_class"],
+
+        "wrong": wrong,
+
+        # viva
+        "viva_eligible": viva_eligible,
+        "viva_decided_at": viva_decided_at,
+
+        # retest
+        "can_authorise_retest": can_authorise_retest,
     }
     return render(request, "instructor/exams/attempt_incorrect.html", ctx)
 

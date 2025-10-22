@@ -7,10 +7,14 @@
 <div class="container" style="max-width: 900px;">
 
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h5 mb-0">{{ exam.course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} — Incorrect answers</h1>
-      {% if back_id %}
+    <h1 class="h5 mb-0">
+      {{ exam.course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} — Incorrect answers
+    </h1>
+
+    {# Back to booking Exams tab if given, else to bookings list #}
+    {% if back_id %}
       <a class="btn btn-outline-secondary"
-        href="{% url 'instructor_booking_detail' back_id %}?tab={{ request.GET.tab|default:'exams' }}">
+         href="{% url 'instructor_booking_detail' back_id %}?tab={{ request.GET.tab|default:'exams' }}">
         Back
       </a>
     {% else %}
@@ -18,7 +22,8 @@
     {% endif %}
   </div>
 
-  <div class="alert alert-light border d-flex align-items-center gap-3">
+  {# Header summary #}
+  <div class="alert alert-light border d-flex flex-wrap align-items-center gap-3">
     <div><strong>Delegate:</strong> {{ display_name|default:"—" }}</div>
     <div><strong>DOB:</strong> {{ attempt.date_of_birth|date:"j M Y"|default:"—" }}</div>
     <div><strong>Exam date:</strong> {{ attempt.exam_date|date:"j M Y"|default:"—" }}</div>
@@ -33,6 +38,47 @@
       {% endif %}
     </div>
   </div>
+
+  {# Viva panel: only when currently viva-eligible and not yet decided #}
+  {% if viva_eligible and not viva_decided_at %}
+    <div class="card mb-3">
+      <div class="card-header">Viva decision</div>
+      <div class="card-body">
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="save_viva" value="1">
+
+          <div class="col-12">
+            <label class="form-label"><strong>Viva notes (optional)</strong></label>
+            <textarea name="viva_notes" class="form-control" rows="3">{{ attempt.viva_notes }}</textarea>
+            <div class="form-text">Record the discussion and rationale for the viva outcome.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label"><strong>Result following viva</strong></label>
+            <div class="d-flex gap-4">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_pass" value="pass" required>
+                <label class="form-check-label" for="viva_pass">Pass</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_fail" value="fail" required>
+                <label class="form-check-label" for="viva_fail">Fail</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6 d-flex align-items-end justify-content-end">
+            <button class="btn btn-success">Save viva decision</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% elif viva_decided_at %}
+    <div class="alert alert-info">
+      Viva decision recorded on {{ viva_decided_at|date:"j M Y, H:i" }}.
+    </div>
+  {% endif %}
 
   <div class="card mb-3">
     <div class="card-header">Only incorrect responses</div>
@@ -54,14 +100,16 @@
         <div class="p-3 text-muted">Nothing to show — all answers were correct.</div>
       {% endif %}
     </div>
-    {% if can_authorise_retest %}
-      <div class="card-footer d-flex justify-content-end">
+
+    <div class="card-footer d-flex justify-content-end">
+      {% if can_authorise_retest %}
         <form method="post">
           {% csrf_token %}
           <button class="btn btn-primary" name="authorise" value="1">Authorise re-test</button>
         </form>
-      </div>
-    {% endif %}
+      {% endif %}
+    </div>
   </div>
 </div>
 {% endblock %}
+  
