@@ -217,9 +217,90 @@
   {% if has_exam %}
   <!-- Pane: Exams (only when course type has exams) -->
   <div class="tab-pane fade" id="exams-pane" role="tabpanel" aria-labelledby="exams-tab" tabindex="0">
-    <div class="text-muted">Exams will go here.</div>
+
+    {% if course_exams %}
+      <div class="accordion" id="examAccordion">
+        {% for ex in course_exams %}
+          {% with seq=ex.sequence code=ex.exam_code %}
+          <div class="accordion-item mb-2">
+            <h2 class="accordion-header" id="ex-h-{{ seq }}">
+              <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#ex-c-{{ seq }}"
+                      aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                      aria-controls="ex-c-{{ seq }}">
+                Exam {{ seq }} — {{ ex.title }} <span class="ms-2 small text-muted">({{ code }})</span>
+              </button>
+            </h2>
+            <div id="ex-c-{{ seq }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}"
+                 aria-labelledby="ex-h-{{ seq }}" data-bs-parent="#examAccordion">
+              <div class="accordion-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle m-0">
+                    <thead>
+                      <tr>
+                        <th>Delegate</th>
+                        <th style="width: 120px;">DOB</th>
+                        <th style="width: 90px;">Attempt</th>
+                        <th style="width: 120px;">Result</th>
+                        <th class="text-end" style="width: 260px;">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% with atts=attempts_by_exam|get_item:seq %}
+                        {% if atts %}
+                          {% for att in atts %}
+                            <tr>
+                              <td>{{ att.delegate_name|default:"Delegate" }}</td>
+                              <td>
+                                {% if att.date_of_birth %}
+                                  {{ att.date_of_birth|date:"j M Y" }}
+                                {% else %}
+                                  <span class="text-muted">—</span>
+                                {% endif %}
+                              </td>
+                              <td>{{ att.attempt_number|default:"1" }}</td>
+                              <td>
+                                {% if att.passed %}
+                                  <span class="badge bg-success">Pass</span>
+                                {% elif att.viva_eligible %}
+                                  <span class="badge bg-warning text-dark">Viva</span>
+                                {% else %}
+                                  <span class="badge bg-danger">Fail</span>
+                                {% endif %}
+                              </td>
+                              <td class="text-end">
+                                <a class="btn btn-sm btn-outline-primary"
+                                  href="{% url 'instructor_attempt_review' att.id %}?back={{ booking.id }}&tab=exams">
+                                  Review exam
+                                </a>
+                                <a class="btn btn-sm btn-outline-secondary"
+                                  href="{% url 'instructor_attempt_incorrect' att.id %}?back={{ booking.id }}&tab=exams">
+                                  See incorrect & authorise re-test
+                                </a>
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        {% else %}
+                          <tr><td colspan="5" class="text-muted p-3">No attempts yet for this exam.</td></tr>
+                        {% endif %}
+                      {% endwith %}
+                    </tbody>
+
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endwith %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info my-2">No exams defined for this course type.</div>
+    {% endif %}
+
   </div>
-  {% endif %}
+{% endif %}
+
 
   <!-- Pane: Feedback (loads your booking_feedback.html) -->
   <div class="tab-pane fade" id="feedback-pane" role="tabpanel" aria-labelledby="feedback-tab" tabindex="0">

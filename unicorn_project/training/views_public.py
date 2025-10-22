@@ -1,14 +1,16 @@
 from datetime import timedelta
 from django.db import transaction
+from django.http import HttpResponseForbidden
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.db.models import Q
-from .models import Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion
+from .models import Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Instructor
 from .forms_exam import DelegateExamStartForm
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from math import ceil
-
+from urllib.parse import urlencode
 
 
 @ensure_csrf_cookie   # set csrftoken on GET
@@ -109,101 +111,156 @@ from math import ceil
 def delegate_exam_rules(request):
     code = (request.GET.get("examcode") or "").upper()
     exam = get_object_or_404(Exam, exam_code=code)
-    course_type = exam.course_type
+
+    carry = {
+        "examcode": exam.exam_code,
+        "name": (request.GET.get("name") or "").strip(),
+        "date_of_birth": (request.GET.get("date_of_birth") or "").strip(),
+        "instructor": (request.GET.get("instructor") or "").strip(),
+        "exam_date": (request.GET.get("exam_date") or "").strip(),
+    }
+    qs = urlencode({k: v for k, v in carry.items() if v != ""})
 
     num_questions = exam.questions.count()
+    seconds_total = max(1, num_questions * 90)
+    minutes, seconds = divmod(seconds_total, 60)
+    required_correct = (exam.pass_mark_percent * num_questions + 99) // 100
 
-    # pass mark %
-    pct = exam.pass_mark_percent or 80
-
-    # whole number required correct
-    required_correct = ceil(num_questions * pct / 100.0)
-
-    # total time: 90 seconds per question
-    total_seconds = num_questions * 90
-    minutes, seconds = divmod(total_seconds, 60)
-
-    # NEW: viva threshold, if enabled
-    viva_pct = exam.viva_pass_percent if getattr(exam, "allow_viva", False) else None
-    viva_required = ceil(num_questions * viva_pct / 100.0) if viva_pct else None
-
-    ctx = {
+    return render(request, "exam/rules.html", {
         "exam": exam,
-        "course_type": course_type,
+        "course_type": exam.course_type,
         "num_questions": num_questions,
-        "pass_mark_percent": pct,
-        "required_correct": required_correct,
-        "total_seconds": total_seconds,
         "minutes": minutes,
         "seconds": seconds,
-        # NEW
-        "viva_percent": viva_pct,
-        "viva_required": viva_required,
-    }
-    return render(request, "exam/rules.html", ctx)
-
-    code = (request.GET.get("examcode") or "").upper()
-    exam = get_object_or_404(Exam, exam_code=code)
-    course_type = exam.course_type
-
-    # number of questions (you already use ex.questions.count in templates)
-    num_questions = exam.questions.count()
-
-    # pass mark %
-    pct = exam.pass_mark_percent or 70
-
-    # whole number required correct
-    required_correct = ceil(num_questions * pct / 100.0)
-
-    # total time: 90 seconds per question
-    total_seconds = num_questions * 90
-    minutes, seconds = divmod(total_seconds, 60)
-
-    ctx = {
-        "exam": exam,
-        "course_type": course_type,
-        "num_questions": num_questions,
-        "pass_mark_percent": pct,
+        "pass_mark_percent": exam.pass_mark_percent,
         "required_correct": required_correct,
-        "total_seconds": total_seconds,
-        "minutes": minutes,
-        "seconds": seconds,
-    }
-    return render(request, "exam/rules.html", ctx)
+        "qs": qs,
+    })
 
-def _get_or_create_attempt(request, exam: Exam):
+def _remaining_seconds(attempt):
     """
-    Create an attempt on first entry to /exam/run/, using details captured on the start page.
-    We pass those details via query for now; you can later persist them in session if preferred.
+    Return remaining whole seconds until expiry.
+    If expires_at is missing (legacy rows), backfill it from started_at
+    using total_questions * 90s.
     """
-    # Try to resume an unfinished attempt for this exam + same delegate (basic resume)
-    dn = (request.GET.get("name") or request.POST.get("name") or "").strip()
-    dob = (request.GET.get("dob") or request.POST.get("dob") or "").strip()
-    instr_id = request.GET.get("instructor") or request.POST.get("instructor")
-    ex_date = request.GET.get("date") or request.POST.get("date")
+    if getattr(attempt, "expires_at", None):
+        delta = attempt.expires_at - timezone.now()
+        return max(0, int(delta.total_seconds()))
 
-    # If an attempt id is supplied, prefer that
-    att_id = request.GET.get("attempt") or request.POST.get("attempt")
-    if att_id:
-        att = get_object_or_404(ExamAttempt, pk=att_id, exam=exam)
+    # Backfill expires_at if missing
+    qcount = attempt.total_questions or getattr(attempt.exam, "questions", None).count() or 1
+    started = attempt.started_at or timezone.now()
+    attempt.expires_at = started + timedelta(seconds=qcount * 90)
+    attempt.save(update_fields=["expires_at"])
+
+    delta = attempt.expires_at - timezone.now()
+    return max(0, int(delta.total_seconds()))
+
+def _get_or_create_attempt(request, exam):
+    """
+    Reuse ?attempt=<id> when present; otherwise create a new attempt
+    using the details carried from the start/rules pages.
+    Ensures expires_at is set based on 90s/question.
+    """
+    attempt_id = request.GET.get("attempt") or request.POST.get("attempt")
+    if attempt_id:
+        att = get_object_or_404(ExamAttempt, pk=attempt_id, exam=exam)
+        # Backfill expires_at if a legacy attempt is missing it
+        if not att.expires_at:
+            qcount = exam.questions.count() or 1
+            duration = qcount * 90  # seconds
+            att.expires_at = (att.started_at or timezone.now()) + timedelta(seconds=duration)
+            att.total_questions = att.total_questions or qcount
+            att.save(update_fields=["expires_at", "total_questions"])
         return att
 
-    # Otherwise create new
-    total_qs = exam.questions.count()
-    total_seconds = total_qs * 90
-    expires_at = timezone.now() + timedelta(seconds=total_seconds)
+    name = (request.GET.get("name") or request.POST.get("name") or "").strip()
+    dob_str = (request.GET.get("date_of_birth") or request.POST.get("date_of_birth") or "").strip()
+    instr_id = request.GET.get("instructor") or request.POST.get("instructor")
+    exam_date_str = (request.GET.get("exam_date") or request.POST.get("exam_date") or "").strip()
 
-    att = ExamAttempt.objects.create(
+    dob = parse_date(dob_str) if dob_str else None
+    exdate = parse_date(exam_date_str) if exam_date_str else None
+
+    instr = None
+    if instr_id:
+        try:
+            instr = Instructor.objects.get(pk=instr_id)
+        except Instructor.DoesNotExist:
+            instr = None
+
+    qcount = exam.questions.count() or 1
+    duration = qcount * 90  # seconds
+    started = timezone.now()
+    expires = started + timedelta(seconds=duration)
+
+    return ExamAttempt.objects.create(
         exam=exam,
-        delegate_name=dn or "Delegate",
-        date_of_birth=dob or "1900-01-01",  # string accepted; DB layer will coerce via ISO format
-        instructor_id=int(instr_id) if instr_id else None,
-        exam_date=ex_date or timezone.localdate(),
-        started_at=timezone.now(),
-        expires_at=expires_at,
-        total_questions=total_qs,
+        delegate_name=name or "",
+        date_of_birth=dob,
+        instructor=instr,
+        exam_date=exdate or timezone.localdate(),
+        total_questions=qcount,
+        started_at=started,
+        expires_at=expires,
     )
-    return att
+
+def delegate_exam_run(request):
+    code = (request.GET.get("examcode") or request.POST.get("examcode") or "").upper()
+    if not code:
+        return redirect(f'{reverse("delegate_exam_start")}')
+    exam = get_object_or_404(Exam, exam_code=code)
+
+    questions = list(exam.questions.order_by("order", "id"))
+    if not questions:
+        return render(request, "exam/run_empty.html", {"exam": exam, "course_type": exam.course_type})
+
+    attempt = _get_or_create_attempt(request, exam)
+    if _remaining_seconds(attempt) <= 0:
+        return redirect(f'{reverse("delegate_exam_finish")}?examcode={exam.exam_code}&attempt={attempt.pk}')
+
+    q_index = int(request.GET.get("q") or request.POST.get("q") or 1)
+    q_index = max(1, min(q_index, len(questions)))
+    question = questions[q_index - 1]
+    answers = list(question.answers.order_by("order", "id"))
+
+    if request.method == "POST":
+        selected_id = request.POST.get("answer")
+        with transaction.atomic():
+            aa, _ = ExamAttemptAnswer.objects.get_or_create(attempt=attempt, question=question)
+            if selected_id:
+                ans = get_object_or_404(ExamAnswer, pk=int(selected_id), question=question)
+                aa.answer = ans
+                aa.is_correct = bool(ans.is_correct)
+            else:
+                aa.answer = None
+                aa.is_correct = False
+            aa.save()
+
+        if "prev" in request.POST and q_index > 1:
+            return redirect(f'{reverse("delegate_exam_run")}?examcode={exam.exam_code}&attempt={attempt.pk}&q={q_index-1}')
+        if "next" in request.POST and q_index < len(questions):
+            return redirect(f'{reverse("delegate_exam_run")}?examcode={exam.exam_code}&attempt={attempt.pk}&q={q_index+1}')
+        if "finish" in request.POST:
+            return redirect(f'{reverse("delegate_exam_finish")}?examcode={exam.exam_code}&attempt={attempt.pk}')
+
+    try:
+        prev = ExamAttemptAnswer.objects.get(attempt=attempt, question=question)
+        selected_pk = prev.answer_id
+    except ExamAttemptAnswer.DoesNotExist:
+        selected_pk = None
+
+    return render(request, "exam/run.html", {
+        "exam": exam,
+        "course_type": exam.course_type,
+        "attempt": attempt,
+        "question": question,
+        "answers": answers,
+        "q_index": q_index,
+        "q_total": len(questions),
+        "remaining": _remaining_seconds(attempt),
+        "selected_pk": selected_pk,
+    })
 
 @ensure_csrf_cookie
 @csrf_protect
@@ -226,7 +283,7 @@ def delegate_exam_run(request):
     attempt = _get_or_create_attempt(request, exam)
 
     # Hard-stop if expired or finished
-    if attempt.remaining_seconds() <= 0:
+    if _remaining_seconds(attempt) <= 0:
         return redirect(f'{reverse("delegate_exam_finish")}?examcode={exam.exam_code}&attempt={attempt.pk}')
 
     # Which question index?
@@ -278,7 +335,7 @@ def delegate_exam_run(request):
         "answers": answers,
         "q_index": q_index,
         "q_total": len(questions),
-        "remaining": attempt.remaining_seconds(),
+        "remaining": _remaining_seconds(attempt),
         "selected_pk": selected_pk,
     }
     return render(request, "exam/run.html", ctx)
@@ -294,7 +351,7 @@ def delegate_exam_review(request):
     attempt = get_object_or_404(ExamAttempt, pk=att_id, exam=exam)
 
     # If time is up, jump directly to results
-    if attempt.remaining_seconds() <= 0:
+    if _remaining_seconds(attempt) <= 0:
         return redirect(f'{reverse("delegate_exam_finish")}?examcode={exam.exam_code}&attempt={attempt.pk}')
 
     # Pull all questions with answers, and any selected answers for this attempt
@@ -315,7 +372,7 @@ def delegate_exam_review(request):
         "attempt": attempt,
         "questions": questions,
         "chosen": chosen,
-        "remaining": attempt.remaining_seconds(),
+        "remaining": _remaining_seconds(attempt),
     }
     return render(request, "exam/review.html", ctx)
 

@@ -123,4 +123,26 @@ urlpatterns = [
     path("exam/run/", views_public.delegate_exam_run, name="delegate_exam_run"),
     path("exam/review/", views_public.delegate_exam_review, name="delegate_exam_review"),
     path("exam/finish/", views_public.delegate_exam_finish, name="delegate_exam_finish"),
+    
+    path(
+        "app/instructor/exams/attempt/<int:attempt_id>/review/",
+        views_instructor.instructor_attempt_review,
+        name="instructor_attempt_review",
+    ),
+    path(
+        "app/instructor/exams/attempt/<int:attempt_id>/incorrect/",
+        views_instructor.instructor_attempt_incorrect,
+        name="instructor_attempt_incorrect",
+    ),
+    path(
+    "app/instructor/exams/attempt/<int:attempt_id>/authorize-retake/",
+    instv.instructor_attempt_authorize_retake,
+    name="instructor_attempt_authorize_retake",
+),
+
+    path(
+    "app/instructor/whoami/",
+    instv.whoami,
+    name="instructor_whoami",
+),
 ]

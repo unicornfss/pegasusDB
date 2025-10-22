@@ -210,12 +210,66 @@
                           <tr class="clickable-row" data-href="{% url 'admin_exam_edit' ex.id %}" tabindex="0">
                             <td>{{ ex.sequence }}</td>
                             <td>{{ ex.exam_code }}</td>
-                            <td>{{ ex.title }}</td>  {# <-- just show the title #}
+                            <td>{{ ex.title }}</td>
                             <td>{{ ex.questions.count }}</td>
                             <td class="text-end">
                               <a href="{% url 'admin_exam_edit' ex.id %}" class="btn btn-sm btn-outline-primary" data-no-row-nav="1">
                                 Edit
                               </a>
+                            </td>
+                          </tr>
+
+                          {# --- NEW: Attempts for this exam --- #}
+                          <tr>
+                            <td colspan="5" class="p-0">
+                              <div class="p-3 pt-0">
+                                <div class="card">
+                                  <div class="card-header py-2">
+                                    <strong>Recent attempts — {{ ex.exam_code }}</strong>
+                                  </div>
+                                  <div class="card-body p-0">
+                                    <div class="table-responsive">
+                                      <table class="table table-sm align-middle m-0">
+                                        <thead>
+                                          <tr>
+                                            <th>Delegate</th>
+                                            <th>DOB</th>
+                                            <th>Attempt</th>
+                                            <th>Result</th>
+                                            <th class="text-end">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {% for att in ex.attempts.all|dictsortreversed:"started_at" %}
+                                            <tr>
+                                              <td>{{ att.delegate_name }}</td>
+                                              <td>{{ att.date_of_birth }}</td>
+                                              <td>{{ att.attempt_number|default:"1" }}</td>
+                                              <td>
+                                                {% if att.passed %}
+                                                  <span class="badge bg-success">Pass</span>
+                                                {% elif att.viva_eligible %}
+                                                  <span class="badge bg-warning text-dark">Viva</span>
+                                                {% else %}
+                                                  <span class="badge bg-danger">Fail</span>
+                                                {% endif %}
+                                              </td>
+                                              <td class="text-end">
+                                                <a class="btn btn-sm btn-outline-primary"
+                                                  href="{% url 'admin_attempt_review' att.id %}">Review exam</a>
+                                                <a class="btn btn-sm btn-outline-secondary"
+                                                  href="{% url 'admin_attempt_incorrect' att.id %}">See incorrect &amp; enable re-test</a>
+                                              </td>
+                                            </tr>
+                                          {% empty %}
+                                            <tr><td colspan="5" class="text-muted">No attempts yet.</td></tr>
+                                          {% endfor %}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
                             </td>
                           </tr>
                         {% empty %}

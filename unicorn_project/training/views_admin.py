@@ -27,7 +27,7 @@ from .services.booking_status import auto_update_booking_statuses
 from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
     StaffProfile, BookingDay, DelegateRegister, CourseCompetency,
-    Exam, ExamQuestion,
+    Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer
 )
 from .forms import (
     BusinessForm, CourseTypeForm, TrainingLocationForm,
@@ -457,6 +457,21 @@ def course_delete(request, pk):
         "back_url": reverse("admin_course_edit", args=[obj.id]),
     })
 
+@admin_required
+def admin_attempt_review(request, attempt_id: int):
+    att = get_object_or_404(
+        ExamAttempt.objects.select_related("exam", "exam__course_type"),
+        pk=attempt_id
+    )
+    questions = list(att.exam.questions.order_by("order", "id").prefetch_related("answers"))
+    chosen = {aa.question_id: aa for aa in att.answers.select_related("answer", "question")}
+    return render(request, "admin/exam_attempt_review.html", {
+        "attempt": att,
+        "exam": att.exam,
+        "course_type": att.exam.course_type,
+        "questions": questions,
+        "chosen": chosen,
+    })
 
 # =========================
 # Bookings — LIST (filters + sort + pagination)

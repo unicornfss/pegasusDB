@@ -1,0 +1,25 @@
+{# expects either `result_label` OR an ExamAttempt in `a`/`attempt` #}
+{% with att=a|default:attempt %}
+
+  {% if result_label %}
+    {% if result_label|lower == "pass" %}
+      <span class="badge bg-success">Pass</span>
+    {% elif result_label|lower == "viva" %}
+      <span class="badge bg-warning text-dark">Viva</span>
+    {% else %}
+      <span class="badge bg-danger">Fail</span>
+    {% endif %}
+  {% elif att %}
+    {# fallback if you didn't pass result_label #}
+    {% if att.is_viva %}
+      <span class="badge bg-warning text-dark">Viva</span>
+    {% elif att.passed %}
+      <span class="badge bg-success">Pass</span>
+    {% else %}
+      <span class="badge bg-danger">Fail</span>
+    {% endif %}
+  {% else %}
+    <span class="badge bg-secondary">—</span>
+  {% endif %}
+
+{% endwith %}

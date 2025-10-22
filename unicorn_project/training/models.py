@@ -631,3 +631,45 @@ class ExamAttemptAnswer(models.Model):
 
     class Meta:
         unique_together = ("attempt", "question")
+
+class ExamAttempt(models.Model):
+    exam = models.ForeignKey("Exam", on_delete=models.CASCADE, related_name="attempts")
+    delegate_name = models.CharField(max_length=120)
+    date_of_birth = models.DateField()
+    instructor = models.ForeignKey("Instructor", null=True, blank=True, on_delete=models.SET_NULL)
+    exam_date = models.DateField()
+
+    started_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    score_correct = models.PositiveIntegerField(default=0)
+    total_questions = models.PositiveIntegerField(default=0)
+
+    passed = models.BooleanField(default=False)
+    viva_eligible = models.BooleanField(default=False)
+
+    # for future: instructor can flip this to allow a second attempt
+    retake_authorised = models.BooleanField(default=False)
+
+    @property
+    def attempt_number(self) -> int:
+        qs = (ExamAttempt.objects
+              .filter(exam=self.exam,
+                      delegate_name__iexact=self.delegate_name,
+                      date_of_birth=self.date_of_birth)
+              .order_by("started_at", "pk")
+              .values_list("pk", flat=True))
+        try:
+            return list(qs).index(self.pk) + 1
+        except ValueError:
+            return 1  # fallback if not in the list
+
+class ExamAttemptAnswer(models.Model):
+    attempt = models.ForeignKey("ExamAttempt", on_delete=models.CASCADE, related_name="answers")
+    question = models.ForeignKey("ExamQuestion", on_delete=models.CASCADE)
+    answer = models.ForeignKey("ExamAnswer", null=True, blank=True, on_delete=models.SET_NULL)
+    is_correct = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ("attempt", "question")
