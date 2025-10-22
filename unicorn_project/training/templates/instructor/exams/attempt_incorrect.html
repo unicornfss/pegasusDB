@@ -39,47 +39,7 @@
     </div>
   </div>
 
-  {# Viva panel: only when currently viva-eligible and not yet decided #}
-  {% if viva_eligible and not viva_decided_at %}
-    <div class="card mb-3">
-      <div class="card-header">Viva decision</div>
-      <div class="card-body">
-        <form method="post" class="row g-3">
-          {% csrf_token %}
-          <input type="hidden" name="save_viva" value="1">
-
-          <div class="col-12">
-            <label class="form-label"><strong>Viva notes (optional)</strong></label>
-            <textarea name="viva_notes" class="form-control" rows="3">{{ attempt.viva_notes }}</textarea>
-            <div class="form-text">Record the discussion and rationale for the viva outcome.</div>
-          </div>
-
-          <div class="col-md-6">
-            <label class="form-label"><strong>Result following viva</strong></label>
-            <div class="d-flex gap-4">
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_pass" value="pass" required>
-                <label class="form-check-label" for="viva_pass">Pass</label>
-              </div>
-              <div class="form-check">
-                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_fail" value="fail" required>
-                <label class="form-check-label" for="viva_fail">Fail</label>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-md-6 d-flex align-items-end justify-content-end">
-            <button class="btn btn-success">Save viva decision</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  {% elif viva_decided_at %}
-    <div class="alert alert-info">
-      Viva decision recorded on {{ viva_decided_at|date:"j M Y, H:i" }}.
-    </div>
-  {% endif %}
-
+  {# WRONG ANSWERS — show all options for each wrong question #}
   <div class="card mb-3">
     <div class="card-header">Only incorrect responses</div>
     <div class="card-body p-0">
@@ -88,10 +48,21 @@
           {% for aa in wrong %}
             <li class="list-group-item">
               <div class="mb-2"><strong>Q{{ forloop.counter }}.</strong> {{ aa.question.text }}</div>
-              {% if aa.answer %}
-                <div><strong>Chosen:</strong> {{ aa.answer.text }}</div>
-              {% else %}
-                <div class="text-danger"><em>No answer selected.</em></div>
+
+              <ul class="list-unstyled ms-3 mb-0">
+                {% for opt in aa.question.answers.all %}
+                  <li class="mb-1">
+                    {% if aa.answer and aa.answer.id == opt.id %}
+                      <strong>{{ opt.text }}</strong> <span class="badge bg-primary">Chosen</span>
+                    {% else %}
+                      {{ opt.text }}
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+
+              {% if not aa.answer %}
+                <div class="text-danger mt-2"><em>No answer selected.</em></div>
               {% endif %}
             </li>
           {% endfor %}
@@ -110,6 +81,78 @@
       {% endif %}
     </div>
   </div>
+
+  {# VIVA PANEL — below wrong answers #}
+  {% if show_viva_form %}
+    <div class="card mb-3">
+      <div class="card-header">Viva decision</div>
+      <div class="card-body">
+        <form method="post" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="save_viva" value="1">
+
+          <div class="col-12">
+            <label class="form-label"><strong>Viva notes (optional)</strong></label>
+            <textarea name="viva_notes" class="form-control" rows="3">{{ viva_notes_prefill }}</textarea>
+            <div class="form-text">Record the discussion and rationale for the viva outcome.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label"><strong>Result following viva</strong></label>
+            <div class="d-flex gap-4">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_pass" value="pass"
+                       {% if viva_selected == "pass" %}checked{% endif %} required>
+                <label class="form-check-label" for="viva_pass">Pass</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_fail" value="fail"
+                       {% if viva_selected == "fail" %}checked{% endif %} required>
+                <label class="form-check-label" for="viva_fail">Fail</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6 d-flex align-items-end justify-content-end">
+            <button class="btn btn-success">Save viva decision</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% elif viva_decided_summary %}
+    <div class="card mb-3">
+      <div class="card-header">Viva decision recorded</div>
+      <div class="card-body">
+        <div class="mb-2">
+          <strong>Outcome:</strong>
+          {% if viva_decided_summary.outcome == "pass" %}
+            <span class="badge bg-success">Pass</span>
+          {% else %}
+            <span class="badge bg-danger">Fail</span>
+          {% endif %}
+        </div>
+
+        {% if viva_decided_summary.when %}
+          <div class="mb-2"><strong>Recorded:</strong> {{ viva_decided_summary.when|date:"j M Y, H:i" }}</div>
+        {% endif %}
+
+        {% if viva_decided_summary.by %}
+          <div class="mb-2"><strong>By:</strong> {{ viva_decided_summary.by }}</div>
+        {% endif %}
+
+        {% if viva_decided_summary.notes %}
+          <div><strong>Notes:</strong><br>{{ viva_decided_summary.notes|linebreaksbr }}</div>
+        {% endif %}
+      </div>
+      <div class="card-footer d-flex justify-content-end">
+        {# Re-open the form for editing #}
+        <a class="btn btn-outline-secondary"
+           href="?{% if back_id %}back={{ back_id }}&{% endif %}tab={{ request.GET.tab|default:'exams' }}&edit_viva=1">
+          Edit viva decision
+        </a>
+      </div>
+    </div>
+  {% endif %}
+
 </div>
 {% endblock %}
-  

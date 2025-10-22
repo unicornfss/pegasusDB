@@ -40,10 +40,8 @@ from .utils.invoice import (
 )
 
 def _can_view_attempt(user, attempt) -> bool:
-    # staff/superusers: always allowed
     if getattr(user, "is_superuser", False) or getattr(user, "is_staff", False):
         return True
-    # instructors can see their own attempts, and attempts not assigned
     instr = getattr(user, "instructor", None)
     if not instr:
         return False
@@ -51,7 +49,6 @@ def _can_view_attempt(user, attempt) -> bool:
     return (a_instr_id is None) or (a_instr_id == instr.id)
 
 def _display_name_for_attempt(attempt) -> str:
-    # Try common name fields; return em dash if missing
     for f in ("name", "delegate_name"):
         val = getattr(attempt, f, None)
         if val:
@@ -123,44 +120,21 @@ def _can_authorise_retest(user, attempt) -> bool:
     return number <= 1
 
 def _attempt_header_stats(attempt):
-    """
-    Returns a dict for the header:
-      - display_name
-      - correct_count
-      - total_questions
-      - result_label ('Pass' | 'Viva' | 'Fail')
-      - result_class ('success' | 'warning' | 'danger')
-    Uses recorded viva decision when present; otherwise computes from thresholds.
-    """
-    from django.db.models import Count
-
-    # Score
+    """Returns header dict preferring recorded viva decision."""
     correct = ExamAttemptAnswer.objects.filter(attempt=attempt, is_correct=True).count()
     total   = ExamAttemptAnswer.objects.filter(attempt=attempt).aggregate(n=Count("id"))["n"] or 0
 
-    # Helper for name
-    def _name(a):
-        for f in ("name", "delegate_name"):
-            v = getattr(a, f, None)
-            if v:
-                return str(v)
-        first = getattr(a, "first_name", "") or ""
-        last  = getattr(a, "last_name", "") or ""
-        full = f"{first} {last}".strip()
-        return full or "—"
-
-    # If viva has already been decided, show final outcome
+    # If viva already decided, honour recorded outcome
     if hasattr(attempt, "viva_eligible") and not getattr(attempt, "viva_eligible", False):
         decided_pass = bool(getattr(attempt, "passed", False))
         return {
-            "display_name": _name(attempt),
+            "display_name": _display_name_for_attempt(attempt),
             "correct_count": correct,
             "total_questions": total,
             "result_label": "Pass" if decided_pass else "Fail",
             "result_class": "success" if decided_pass else "danger",
         }
 
-    # Otherwise compute by thresholds
     exam = getattr(attempt, "exam", None)
     passp = getattr(exam, "pass_mark_percent", 70) or 70
     viva_p = getattr(exam, "viva_threshold_percent", None)
@@ -174,13 +148,12 @@ def _attempt_header_stats(attempt):
         label, klass = "Fail", "danger"
 
     return {
-        "display_name": _name(attempt),
+        "display_name": _display_name_for_attempt(attempt),
         "correct_count": correct,
         "total_questions": total,
         "result_label": label,
         "result_class": klass,
     }
-
 
 def _back_to_booking_url(attempt: ExamAttempt) -> str:
     """
@@ -2400,7 +2373,7 @@ def instructor_attempt_review(request, attempt_id: int):
 
 @login_required
 def instructor_attempt_incorrect(request, attempt_id: int):
-    """Show incorrect answers. Allow recording a viva decision and authorising a re-test."""
+    """Show incorrect answers, allow viva decision (with edit), and authorise re-test."""
     attempt = get_object_or_404(
         ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor"),
         pk=attempt_id
@@ -2408,41 +2381,31 @@ def instructor_attempt_incorrect(request, attempt_id: int):
     if not _can_view_attempt(request.user, attempt):
         return HttpResponseForbidden("Not allowed.")
 
-    # --- Handle POSTs -------------------------------------------------------
-    # Save viva decision (pass/fail + notes)
+    # --- POST: save viva decision ---
     if request.method == "POST" and request.POST.get("save_viva") == "1":
-        if bool(getattr(attempt, "viva_eligible", False)):
+        if bool(getattr(attempt, "viva_eligible", False)) or request.GET.get("edit_viva") == "1":
             outcome = (request.POST.get("viva_outcome") or "").strip().lower()
             notes   = (request.POST.get("viva_notes") or "").strip()
-
             if outcome in ("pass", "fail"):
-                # Persist to real fields you have
+                # Persist to your real fields
                 if hasattr(attempt, "passed"):
                     attempt.passed = (outcome == "pass")
                 if hasattr(attempt, "viva_eligible"):
-                    attempt.viva_eligible = False  # decision made, no longer viva-eligible
-
-                # Optional finished timestamp if not already set
+                    attempt.viva_eligible = False  # considered decided now (even in edit mode)
                 if not getattr(attempt, "finished_at", None):
-                    from django.utils.timezone import now
                     attempt.finished_at = now()
-
-                # If your model has these, they’ll get filled; otherwise ignored
+                # Optional fields if present
                 if hasattr(attempt, "viva_notes"):
                     attempt.viva_notes = notes
                 if hasattr(attempt, "viva_decided_at"):
-                    from django.utils.timezone import now
                     attempt.viva_decided_at = now()
                 if hasattr(attempt, "viva_decided_by"):
                     attempt.viva_decided_by = getattr(request.user, "instructor", None) or request.user
-
                 attempt.save()
-
-        # redirect (PRG) and preserve back/tab
         return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
                         f"{'?' + request.GET.urlencode() if request.GET else ''}")
 
-    # Authorise a re-test (if your model has such a flag)
+    # --- POST: authorise a re-test ---
     if request.method == "POST" and request.POST.get("authorise") == "1":
         if hasattr(attempt, "retest_authorised"):
             attempt.retest_authorised = True
@@ -2450,7 +2413,7 @@ def instructor_attempt_incorrect(request, attempt_id: int):
         return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
                         f"{'?' + request.GET.urlencode() if request.GET else ''}")
 
-    # --- Build data for display ---------------------------------------------
+    # --- DATA for display ---
     wrong = (
         ExamAttemptAnswer.objects
         .select_related("question", "answer")
@@ -2460,11 +2423,29 @@ def instructor_attempt_incorrect(request, attempt_id: int):
 
     stats = _attempt_header_stats(attempt)
 
-    # Whether to show viva form; expose decided_at if present
     viva_eligible = bool(getattr(attempt, "viva_eligible", False))
     viva_decided_at = getattr(attempt, "viva_decided_at", None)
+    viva_decided_by = getattr(attempt, "viva_decided_by", None)
+    viva_notes = getattr(attempt, "viva_notes", "")
 
-    # Simple rule for retest button (tweak to your rules)
+    # Allow re-open form for editing via ?edit_viva=1
+    edit_mode = request.GET.get("edit_viva") == "1"
+    show_viva_form = (viva_eligible and not viva_decided_at) or edit_mode
+
+    # Pre-select radio if a decision already exists
+    viva_selected = ""
+    if not viva_eligible:
+        viva_selected = "pass" if bool(getattr(attempt, "passed", False)) else "fail"
+
+    viva_decided_summary = None
+    if not show_viva_form and (not viva_eligible):
+        viva_decided_summary = {
+            "outcome": viva_selected or ("pass" if bool(getattr(attempt, "passed", False)) else "fail"),
+            "when": viva_decided_at,
+            "by": getattr(viva_decided_by, "name", None) or getattr(viva_decided_by, "username", None),
+            "notes": viva_notes,
+        }
+
     can_authorise_retest = not bool(getattr(attempt, "passed", False))
 
     ctx = {
@@ -2474,20 +2455,25 @@ def instructor_attempt_incorrect(request, attempt_id: int):
 
         "back_id": request.GET.get("back") or request.GET.get("booking") or "",
 
-        # header figures
+        # header
         "display_name": stats["display_name"],
         "correct_count": stats["correct_count"],
         "total_questions": stats["total_questions"],
         "result_label": stats["result_label"],
         "result_class": stats["result_class"],
 
+        # wrong answers list
         "wrong": wrong,
 
-        # viva
+        # viva block
+        "show_viva_form": show_viva_form,
         "viva_eligible": viva_eligible,
         "viva_decided_at": viva_decided_at,
+        "viva_selected": viva_selected,
+        "viva_notes_prefill": viva_notes,
+        "viva_decided_summary": viva_decided_summary,
 
-        # retest
+        # retest button
         "can_authorise_retest": can_authorise_retest,
     }
     return render(request, "instructor/exams/attempt_incorrect.html", ctx)
