@@ -146,4 +146,37 @@
 </div>
 {% endif %}
 
+<script>
+  // 1) Your callback: binds Places Autocomplete to the address input
+  function initAutocomplete() {
+    // adjust this id to your field's id if different:
+    var input =
+      document.getElementById('id_address_line') ||   // Business.address_line
+      document.getElementById('id_address') ||        // generic
+      document.querySelector('input[name="address_line"], input[name="address"]');
+
+    if (!input) return;
+
+    var ac = new google.maps.places.Autocomplete(input, {
+      types: ['address'] // restrict to addresses
+      // componentRestrictions: { country: ['gb'] } // optional
+    });
+
+    // optional: handle when a suggestion is chosen
+    ac.addListener('place_changed', function () {
+      var place = ac.getPlace();
+      // console.log(place);
+      // If you want to split postcode/town later, we can add that.
+    });
+  }
+
+  // 2) Expose callback globally for Google loader
+  window.initAutocomplete = initAutocomplete;
+</script>
+
+<!-- 3) Load Google Maps JS with the Places library -->
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initAutocomplete">
+</script>
+
 {% endblock %}

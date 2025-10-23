@@ -174,3 +174,23 @@
 .list-group-item:has(input[type="radio"]:checked) span {
   font-weight: 600;
 }
+
+/* === Sidebar: stick to viewport on desktop & don't shrink === */
+@media (min-width: 992px) {
+  .sidebar {
+    position: sticky;   /* keeps it fixed while the page scrolls */
+    top: 0;
+    height: 100vh;      /* full viewport height */
+    overflow-y: auto;   /* sidebar scrolls internally if long */
+    flex-shrink: 0;     /* prevents the width from collapsing */
+    /* keep your existing width (e.g., 280px) from earlier rules */
+  }
+
+  /* whichever you use for the main content area, keep it flexible */
+  .content, main {
+    min-width: 0;
+  }
+}
+
+/* If the sticky doesn’t “stick”, set the wrapper's overflow to visible */
+.layout { overflow: visible; }

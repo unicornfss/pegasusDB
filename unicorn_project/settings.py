@@ -33,6 +33,10 @@ else:
     sqlite_url = DB_URL or f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
     DATABASES = {"default": dj_database_url.parse(sqlite_url, conn_max_age=0)}
 
+# ----- APIs ------------------------
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+
+
 # --- Apps / Middleware ---------------------------------------
 INSTALLED_APPS = [
     "django.contrib.admin",
