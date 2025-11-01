@@ -139,6 +139,7 @@ urlpatterns = [
     instv.instructor_attempt_authorize_retake,
     name="instructor_attempt_authorize_retake",
 ),
+    
 
     path(
     "app/instructor/whoami/",
