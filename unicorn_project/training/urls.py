@@ -8,6 +8,14 @@ from . import views_instructor as instv
 from . import views_instructor
 from . import views_public
 
+from .views_public import (
+    delegate_exam_start,      # start (enter details / match register)
+    delegate_exam_rules,      # rules screen
+    delegate_exam_run,        # run the exam (Q&A screen)
+    delegate_exam_review,     # review answers before submit
+    delegate_exam_finish,     # results
+)
+
 
 urlpatterns = [
     # ---------- Core / Home ----------

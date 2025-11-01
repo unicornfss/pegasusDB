@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% load static %}
+
 {% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}{% endblock %}
+
 {% block content %}
 <div class="container" style="max-width: 720px;">
+
   <h1 class="h4 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
-  {% if message is not None %}
-    <div class="alert {% if match_ok %}alert-success{% else %}alert-warning{% endif %} mb-3">
-      {{ message }}
-    </div>
-  {% endif %}
-  {% if match_ok %}
+
+  {% comment %}If the name/date matched the register, we show a green “continue” button. All banners/alerts are handled by Django messages in base.html.{% endcomment %}
+  {% if can_continue %}
     <form class="d-flex justify-content-end mb-3" method="get" action="{% url 'delegate_exam_rules' %}">
       <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
       <input type="hidden" name="name" value="{{ form.name.value|default_if_none:'' }}">
@@ -19,6 +19,7 @@
       <button class="btn btn-success">Continue to exam rules</button>
     </form>
   {% endif %}
+
   <form method="post" class="card" novalidate>
     {% csrf_token %}
     <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
@@ -28,33 +29,39 @@
         {{ form.exam_code }}
         <div class="form-text">This is set from the QR/link.</div>
       </div>
+
       <div class="col-md-8">
         <label class="form-label">Your full name</label>
         {{ form.name }}
         <div class="form-text">Enter your name exactly as on the register.</div>
         {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
+
       <div class="col-md-4">
         <label class="form-label">Date of birth</label>
         {{ form.date_of_birth }}
         {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
+
       <div class="col-md-8">
         <label class="form-label">Instructor</label>
         {{ form.instructor }}
         {% for e in form.instructor.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
+
       <div class="col-md-4">
         <label class="form-label">Exam date</label>
         {{ form.exam_date }}
         {% for e in form.exam_date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
     </div>
+
     <div class="card-footer d-flex justify-content-between gap-2">
       <a class="btn btn-outline-secondary" href="?examcode={{ exam.exam_code }}">Reset</a>
       <button class="btn btn-primary">Check my details</button>
     </div>
   </form>
+
   <p class="small text-muted mt-3">
     If your details don’t match, please confirm the spelling and date format with your instructor.
   </p>

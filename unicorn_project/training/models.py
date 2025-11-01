@@ -661,8 +661,8 @@ class ExamAttempt(models.Model):
     passed = models.BooleanField(default=False)
     viva_eligible = models.BooleanField(default=False)
 
-    # for future: instructor can flip this to allow a second attempt
     retake_authorised = models.BooleanField(default=False)
+    retake_authorised_until = models.DateTimeField(null=True, blank=True)
 
     @property
     def attempt_number(self) -> int:

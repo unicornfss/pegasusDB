@@ -2373,7 +2373,10 @@ def instructor_attempt_review(request, attempt_id: int):
 
 @login_required
 def instructor_attempt_incorrect(request, attempt_id: int):
-    """Show incorrect answers, allow viva decision (with edit), and authorise re-test."""
+    """
+    Show incorrect answers, allow viva decision (with edit), and authorise re-test.
+    When authorising a re-test, set a 60-minute expiry window.
+    """
     attempt = get_object_or_404(
         ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor"),
         pk=attempt_id
@@ -2387,14 +2390,12 @@ def instructor_attempt_incorrect(request, attempt_id: int):
             outcome = (request.POST.get("viva_outcome") or "").strip().lower()
             notes   = (request.POST.get("viva_notes") or "").strip()
             if outcome in ("pass", "fail"):
-                # Persist to your real fields
                 if hasattr(attempt, "passed"):
                     attempt.passed = (outcome == "pass")
                 if hasattr(attempt, "viva_eligible"):
-                    attempt.viva_eligible = False  # considered decided now (even in edit mode)
+                    attempt.viva_eligible = False
                 if not getattr(attempt, "finished_at", None):
                     attempt.finished_at = now()
-                # Optional fields if present
                 if hasattr(attempt, "viva_notes"):
                     attempt.viva_notes = notes
                 if hasattr(attempt, "viva_decided_at"):
@@ -2405,13 +2406,24 @@ def instructor_attempt_incorrect(request, attempt_id: int):
         return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
                         f"{'?' + request.GET.urlencode() if request.GET else ''}")
 
-    # --- POST: authorise a re-test ---
-    if request.method == "POST" and request.POST.get("authorise") == "1":
-        if hasattr(attempt, "retest_authorised"):
-            attempt.retest_authorised = True
-            attempt.save(update_fields=["retest_authorised"])
-        return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
-                        f"{'?' + request.GET.urlencode() if request.GET else ''}")
+    # --- POST: authorise a re-test (60-minute window) ---
+    if request.method == "POST" and "authorise" in request.POST:
+        # Allow authorisation only if the attempt is not a pass
+        if getattr(attempt, "passed", False):
+            messages.error(request, "This attempt is a pass. You can only authorise a re-test for failed attempts.")
+            return redirect(request.get_full_path())
+
+        # Set/refresh 60-minute authorisation window
+        attempt.retake_authorised = True
+        attempt.retake_authorised_until = now() + timedelta(minutes=60)
+        attempt.save(update_fields=["retake_authorised", "retake_authorised_until"])
+
+        messages.success(
+            request,
+            "Re-test authorised for this delegate for the next 60 minutes."
+        )
+        # Redirect back (keeps ?back=...&tab=exams)
+        return redirect(request.get_full_path())
 
     # --- DATA for display ---
     wrong = (
