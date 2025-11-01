@@ -2355,7 +2355,8 @@ def instructor_attempt_review(request, attempt_id: int):
         .order_by("question__order", "question_id")
     )
 
-    correct_count, total_questions, result_text, result_class = _attempt_header_stats(attempt)
+    # IMPORTANT: _attempt_header_stats returns a dict; do NOT unpack into 4 vars
+    stats = _attempt_header_stats(attempt)
 
     ctx = {
         "attempt": attempt,
@@ -2363,13 +2364,17 @@ def instructor_attempt_review(request, attempt_id: int):
         "course_type": attempt.exam.course_type,
         "answers": answers,
         "display_name": _display_name_for_attempt(attempt) or "—",
-        "correct_count": correct_count,
-        "total_questions": total_questions,
-        "result_label": result_text,
-        "result_class": result_class,
+
+        # pull values from the dict
+        "correct_count": stats.get("correct_count"),
+        "total_questions": stats.get("total_questions"),
+        "result_label": stats.get("result_label") or stats.get("result_text"),
+        "result_class": stats.get("result_class"),
+
         "back_url": _back_url_for_attempt(request, attempt),
     }
     return render(request, "instructor/exams/attempt_review.html", ctx)
+
 
 @login_required
 def instructor_attempt_incorrect(request, attempt_id: int):

@@ -1,25 +1,20 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}{{ exam.course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}{% endblock %}
+{% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} (Review){% endblock %}
 
 {% block content %}
 <div class="container" style="max-width: 900px;">
 
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h5 mb-0">{{ exam.course_type.name }}: Exam {{ exam.exam_code|slice:"-2:" }}</h1>
-      {% if back_id %}
-      <a class="btn btn-outline-secondary"
-        href="{% url 'instructor_booking_detail' back_id %}?tab={{ request.GET.tab|default:'exams' }}">
-        Back
-      </a>
-    {% else %}
-      <a class="btn btn-outline-secondary" href="{% url 'instructor_bookings' %}">Back</a>
+    <h1 class="h5 mb-0">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} — Full review</h1>
+    {% if back_url %}
+      <a class="btn btn-outline-secondary" href="{{ back_url }}">Back</a>
     {% endif %}
   </div>
 
   <div class="alert alert-light border d-flex align-items-center gap-3">
-    <div><strong>Delegate:</strong> {{ display_name|default:"—" }}</div>
+    <div><strong>Delegate:</strong> {{ display_name }}</div>
     <div><strong>DOB:</strong> {{ attempt.date_of_birth|date:"j M Y"|default:"—" }}</div>
     <div><strong>Exam date:</strong> {{ attempt.exam_date|date:"j M Y"|default:"—" }}</div>
     <div><strong>Score:</strong> {{ correct_count }}/{{ total_questions }}</div>
@@ -35,32 +30,36 @@
   </div>
 
   <div class="card">
-    <div class="card-header">All answers</div>
-    <div class="card-body p-0">
-      {% if answers %}
-        <ol class="list-group list-group-numbered list-group-flush">
-          {% for aa in answers %}
-            <li class="list-group-item">
-              <div class="mb-2"><strong>Q{{ forloop.counter }}.</strong> {{ aa.question.text }}</div>
-              {% if aa.answer %}
-                <div class="d-flex align-items-center gap-2">
-                  <span><strong>Chosen:</strong> {{ aa.answer.text }}</span>
-                  {% if aa.is_correct %}
-                    <span class="badge bg-success">Correct</span>
-                  {% else %}
-                    <span class="badge bg-danger">Incorrect</span>
-                  {% endif %}
-                </div>
-              {% else %}
-                <div class="text-danger"><em>No answer selected.</em></div>
-              {% endif %}
-            </li>
-          {% endfor %}
-        </ol>
-      {% else %}
-        <div class="p-3 text-muted">No recorded answers.</div>
-      {% endif %}
-    </div>
+    <div class="card-header">All responses</div>
+    <ol class="list-group list-group-numbered list-group-flush">
+      {% for aa in answers %}
+        <li class="list-group-item">
+          <div class="mb-2">
+            <strong>Q{{ forloop.counter }}.</strong> {{ aa.question.text }}
+          </div>
+
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge {% if aa.is_correct %}bg-success{% else %}bg-danger{% endif %}">
+              {% if aa.is_correct %}Correct{% else %}Incorrect{% endif %}
+            </span>
+            <span><strong>Chosen:</strong> {{ aa.answer.text }}</span>
+          </div>
+
+          {# Optional: show the other choices #}
+          {% if aa.question.answers.exists %}
+            <div class="mt-2 small text-muted">
+              <strong>Other options:</strong>
+              {% for opt in aa.question.answers.all %}
+                {% if opt.id != aa.answer_id %}
+                  <span class="me-2">{{ opt.text }}</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
   </div>
+
 </div>
 {% endblock %}
