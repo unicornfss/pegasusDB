@@ -16,7 +16,7 @@ from .models import (
     Business, TrainingLocation, CourseType,
     Instructor, Booking, BookingDay, Attendance, CourseCompetency,
     Invoice, InvoiceItem,
-    Exam, ExamAttempt, ExamAttemptAnswer,
+    Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer
 )
 
 # ---------- Forms ----------
@@ -386,3 +386,85 @@ class ExamAdmin(admin.ModelAdmin):
         v = getattr(obj, "viva_percent", None)
         return f"{v}%" if v is not None else "—"
     viva_percent_admin.short_description = "Viva %"
+
+class ExamQuestionResource(resources.ModelResource):
+    # Use exam_code for the FK so CSVs are easy to read/edit
+    exam = fields.Field(
+        column_name="exam_code",
+        attribute="exam",
+        widget=ForeignKeyWidget(Exam, "exam_code"),
+    )
+
+    class Meta:
+        model = ExamQuestion
+        fields = ("id", "exam", "order", "text")
+        export_order = ("id", "exam", "order", "text")
+
+
+class ExamAnswerResource(resources.ModelResource):
+    # Reference the parent question by its primary key.
+    # (This keeps imports unambiguous. You can export first to get the IDs.)
+    question = fields.Field(
+        column_name="question_id",
+        attribute="question",
+        widget=ForeignKeyWidget(ExamQuestion, "id"),
+    )
+
+    class Meta:
+        model = ExamAnswer
+        fields = ("id", "question", "order", "text", "is_correct")
+        export_order = ("id", "question", "order", "text", "is_correct")
+
+
+# ---------- Inlines & Admins ----------
+
+class ExamAnswerInline(admin.TabularInline):
+    model = ExamAnswer
+    extra = 1
+    fields = ("order", "text", "is_correct")
+    ordering = ("order", "id")
+
+
+@admin.register(ExamQuestion)
+class ExamQuestionAdmin(ImportExportModelAdmin):
+    """Questions visible as a standalone table + import/export."""
+    resource_classes = [ExamQuestionResource]
+    list_display = ("id", "exam", "order", "short_text", "answers_count")
+    list_filter = ("exam",)
+    search_fields = ("text", "exam__exam_code", "exam__title", "exam__course_type__name")
+    ordering = ("exam__exam_code", "order", "id")
+    autocomplete_fields = ("exam",)
+    inlines = [ExamAnswerInline]
+
+    @admin.display(description="Question")
+    def short_text(self, obj: ExamQuestion):
+        t = (obj.text or "").strip()
+        return (t[:80] + "…") if len(t) > 80 else t or "—"
+
+    @admin.display(description="# Answers")
+    def answers_count(self, obj: ExamQuestion):
+        # avoids N+1 if you want: annotate in a custom queryset; for now quick count()
+        return obj.answers.count()
+
+
+@admin.register(ExamAnswer)
+class ExamAnswerAdmin(ImportExportModelAdmin):
+    """Answers also available as a flat table + import/export."""
+    resource_classes = [ExamAnswerResource]
+    list_display = ("id", "question", "order", "short_text", "is_correct")
+    list_filter = ("question__exam", "is_correct")
+    search_fields = (
+        "text",
+        "question__text",
+        "question__exam__exam_code",
+        "question__exam__title",
+        "question__exam__course_type__name",
+    )
+    ordering = ("question__exam__exam_code", "question__order", "order", "id")
+    autocomplete_fields = ("question",)
+
+    @admin.display(description="Answer")
+    def short_text(self, obj: ExamAnswer):
+        t = (obj.text or "").strip()
+        return (t[:80] + "…") if len(t) > 80 else t or "—"
+# ---------------------------------------------------------------------------
