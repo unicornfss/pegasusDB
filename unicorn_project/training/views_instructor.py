@@ -544,21 +544,12 @@ def instructor_booking_detail(request, pk):
         pk=pk,
     )
     if not instr or booking.instructor_id != instr.id:
-        from django.contrib import messages
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
     is_locked = (getattr(booking, "status", "") == "completed")
 
-    # ---------------- existing POST handling (notes, close_course, invoicing) stays as-is ----------------
-    # ... keep your current POST block here unchanged ...
-    # -----------------------------------------------------------------------------------------------------
-
-    # Notes form (GET path)
-    from .forms import BookingNotesForm
-    notes_form = BookingNotesForm(instance=booking)
-
-    # Days and registers
+    # ---------- Days / registers (computed early so POST can use them) ----------
     days_qs = (
         BookingDay.objects
         .filter(booking=booking)
@@ -588,6 +579,71 @@ def instructor_booking_detail(request, pk):
     )
 
     booking_dates = list(days_qs.values_list("date", flat=True))
+
+    # ----------------------------- POST handling -----------------------------
+    if request.method == "POST":
+        action = request.POST.get("action", "").strip()
+
+        # Save course notes
+        if action == "save_notes":
+            from .forms import BookingNotesForm
+            form = BookingNotesForm(request.POST, instance=booking)
+            if form.is_valid():
+                form.save()
+                messages.success(request, "Notes saved.")
+            else:
+                messages.error(request, "Could not save notes. Please check the form.")
+            return redirect(redirect("instructor_booking_detail", pk=booking.pk).url)
+
+        # Close course and move to invoicing
+        if action == "close_course":
+            reg_manual    = request.POST.get("reg_manual") in ("1", "true", "on", "yes")
+            assess_manual = request.POST.get("assess_manual") in ("1", "true", "on", "yes")
+
+            regs_ok   = registers_all_days or reg_manual
+            assess_ok = assessments_all_complete or assess_manual
+
+            if not (regs_ok and assess_ok):
+                messages.error(
+                    request,
+                    "Cannot close the course yet — please complete registers/assessments "
+                    "or tick 'Manual submission to follow'."
+                )
+                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=closure")
+
+            # Persist manual flags if your Booking model has these fields (safe no-ops if not)
+            if hasattr(booking, "closure_register_manual"):
+                booking.closure_register_manual = bool(reg_manual)
+            if hasattr(booking, "closure_assess_manual"):
+                booking.closure_assess_manual = bool(assess_manual)
+
+            booking.status = "completed"
+            booking.save(update_fields=[
+                "status",
+                *(["closure_register_manual"] if hasattr(booking, "closure_register_manual") else []),
+                *(["closure_assess_manual"] if hasattr(booking, "closure_assess_manual") else []),
+            ])
+
+            # ✅ NEW: build and email all course documents to admin
+            try:
+                sent = email_all_course_docs_to_admin(request, booking)
+                if sent:
+                    messages.success(request, f"Course closed. Sent {sent} document(s) to admin.")
+                else:
+                    messages.warning(request, "Course closed, but no documents were attached (nothing to send).")
+            except Exception as e:
+                messages.error(request, f"Course closed, but failed to email documents: {e}")
+
+            # Jump straight to the Invoicing tab
+            return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing")
+
+
+        # (Optional) other actions like 'start_invoicing' could go here
+
+    # ----------------------------- GET: build context -----------------------------
+    from .forms import BookingNotesForm
+    notes_form = BookingNotesForm(instance=booking)
+
     if booking_dates:
         fb_qs = (
             FeedbackResponse.objects
@@ -603,7 +659,6 @@ def instructor_booking_detail(request, pk):
     fb_count = fb_qs.count()
     fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
 
-    # ---------- base context (what the template already expects) ----------
     ctx = {
         "title": booking.course_type.name,
         "booking": booking,
@@ -621,7 +676,7 @@ def instructor_booking_detail(request, pk):
         "assessments_manual": getattr(booking, "closure_assess_manual", False),
     }
 
-    # ---------- add the new Exam attempts accordion data (UPDATE, do not overwrite) ----------
+    # ---------- Exam attempts accordion ----------
     course_exams = list(booking.course_type.exams.order_by("sequence"))
     if booking_dates:
         attempts_qs = (
@@ -645,18 +700,19 @@ def instructor_booking_detail(request, pk):
         "attempts_by_exam": dict(attempts_by_exam),
     })
 
-    # If you have helpers that enrich ctx (invoicing, assessment), keep them:
+    # Optional helpers
     try:
-        from .views_instructor import _invoicing_tab_context  # if defined elsewhere
+        from .views_instructor import _invoicing_tab_context
         ctx.update(_invoicing_tab_context(booking))
     except Exception:
         pass
 
     try:
-        from .views_instructor import _assessment_context  # if defined elsewhere
+        from .views_instructor import _assessment_context
         ctx.update(_assessment_context(booking, request.user))
     except Exception:
         ctx.update({"delegates": [], "competencies": [], "existing": {}, "levels": []})
+
     ctx["active_tab"] = request.GET.get("tab", "")
 
     return render(request, "instructor/booking_detail.html", ctx)

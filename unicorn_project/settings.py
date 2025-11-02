@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "import_export",
     "unicorn_project.training.apps.TrainingConfig",
+    "anymail"
 ]
 
 MIDDLEWARE = [
@@ -126,8 +127,14 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Unicorn Admin System <onbo
 DEV_CATCH_ALL_EMAIL = os.getenv("DEV_CATCH_ALL_EMAIL", "you@example.com")
 ADMIN_INBOX_EMAIL = os.getenv("ADMIN_INBOX_EMAIL", "info@adminforge.co.uk")
 
-# Force a safe backend so any stray Django EmailMessage calls won't try SMTP
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.dummy.EmailBackend"
+# Email backend selection
+if os.getenv("EMAIL_PROVIDER", "").lower() == "resend":
+    EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+elif DEBUG:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"  # or dummy if you want
+
 
 # --- HTML invoice rendering & wkhtmltopdf --------------------
 WKHTMLTOPDF_CMD = os.getenv("WKHTMLTOPDF_CMD", "")
@@ -144,4 +151,9 @@ SETTINGS_EMAIL_SUMMARY = {
     "default_from": DEFAULT_FROM_EMAIL,
     "admin_inbox": ADMIN_INBOX_EMAIL,
     "dev_catch_all": DEV_CATCH_ALL_EMAIL,
+}
+
+ANYMAIL = {
+    "RESEND_API_KEY": os.getenv("RESEND_API_KEY"),
+    "SEND_DEFAULTS": {"from_email": DEFAULT_FROM_EMAIL},
 }
