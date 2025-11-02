@@ -1,0 +1,71 @@
+{# training/templates/legal/privacy.html #}
+{% extends "public/base_public_no_sidebar.html" %}
+{% block title %}Privacy notices{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 900px;">
+  <h1 class="h4 mb-3">Privacy notices</h1>
+
+  <div class="alert alert-info">
+    These notices explain how we use personal data across Registers, Exams, and Feedback.
+  </div>
+
+  <h2 class="h5">Registers (attendance)</h2>
+  <p>
+    We collect your name and attendance to confirm course participation and for safety/quality records.
+    We do not use register details to contact you directly. Registers may be shared with your employer,
+    but not with other organisations. Registers may be used to help create an assessment matrix.
+    If we must share for external audit, we will anonymise the data wherever possible.
+  </p>
+
+  <h2 class="h5">Exams</h2>
+  <p>
+    Exam data is used to evidence knowledge and verify eligibility to sit the exam. Personal information
+    is used only for identity and eligibility checks. It will not be used to contact you. Your overall
+    result (Pass/Fail/Viva outcome) may be shared with your employer; individual answers are not shared.
+    If external sharing is required (e.g., audit), we will anonymise responses wherever possible.
+  </p>
+
+  <h2 class="h5">Feedback</h2>
+  <p>
+    Feedback is used for internal quality monitoring. We will only contact you if you explicitly request
+    contact within the feedback form. Feedback may be shared with your employer.
+  </p>
+
+  <h2 class="h5">Lawful basis</h2>
+  <p>
+    We process attendance and exam results under <em>legitimate interests</em> (training delivery and
+    quality assurance) and, where relevant, <em>contract</em> (providing training services to your employer).
+    Feedback processing is based on <em>legitimate interests</em>, and contact from feedback occurs only if
+    you clearly consent to being contacted.
+  </p>
+
+  <h2 class="h5">Retention</h2>
+  <p>
+    We retain registers and exam results for up to <strong>7 years</strong> to meet training and audit
+    requirements, unless a longer period is required by a contractual or regulatory obligation applicable to a specific course.
+    Feedback records are typically retained for <strong>2 years</strong> for quality monitoring. We periodically review
+    and securely delete data that is no longer required.
+  </p>
+
+  <h2 class="h5">Storage location</h2>
+  <p>
+    Data is stored on secure servers hosted by our cloud provider(s). Infrastructure location may change over time,
+    but we require providers to meet appropriate security and compliance standards. Where data is transferred
+    outside the UK/EEA, we ensure appropriate safeguards are in place.
+  </p>
+
+  <h2 class="h5">Future employer portal</h2>
+  <p>
+    If an employer portal is enabled, employers will have read-only access to the registers and results of
+    their own staff only. Access will be role-based and restricted to authorised employer contacts.
+  </p>
+
+  <h2 class="h5">Your rights & contact</h2>
+  <p>
+    You can request access to your data, ask for corrections, or raise concerns about processing.
+    You can also <strong>request deletion</strong> where we have no continuing lawful basis to retain the data.
+    To exercise your rights, contact <a href="mailto:info@unicornsafety.co.uk">info@unicornsafety.co.uk</a>.
+  </p>
+</div>
+{% endblock %}

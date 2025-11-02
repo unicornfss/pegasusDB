@@ -660,3 +660,9 @@ def delegate_exam_finish(request):
         "viva_required": viva_required,
     }
     return render(request, "exam/finish.html", ctx)
+
+def privacy_notices(request):
+    """
+    Public privacy notices covering Registers, Exams and Feedback.
+    """
+    return render(request, "legal/privacy.html")

@@ -131,6 +131,7 @@ urlpatterns = [
     path("exam/run/", views_public.delegate_exam_run, name="delegate_exam_run"),
     path("exam/review/", views_public.delegate_exam_review, name="delegate_exam_review"),
     path("exam/finish/", views_public.delegate_exam_finish, name="delegate_exam_finish"),
+    path("privacy/", views_public.privacy_notices, name="privacy_notices"),
     
     path(
         "app/instructor/exams/attempt/<int:attempt_id>/review/",

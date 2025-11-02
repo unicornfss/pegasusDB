@@ -7,7 +7,7 @@
   <title>{% block title %}{% endblock %}</title>
   {% load static %}
 
-  {# If you already ship Bootstrap via static, swap this CDN for your static build #}
+  <!-- Bootstrap (swap to your static build if you prefer) -->
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
     rel="stylesheet"
@@ -16,7 +16,7 @@
   >
   <link rel="stylesheet" href="{% static 'css/site.css' %}">
   <style>
-    /* Small, safe mobile helpers */
+    /* page takes full viewport height so the footer sits at the bottom */
     .page-wrap { min-height: 100dvh; display: flex; flex-direction: column; }
     main { flex: 1 1 auto; }
     .card-narrow { max-width: 48rem; margin-inline: auto; }
@@ -34,12 +34,27 @@
     </header>
 
     <main class="container py-4">
+
+      {# --- FLASH MESSAGES (success / warning / error) --- #}
+      {% if messages %}
+        <div class="mb-3">
+          {% for m in messages %}
+            <div class="alert alert-{{ m.tags|default:'info' }} alert-dismissible fade show" role="alert">
+              {{ m }}
+              <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+
       {% block content %}{% endblock %}
     </main>
 
-    <footer class="border-top bg-white">
-      <div class="container py-3 text-secondary small">
-        {% block footer %}© {{ now|date:"Y" }}{% endblock %}
+    <!-- single footer (right side only on public pages) -->
+    <footer class="mt-auto py-3 border-top text-muted small">
+      <div class="container d-flex justify-content-between align-items-center" style="max-width: 960px;">
+        <div>&copy; {% now "Y" %} Unicorn Safety</div>
+        <div><a href="{% url 'privacy_notices' %}" class="text-decoration-none">Privacy notices</a></div>
       </div>
     </footer>
   </div>

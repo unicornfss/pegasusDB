@@ -1,0 +1,8 @@
+{# training/templates/public/base_public_no_sidebar.html #}
+{% extends "public/base_public.html" %}
+
+{# If your base_public.html defines a sidebar block, clear it here #}
+{% block sidebar %}{% endblock %}
+
+{# If it doesn’t use a sidebar block, you can simply copy base_public.html
+   and remove the sidebar markup instead of extending. #}
