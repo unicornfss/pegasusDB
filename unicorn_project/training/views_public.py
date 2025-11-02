@@ -17,7 +17,7 @@ from django.views.decorators.http import require_http_methods
 from math import ceil
 from urllib.parse import urlencode, unquote_plus
 
-import re
+import re, math
 
 def _norm_name(s: str) -> str:
     """Name normalisation used everywhere (case/space-insensitive)."""
@@ -145,34 +145,57 @@ def delegate_exam_start(request):
 from math import ceil
 # ...
 
+@ensure_csrf_cookie
 def delegate_exam_rules(request):
     code = (request.GET.get("examcode") or "").upper()
+    if not code:
+        return HttpResponseBadRequest("Missing exam code")
+
     exam = get_object_or_404(Exam, exam_code=code)
+    course_type = exam.course_type
 
-    carry = {
-        "examcode": exam.exam_code,
-        "name": (request.GET.get("name") or "").strip(),
-        "date_of_birth": (request.GET.get("date_of_birth") or "").strip(),
-        "instructor": (request.GET.get("instructor") or "").strip(),
-        "exam_date": (request.GET.get("exam_date") or "").strip(),
-    }
-    qs = urlencode({k: v for k, v in carry.items() if v != ""})
+    # values carried from the start page
+    name        = (request.GET.get("name") or "").strip()
+    date_of_birth = request.GET.get("date_of_birth") or ""
+    instructor  = request.GET.get("instructor") or ""
+    exam_date   = request.GET.get("exam_date") or ""
 
-    num_questions = exam.questions.count()
-    seconds_total = max(1, num_questions * 90)
-    minutes, seconds = divmod(seconds_total, 60)
-    required_correct = (exam.pass_mark_percent * num_questions + 99) // 100
+    # Timer: 90 seconds per question
+    num_questions   = exam.questions.count()
+    total_seconds   = num_questions * 90
+    minutes, seconds = divmod(total_seconds, 60)
 
-    return render(request, "exam/rules.html", {
+    # Pass/viva thresholds expressed as question counts
+    pass_mark_percent = exam.pass_mark_percent
+    required_correct  = ceil((pass_mark_percent / 100) * num_questions)
+
+    viva_required = None
+    viva_pass_percent = getattr(exam, "viva_pass_percent", None)
+    if viva_pass_percent:
+        viva_required = ceil((viva_pass_percent / 100) * num_questions)
+
+    # Build the querystring for the “Start exam” link
+    qs = urlencode({
+        "examcode":    exam.exam_code,
+        "name":        name,
+        "date_of_birth": date_of_birth,
+        "instructor":  instructor,
+        "exam_date":   exam_date,
+    })
+
+    context = {
         "exam": exam,
-        "course_type": exam.course_type,
+        "course_type": course_type,
         "num_questions": num_questions,
         "minutes": minutes,
         "seconds": seconds,
-        "pass_mark_percent": exam.pass_mark_percent,
+        "pass_mark_percent": pass_mark_percent,
         "required_correct": required_correct,
+        "viva_pass_percent": viva_pass_percent,
+        "viva_required": viva_required,   # None if not applicable
         "qs": qs,
-    })
+    }
+    return render(request, "exam/rules.html", context)
 
 def _remaining_seconds(attempt) -> int:
     """

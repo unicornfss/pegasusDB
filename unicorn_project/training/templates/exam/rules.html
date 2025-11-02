@@ -18,7 +18,16 @@
         <li>This is an individual assessment. No talking or collaboration.</li>
         <li>No phones, notes, or reference materials.</li>
         <li>You have a total of <strong>{{ minutes }}:{% if seconds < 10 %}0{% endif %}{{ seconds }}</strong> to complete {{ num_questions }} questions.</li>
-        <li>Pass mark: <strong>{{ pass_mark_percent }}%</strong> (you must answer at least <strong>{{ required_correct }}</strong> correctly).</li>
+        <li>Pass mark: <strong>{{ pass_mark_percent }}%</strong>
+          (you must answer at least <strong>{{ required_correct }}</strong> correctly).
+        </li>
+
+        {% if viva_pass_percent and viva_required %}
+        <li>Viva threshold: <strong>{{ viva_pass_percent }}%</strong>
+          (a viva may be offered if you score at least <strong>{{ viva_required }}</strong>).
+        </li>
+      {% endif %}
+
         <li>Once you start the exam, the timer will not pause.</li>
       </ul>
     </div>

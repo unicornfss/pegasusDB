@@ -31,37 +31,34 @@
   <form method="post" class="card" novalidate>
     {% csrf_token %}
     <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
-    <div class="card-body row g-3">
-      <div class="col-md-4">
-        <label class="form-label">Exam code</label>
-        {{ form.exam_code }}
-        <div class="form-text">This is set from the QR/link.</div>
-      </div>
 
-      <div class="col-md-8">
-        <label class="form-label">Your full name</label>
+    <div class="card-body row g-3">
+
+      <div class="col-md-6">
+        <label class="form-label d-block">Your full name</label>
         {{ form.name }}
         <div class="form-text">Enter your name exactly as on the register.</div>
         {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Date of birth</label>
+      <div class="col-md-3">
+        <label class="form-label d-block">Date of birth</label>
         {{ form.date_of_birth }}
         {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
 
-      <div class="col-md-8">
-        <label class="form-label">Instructor</label>
+      <div class="col-md-3">
+        <label class="form-label d-block">Exam date</label>
+        {{ form.exam_date }}
+        {% for e in form.exam_date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label d-block">Instructor</label>
         {{ form.instructor }}
         {% for e in form.instructor.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Exam date</label>
-        {{ form.exam_date }}
-        {% for e in form.exam_date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-      </div>
     </div>
 
     <div class="card-footer d-flex justify-content-between gap-2">
@@ -69,6 +66,18 @@
       <button class="btn btn-primary">Check my details</button>
     </div>
   </form>
+
+  <script>
+  (function () {
+    const d = document.querySelector('input[name="exam_date"]');
+    if (d && !d.value) {
+      const today = new Date();
+      d.value = today.toISOString().slice(0,10);
+    }
+  })();
+  </script>
+
+
 
   {% include "legal/_inline_notice_exam.html" %}
 </div>

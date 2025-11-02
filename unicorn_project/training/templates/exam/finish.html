@@ -18,9 +18,13 @@
       <p class="mb-2">
         <strong>{{ attempt.delegate_name }}</strong> — {{ attempt.date_of_birth }}
       </p>
+      {% widthratio attempt.score_correct attempt.total_questions 100 as score_percent %}
       <p class="mb-0">
         Score: <strong>{{ attempt.score_correct }}</strong> / {{ attempt.total_questions }}
+        (<strong>{% widthratio attempt.score_correct attempt.total_questions 100 %}%</strong>)
       </p>
+
+
       <p class="mb-0">
         Pass mark: <strong>{{ exam.pass_mark_percent }}%</strong> (need {{ required_correct }})
         {% if viva_required %}
