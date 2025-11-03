@@ -4,6 +4,14 @@
 {% block title %}Accident / Incident Report{% endblock %}
 {% block title_text %}Accident / Incident Report{% endblock %}
 
+{# Header: logo + company name #}
+{% block header %}
+  <div class="d-flex align-items-center gap-3 py-2">
+    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
+    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
+  </div>
+{% endblock %}
+
 {% block content %}
 <form method="post" novalidate>
   {% csrf_token %}
