@@ -135,11 +135,11 @@ def render_invoice_pdf(context: Dict) -> Tuple[bytes, str]:
 # Email helper
 # ------------------------------
 def _get_admin_email() -> str:
-    # Dev catch-all override, otherwise ADMIN_EMAIL, else fallback
-    dev_override = getattr(settings, "DEV_EMAIL_ROUTING", None) or os.environ.get("DEV_EMAIL_ROUTING")
-    if dev_override:
-        return dev_override
-    return getattr(settings, "ADMIN_EMAIL", None) or "info@unicornsafety.co.uk"
+    """
+    Always return the real admin inbox (prod target).
+    Redirection to the dev catch-all happens in send_invoice_email().
+    """
+    return getattr(settings, "ADMIN_INBOX_EMAIL", None) or "info@unicornsafety.co.uk"
 
 
 def send_invoice_email(
@@ -162,12 +162,27 @@ def send_invoice_email(
     if not to_addr:
         raise RuntimeError("No admin email configured.")
 
+    # If a dev catch-all is set, redirect ALL recipients there (no real CC)
+    catch_all = getattr(settings, "DEV_CATCH_ALL_EMAIL", "") or os.environ.get("DEV_CATCH_ALL_EMAIL", "")
+    if catch_all:
+        original = ", ".join([a for a in to_addr if a] + ([cc_instructor] if cc_instructor else [])) or "(none)"
+        subject = f"[DEV → {original}] {subject}"
+        body = (
+            "This message was redirected to the dev catch-all mailbox.\n"
+            f"Original recipients: {original}\n\n"
+        ) + (body or "")
+        to_addr = [catch_all]
+        cc_list = None
+    else:
+        cc_list = [cc_instructor] if cc_instructor else None
+
     email = EmailMessage(
         subject=subject,
         body=body,
         from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@unicornsafety.co.uk"),
         to=to_addr,
-        cc=([cc_instructor] if cc_instructor else None),
+        cc=cc_list,
     )
+
     email.attach(filename, file_bytes)
     email.send(fail_silently=False)

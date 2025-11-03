@@ -32,13 +32,13 @@
           </div>
 
           <div class="col-md-5">
-  <label class="form-label">Invoice date</label>
-  <input type="date"
-         name="invoice_date"
-         class="form-control"
-         value="{% if invoice.invoice_date %}{{ invoice.invoice_date|date:'Y-m-d' }}{% else %}{{ today_iso }}{% endif %}"
-         {% if inv_lower == "sent" %}readonly disabled{% endif %}>
-</div>
+            <label class="form-label">Invoice date</label>
+            <input class="form-control"
+                  value="{% if invoice.invoice_date %}{{ invoice.invoice_date|date:'d/m/Y' }}{% else %}{{ today_human }}{% endif %}"
+                  readonly>
+          </div>
+
+
         </div>
 
         <div class="mt-4">
