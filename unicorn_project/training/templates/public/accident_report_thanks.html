@@ -1,13 +1,29 @@
+{% extends "public/base_public.html" %}
 {% load static %}
 
-{# Header: logo + company name #}
+{% block title %}Thank you{% endblock %}
+{% block title_text %}Accident / Incident Report{% endblock %}
+
 {% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+<div class="d-flex align-items-center gap-3 py-2">
+  <img src="{% static 'training/img/logo.png' %}"
+       alt="Unicorn Fire and Safety Solutions"
+       height="100">
+  <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
+</div>
 {% endblock %}
+
 {% block content %}
-<h2>Thank you</h2>
-<p>Your report has been submitted.</p>
+<div class="row justify-content-center">
+  <div class="col-12 col-md-8 text-center">
+
+    <h2 class="h4 mb-3">Thank you</h2>
+    <p class="lead mb-4">Your report has been submitted.</p>
+
+    <a class="btn btn-primary" href="{% url 'accident_report_public' %}">
+      Submit another report
+    </a>
+
+  </div>
+</div>
 {% endblock %}
