@@ -8,6 +8,7 @@ from django.utils import timezone
 from . import models as m
 
 from .models import (
+    AccidentReport,
     Business,
     CourseType,
     Instructor,
@@ -606,3 +607,42 @@ QuestionFormSet = inlineformset_factory(
     extra=0,              # add via “Add question” button (empty_form)
     can_delete=True,
 )
+
+class AccidentReportForm(forms.ModelForm):
+    class Meta:
+        model = AccidentReport
+        fields = [
+            "date", "time", "location",
+            "injured_name", "injured_address",
+            "what_happened", "injuries_sustained",
+            "actions_carried_out", "actions_prevent_recurrence",
+            "first_aider_name", "reporter_name",
+        ]
+        widgets = {
+            "date":  forms.DateInput(attrs={"type": "date", "class": "form-control", "id": "ar-date"}),
+            "time":  forms.TimeInput(attrs={"type": "time", "class": "form-control", "id": "ar-time"}),
+            "location": forms.TextInput(attrs={"class": "form-control"}),
+            "injured_name": forms.TextInput(attrs={"class": "form-control"}),
+
+            # TextInput so Places can attach
+            "injured_address": forms.TextInput(attrs={
+                "class": "form-control", "id": "ar-injured-address", "autocomplete": "off"
+            }),
+
+            "what_happened": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "injuries_sustained": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "actions_carried_out": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "actions_prevent_recurrence": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "first_aider_name": forms.TextInput(attrs={"class": "form-control", "id": "ar-first-aider"}),
+            "reporter_name":    forms.TextInput(attrs={"class": "form-control", "id": "ar-reporter"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # belt-and-braces: ensure IDs exist even if a widget gets swapped
+        self.fields["date"].widget.attrs.setdefault("id", "ar-date")
+        self.fields["time"].widget.attrs.setdefault("id", "ar-time")
+        self.fields["injured_address"].widget.attrs.setdefault("id", "ar-injured-address")
+        self.fields["first_aider_name"].widget.attrs.setdefault("id", "ar-first-aider")
+        self.fields["reporter_name"].widget.attrs.setdefault("id", "ar-reporter")
+

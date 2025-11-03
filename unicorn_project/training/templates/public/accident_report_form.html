@@ -1,0 +1,98 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}Accident / Incident Report{% endblock %}
+{% block title_text %}Accident / Incident Report{% endblock %}
+
+{% block content %}
+<form method="post" novalidate>
+  {% csrf_token %}
+
+  <div class="card card-narrow shadow-sm">
+    <div class="card-body">
+      {{ form.as_p }}
+      <button class="btn btn-primary">Submit report</button>
+    </div>
+  </div>
+</form>
+
+<script>
+(function () {
+  function byId(id) { return document.getElementById(id); }
+
+  // --- 1) Default date/time (only if blank) ---
+  function defaultDateTime() {
+    try {
+      var d = byId('ar-date');
+      var t = byId('ar-time');
+
+      if (d && !d.value) {
+        var today = new Date();
+        d.value = today.toISOString().slice(0,10); // yyyy-mm-dd
+      }
+      if (t && !t.value) {
+        var now = new Date();
+        var hh = String(now.getHours()).padStart(2, '0');
+        var mm = String(now.getMinutes()).padStart(2, '0');
+        t.value = hh + ':' + mm;
+      }
+    } catch(e) { console.warn('defaultDateTime:', e); }
+  }
+
+  // --- 2) Mirror first-aider -> reporter (until reporter edited) ---
+  function mirrorNames() {
+    try {
+      var fa  = byId('ar-first-aider');
+      var rep = byId('ar-reporter');
+      if (!fa || !rep) return;
+
+      var reporterTouched = false;
+      rep.addEventListener('input', function(){ reporterTouched = true; });
+
+      fa.addEventListener('input', function(){
+        if (!reporterTouched) {
+          rep.value = fa.value || '';
+        }
+      });
+      // initial
+      if (!rep.value) rep.value = fa.value || '';
+    } catch(e) { console.warn('mirrorNames:', e); }
+  }
+
+  // --- 3) Google Places for injured address ---
+  function initPlaces() {
+    try {
+      var el = byId('ar-injured-address');
+      if (!el) return;
+      if (!window.google || !google.maps || !google.maps.places) return;
+
+      var autocomplete = new google.maps.places.Autocomplete(el, {
+        fields: ['formatted_address', 'geometry', 'name'],
+        types: ['address'],
+        componentRestrictions: { country: ['gb', 'ie'] } // adjust as you like
+      });
+      autocomplete.addListener('place_changed', function(){
+        var place = autocomplete.getPlace();
+        if (place && place.formatted_address) {
+          el.value = place.formatted_address;
+        }
+      });
+    } catch(e) { console.warn('initPlaces:', e); }
+  }
+
+  // Run after DOM is ready
+  document.addEventListener('DOMContentLoaded', function(){
+    defaultDateTime();
+    mirrorNames();
+
+    // If the Google script announced itself
+    document.addEventListener('gmaps:ready', initPlaces);
+
+    // Or if it was already loaded before we got here
+    if (window.google && google.maps && google.maps.places) {
+      initPlaces();
+    }
+  });
+})();
+</script>
+{% endblock %}

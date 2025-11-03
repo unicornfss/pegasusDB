@@ -117,11 +117,18 @@
 
           {% if is_instructor %}
             <a class="leaf {% if request.resolver_match.url_name == 'instructor_bookings' %}active{% endif %}"
-               href="{% url 'instructor_bookings' %}">
+              href="{% url 'instructor_bookings' %}">
               <i class="bi bi-calendar-event"></i> My bookings
             </a>
+
+            <a class="leaf {% if request.resolver_match.url_name == 'accident_report_list' or request.resolver_match.url_name == 'accident_report_create' %}active{% endif %}"
+              href="{% url 'accident_report_list' %}">
+              <i class="bi bi-clipboard2"></i> Accident reports
+            </a>
+
+
             <a class="leaf {% if request.resolver_match.url_name == 'instructor_profile' %}active{% endif %}"
-               href="{% url 'instructor_profile' %}">
+              href="{% url 'instructor_profile' %}">
               <i class="bi bi-person-gear"></i> My Profile
             </a>
           {% endif %}

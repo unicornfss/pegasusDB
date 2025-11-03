@@ -81,6 +81,7 @@ urlpatterns = [
     path("app/admin/instructors/<uuid:pk>/", app_admin.admin_instructor_edit, name="admin_instructor_edit"),
     path("app/admin/instructors/<uuid:pk>/delete/", app_admin.instructor_delete, name="admin_instructor_delete"),
     path("app/instructor/booking/<uuid:pk>/invoice/preview/", views_instructor.invoice_preview, name="instructor_invoice_preview"),
+    path("accident-reports/", views.accident_report_list, name="accident_report_list"),
 
     # Bookings (admin)
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
@@ -135,6 +136,13 @@ urlpatterns = [
     path("exam/review/", views_public.delegate_exam_review, name="delegate_exam_review"),
     path("exam/finish/", views_public.delegate_exam_finish, name="delegate_exam_finish"),
     path("privacy/", views_public.privacy_notices, name="privacy_notices"),
+    path("accident-report/", views.accident_report_public, name="accident_report_public"),
+    path("accident-report/thanks/", views.accident_report_thanks, name="accident_report_thanks"),
+
+    path("accident-reports/<uuid:pk>/", views.accident_report_detail, name="accident_report_detail"),
+    path("accident-reports/export-pptx/", views.accident_report_export_pptx, name="accident_report_export_pptx"),
+    path("accident-reports/delete/", views.accident_report_delete, name="accident_report_delete"),
+    path("accident-reports/poll/", views.accident_report_poll, name="accident_report_poll"),
     
     path(
         "app/instructor/exams/attempt/<int:attempt_id>/review/",

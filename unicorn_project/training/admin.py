@@ -13,7 +13,7 @@ from import_export.widgets import ForeignKeyWidget
 from import_export.admin import ImportExportModelAdmin
 
 from .models import (
-    Business, TrainingLocation, CourseType,
+    AccidentReport, Business, TrainingLocation, CourseType,
     Instructor, Booking, BookingDay, Attendance, CourseCompetency,
     Invoice, InvoiceItem,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer
@@ -468,3 +468,9 @@ class ExamAnswerAdmin(ImportExportModelAdmin):
         t = (obj.text or "").strip()
         return (t[:80] + "…") if len(t) > 80 else t or "—"
 # ---------------------------------------------------------------------------
+
+@admin.register(AccidentReport)
+class AccidentReportAdmin(admin.ModelAdmin):
+    list_display = ("date", "time", "location", "injured_name", "first_aider_name", "reporter_name")
+    search_fields = ("injured_name", "first_aider_name", "reporter_name", "location")
+    list_filter = ("date",)

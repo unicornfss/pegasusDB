@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Accident reports{% endblock %}
+{% block content %}
+
+<h3 class="mb-3">Accident reports</h3>
+
+<form id="report-bulk-form" method="post">
+  {% csrf_token %}
+
+  <div class="d-flex gap-2 mb-2">
+    <button type="submit"
+            class="btn btn-outline-secondary"
+            formaction="{% url 'accident_report_export_pptx' %}">
+      <i class="bi bi-filetype-pptx"></i> Export PPTX
+    </button>
+
+    <button type="submit"
+            class="btn btn-danger"
+            formaction="{% url 'accident_report_delete' %}"
+            onclick="return confirmDeleteSelected();">
+      <i class="bi bi-trash"></i> Delete selected
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th style="width:36px;">
+            <input type="checkbox" id="select-all">
+          </th>
+          <th style="width:120px;">Date</th>
+          <th style="width:90px;">Time</th>
+          <th>Location</th>
+          <th>Injured person</th>
+          <th>First aider</th>
+          <th>Reporter</th>
+        </tr>
+      </thead>
+      <tbody id="report-rows">
+        {% include "instructor/_accident_report_rows.html" %}
+        </tbody>
+
+    </table>
+  </div>
+</form>
+
+<script>
+  // Select all toggle
+  (function(){
+    const selectAll = document.getElementById('select-all');
+    if (!selectAll) return;
+    selectAll.addEventListener('change', function(){
+      document.querySelectorAll('input[name="ids"]').forEach(cb => {
+        cb.checked = selectAll.checked;
+      });
+    });
+  })();
+
+  // Confirm deletion; also guard against empty selection
+  function confirmDeleteSelected(){
+    const checked = document.querySelectorAll('input[name="ids"]:checked').length;
+    if (!checked) {
+      alert('Select at least one report to delete.');
+      return false;
+    }
+    return confirm(`Delete ${checked} selected report${checked > 1 ? 's' : ''}? This cannot be undone.`);
+  }
+</script>
+
+<script>
+  (function(){
+    const rowsEl = document.getElementById('report-rows');
+    if (!rowsEl) return;
+
+    const POLL_URL = "{% url 'accident_report_poll' %}";
+    const POLL_MS  = 10000; // 10s; adjust if you want
+
+    function getSelectedIds() {
+      return Array.from(document.querySelectorAll('input[name="ids"]:checked')).map(cb => cb.value);
+    }
+    function restoreSelectedIds(ids) {
+      const set = new Set(ids);
+      document.querySelectorAll('input[name="ids"]').forEach(cb => {
+        if (set.has(cb.value)) cb.checked = true;
+      });
+    }
+
+    async function refresh() {
+      try {
+        const selected = getSelectedIds();
+        const resp = await fetch(POLL_URL, { credentials: 'same-origin' });
+        if (!resp.ok) return; // silent fail; try next tick
+        const data = await resp.json();
+        if (!data || typeof data.html !== 'string') return;
+
+        // Only update if changed
+        if (rowsEl.innerHTML.trim() !== data.html.trim()) {
+          rowsEl.innerHTML = data.html;
+          restoreSelectedIds(selected);
+        }
+      } catch(e) {
+        // ignore transient errors
+      }
+    }
+
+    // initial + interval
+    refresh();
+    setInterval(refresh, POLL_MS);
+
+    // Keep "select all" checkbox working after refreshes
+    const selectAll = document.getElementById('select-all');
+    if (selectAll) {
+      selectAll.addEventListener('change', function(){
+        document.querySelectorAll('input[name="ids"]').forEach(cb => {
+          cb.checked = selectAll.checked;
+        });
+      });
+    }
+  })();
+</script>
+
+{% endblock %}

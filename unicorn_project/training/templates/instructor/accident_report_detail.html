@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Accident / Incident Report</h2>
+
+<table class="table table-sm">
+  <tr><th style="width:220px;">Date</th> <td>{% if report.date %}{{ report.date|date:"d/m/Y" }}{% else %}—{% endif %}</td></tr>
+  <tr><th>Time</th>               <td>{% if report.time %}{{ report.time|time:"H:i" }}{% else %}—{% endif %}</td></tr>
+  <tr><th>Location</th>           <td>{{ report.location|default:"—" }}</td></tr>
+  <tr><th>Injured person</th>     <td>{{ report.injured_name|default:"—" }}</td></tr>
+  <tr><th>Injured address</th>    <td>{{ report.injured_address|linebreaksbr|default:"—" }}</td></tr>
+  <tr><th>What happened</th>      <td>{{ report.what_happened|linebreaksbr|default:"—" }}</td></tr>
+  <tr><th>Injuries sustained</th> <td>{{ report.injuries_sustained|linebreaksbr|default:"—" }}</td></tr>
+  <tr><th>Actions carried out</th><td>{{ report.actions_carried_out|linebreaksbr|default:"—" }}</td></tr>
+  <tr><th>Actions to prevent recurrence</th>
+      <td>{{ report.actions_prevent_recurrence|linebreaksbr|default:"—" }}</td></tr>
+  <tr><th>First aider</th>        <td>{{ report.first_aider_name|default:"—" }}</td></tr>
+  <tr><th>Reporter</th>           <td>{{ report.reporter_name|default:"—" }}</td></tr>
+</table>
+
+<a class="btn btn-outline-secondary" href="{% url 'accident_report_list' %}">&larr; Back to reports</a>
+{% endblock %}

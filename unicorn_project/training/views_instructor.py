@@ -29,8 +29,8 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
 import subprocess, tempfile, os
-from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
-from .forms import DelegateRegisterInstructorForm, BookingNotesForm
+from .models import AccidentReport, Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
+from .forms import AccidentReportForm, DelegateRegisterInstructorForm, BookingNotesForm
 
 from .utils.invoice import (
     get_invoice_template_path,

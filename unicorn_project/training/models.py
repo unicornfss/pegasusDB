@@ -685,3 +685,26 @@ class ExamAttemptAnswer(models.Model):
 
     class Meta:
         unique_together = ("attempt", "question")
+
+class AccidentReport(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    date = models.DateField()
+    time = models.TimeField(null=True, blank=True)
+
+    location = models.CharField(max_length=255)
+    injured_name = models.CharField(max_length=255)
+    injured_address = models.TextField(blank=True, null=True)
+
+    what_happened = models.TextField()
+    injuries_sustained = models.TextField()
+    actions_carried_out = models.TextField()
+    actions_prevent_recurrence = models.TextField()
+
+    first_aider_name = models.CharField(max_length=255)
+    reporter_name = models.CharField(max_length=255)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Incident at {self.location} on {self.date}"

@@ -1,22 +1,36 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import Group
 from django.db.models import Q
-from django.http import JsonResponse, HttpResponseForbidden, FileResponse
+from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponse, HttpResponseBadRequest
 from django.contrib import messages
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
-from django.views.decorators.http import require_GET
-from .models import Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile, DelegateRegister, FeedbackResponse
-from .forms import  BookingForm, InstructorForm, InstructorProfileForm, DelegateRegisterForm, FeedbackForm
+from django.views.decorators.http import require_GET, require_POST
+from django.template.loader import render_to_string
+from .models import AccidentReport, Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile, DelegateRegister, FeedbackResponse
+from .forms import  AccidentReportForm, BookingForm, InstructorForm, InstructorProfileForm, DelegateRegisterForm, FeedbackForm
 from datetime import timedelta, datetime
+from pptx import Presentation
+from pptx.enum.shapes import MSO_SHAPE as SHAPE
+from pptx.enum.text import PP_PARAGRAPH_ALIGNMENT
+from pptx.dml.color import RGBColor
+from pptx.util import Inches, Pt
 from reportlab.lib.pagesizes import A4, portrait
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 import uuid, io
 
+# NEW: a shape enum that works across python-pptx versions
+try:
+    # newer python-pptx
+    from pptx.enum.shapes import MSO_SHAPE as SHAPE
+except Exception:
+    # older python-pptx
+    from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE as SHAPE
 
 # --- helpers --------------------------------------------------
 
@@ -647,3 +661,284 @@ def public_feedback_thanks(request):
     """Simple thank-you page after feedback submission."""
     return render(request, "public/feedback_thanks.html")
 
+@login_required
+def accident_report_list(request):
+    reports = AccidentReport.objects.order_by("-date", "-time")
+    return render(request, "instructor/accident_report_list.html", {"reports": reports})
+
+@login_required
+def accident_report_create(request):
+    if request.method == "POST":
+        form = AccidentReportForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Accident report submitted successfully.")
+            return redirect("accident_report_list")
+    else:
+        form = AccidentReportForm()
+
+    return render(request, "public/accident_report_form.html", {"form": form})
+
+from django.utils import timezone
+
+def accident_report_public(request):
+    form = AccidentReportForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        form.save()
+        messages.success(request, "Accident report submitted successfully.")
+        return redirect("accident_report_thanks")  # or wherever your thank-you lives
+
+    return render(
+        request,
+        "public/accident_report_form.html",
+        {
+            "form": form,
+            "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,  # <-- important
+        },
+    )
+
+def accident_report_thanks(request):
+    return render(request, "public/accident_report_thanks.html")
+
+# --- Accident reports: DETAIL -------------------------------------------------
+
+@login_required
+def accident_report_detail(request, pk):
+    # Use select_related / only as you like; keeping simple
+    report = get_object_or_404(AccidentReport, pk=pk)
+    return render(request, "instructor/accident_report_detail.html", {"report": report})
+
+# --- Accident reports: EXPORT PPTX (selected IDs) -----------------------------
+
+@login_required
+def accident_report_export_pptx(request):
+    """
+    POST with ids[]=<uuid>… -> returns a styled .pptx
+    One 4:3 slide per report with subtle first-aid watermark + corner L accent.
+    """
+    if request.method != "POST":
+        return HttpResponseBadRequest("POST only")
+
+    ids = request.POST.getlist("ids[]") or request.POST.getlist("ids")
+    if not ids:
+        return HttpResponseBadRequest("No IDs supplied")
+
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+    from pptx.enum.text import PP_PARAGRAPH_ALIGNMENT
+
+    reports = list(
+        AccidentReport.objects.filter(pk__in=ids).order_by("date", "time")
+    )
+    if not reports:
+        return HttpResponseBadRequest("No matching reports")
+
+    # ----- Theme colours
+    BRAND = {
+        "primary": RGBColor(220, 53, 69),    # red title bar / accents
+        "ink":     RGBColor(33, 37, 41),     # near-black text
+        "chipbg":  RGBColor(243, 244, 246),  # pill bg
+        "chipfg":  RGBColor(33, 37, 41),
+        "rule":    RGBColor(222, 226, 230),  # rules
+        "panelbg": RGBColor(248, 249, 250),  # main card
+        "panelbd": RGBColor(230, 232, 235),  # panel border
+    }
+
+    prs = Presentation()
+    # Force 4:3 (10" x 7.5")
+    prs.slide_width = Inches(10.0)
+    prs.slide_height = Inches(7.5)
+    blank = prs.slide_layouts[6]
+
+    # ---------- helpers
+
+    def add_title_bar(slide, title_text):
+        bar = slide.shapes.add_shape(
+            SHAPE.RECTANGLE, Inches(0), Inches(0), Inches(10.0), Inches(0.9)
+        )
+        bar.fill.solid(); bar.fill.fore_color.rgb = BRAND["primary"]
+        bar.line.fill.background()
+        tf = bar.text_frame; tf.clear()
+        p = tf.paragraphs[0]
+        p.text = title_text
+        p.font.size = Pt(28); p.font.bold = True
+        p.font.color.rgb = RGBColor(255, 255, 255)
+        p.alignment = PP_PARAGRAPH_ALIGNMENT.LEFT
+        tf.margin_left = Inches(0.4)
+
+    def meta_pill(slide, text):
+        pill = slide.shapes.add_shape(
+            SHAPE.ROUNDED_RECTANGLE, Inches(0.4), Inches(1.0), Inches(9.2), Inches(0.65)
+        )
+        pill.fill.solid(); pill.fill.fore_color.rgb = BRAND["chipbg"]
+        pill.line.fill.background()
+        tf = pill.text_frame; tf.clear(); tf.word_wrap = True
+        p = tf.paragraphs[0]
+        p.text = text
+        p.font.size = Pt(16); p.font.color.rgb = BRAND["chipfg"]
+        p.alignment = PP_PARAGRAPH_ALIGNMENT.CENTER
+        return pill
+
+    def section(slide, left, top, title, body, width, height):
+        box = slide.shapes.add_textbox(left, top, width, height)
+        tf = box.text_frame; tf.clear(); tf.word_wrap = True
+        tf.margin_left = Inches(0.06); tf.margin_right = Inches(0.06)
+
+        h = tf.paragraphs[0]
+        h.text = title
+        h.font.size = Pt(12); h.font.bold = True; h.font.color.rgb = BRAND["ink"]
+
+        txt = (body or "—").strip()
+        L = len(txt)
+        base = 16 if L < 300 else (14 if L < 600 else 12)
+
+        p = tf.add_paragraph(); p.text = txt
+        p.font.size = Pt(base); p.font.color.rgb = BRAND["ink"]
+        return box
+
+    def vline(slide, x, y, h):
+        ln = slide.shapes.add_shape(SHAPE.RECTANGLE, x, y, Inches(0.02), h)
+        ln.fill.solid(); ln.fill.fore_color.rgb = BRAND["rule"]
+        ln.line.fill.background()
+
+    def watermark_plus(slide):
+        """
+        Very faint first-aid '+' watermark in the canvas centre.
+        """
+        cx, cy = Inches(5.0), Inches(4.1)
+        w, t = Inches(2.8), Inches(0.45)   # arm length / thickness
+
+        # horizontal
+        hbar = slide.shapes.add_shape(SHAPE.ROUNDED_RECTANGLE, cx - w/2, cy - t/2, w, t)
+        # vertical
+        vbar = slide.shapes.add_shape(SHAPE.ROUNDED_RECTANGLE, cx - t/2, cy - w/2, t, w)
+        for shp in (hbar, vbar):
+            shp.fill.solid()
+            shp.fill.fore_color.rgb = BRAND["primary"]
+            shp.fill.fore_color.brightness = 0.7   # push toward white
+            shp.line.fill.background()
+
+    def corner_L_accent(slide):
+        """
+        Soft brand L-shape in the top-left of the inner panel.
+        """
+        # short horizontal
+        h = slide.shapes.add_shape(SHAPE.RECTANGLE, Inches(0.25), Inches(0.95), Inches(0.9), Inches(0.07))
+        # long vertical
+        v = slide.shapes.add_shape(SHAPE.RECTANGLE, Inches(0.25), Inches(0.95), Inches(0.07), Inches(1.3))
+        for shp in (h, v):
+            shp.fill.solid()
+            shp.fill.fore_color.rgb = BRAND["primary"]
+            shp.fill.fore_color.brightness = 0.5   # softer than title
+            shp.line.fill.background()
+
+    # ---------- build slides
+
+    for ar in reports:
+        slide = prs.slides.add_slide(blank)
+
+        # Background card
+        panel = slide.shapes.add_shape(
+            SHAPE.RECTANGLE, Inches(0.2), Inches(0.9), Inches(9.6), Inches(6.3)
+        )
+        panel.fill.solid(); panel.fill.fore_color.rgb = BRAND["panelbg"]
+        panel.line.color.rgb = BRAND["panelbd"]
+
+        # Motifs first (behind text visually)
+        watermark_plus(slide)
+        corner_L_accent(slide)
+
+        # Header
+        add_title_bar(slide, "Accident / Incident Report")
+
+        # Meta pill
+        meta_text = " • ".join([
+            f"Date: {ar.date:%d %b %Y}" if ar.date else "Date: —",
+            f"Time: {ar.time.strftime('%H:%M')}" if ar.time else "Time: —",
+            f"Location: {ar.location or '—'}",
+        ])
+        meta_pill(slide, meta_text)
+
+        # Columns
+        left_x  = Inches(0.45)
+        right_x = Inches(5.1)
+        top_y   = Inches(1.9)
+
+        # Left: people + address
+        section(
+            slide, left_x, top_y,
+            "People involved",
+            f"Injured: {ar.injured_name or '—'}\n"
+            f"First aider: {ar.first_aider_name or '—'}\n"
+            f"Reporter: {ar.reporter_name or '—'}",
+            width=Inches(4.4), height=Inches(1.45),
+        )
+        section(
+            slide, left_x, top_y + Inches(1.6),
+            "Injured address",
+            ar.injured_address or "—",
+            width=Inches(4.4), height=Inches(1.1),
+        )
+
+        # Divider
+        vline(slide, Inches(4.95), Inches(1.85), Inches(4.45))
+
+        # Right: narratives
+        ry = top_y
+        section(slide, right_x, ry,                   "What happened",               ar.what_happened,             width=Inches(4.35), height=Inches(1.35))
+        section(slide, right_x, ry + Inches(1.5),     "Injuries sustained",         ar.injuries_sustained,        width=Inches(4.35), height=Inches(1.05))
+        section(slide, right_x, ry + Inches(2.7),     "Actions carried out",        ar.actions_carried_out,       width=Inches(4.35), height=Inches(1.05))
+        section(slide, right_x, ry + Inches(3.9),     "Actions to prevent recurrence", ar.actions_prevent_recurrence, width=Inches(4.35), height=Inches(1.05))
+
+        # Footer tag
+        footer = slide.shapes.add_textbox(Inches(0.3), Inches(7.25), Inches(9.4), Inches(0.3))
+        ft = footer.text_frame; ft.clear()
+        fp = ft.paragraphs[0]
+        fp.text = "Confidential — Internal Safety Record"
+        fp.font.size = Pt(10); fp.font.color.rgb = RGBColor(160, 165, 170)
+
+    # ---------- return file
+    from io import BytesIO
+    buf = BytesIO(); prs.save(buf); buf.seek(0)
+    resp = HttpResponse(
+        buf.read(),
+        content_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    )
+    resp["Content-Disposition"] = 'attachment; filename="Accident reports.pptx"'
+    return resp
+
+@require_POST
+@login_required
+def accident_report_delete(request):
+    """
+    Bulk-delete accident reports by ids[]=...
+    """
+    ids = request.POST.getlist("ids[]") or request.POST.getlist("ids")
+    if not ids:
+        messages.warning(request, "No reports selected.")
+        return redirect("accident_report_list")
+
+    qs = AccidentReport.objects.filter(pk__in=ids)
+    count = qs.count()
+    if count == 0:
+        messages.warning(request, "No matching reports found.")
+        return redirect("accident_report_list")
+
+    qs.delete()
+    messages.success(request, f"Deleted {count} report{'s' if count != 1 else ''}.")
+    return redirect("accident_report_list")
+
+@login_required
+def accident_report_poll(request):
+    """
+    Returns just the table rows (HTML) for the accident report list.
+    Frontend replaces <tbody> with this HTML, preserving selections.
+    """
+    reports = AccidentReport.objects.order_by("-date", "-time", "-id")
+    rows_html = render_to_string(
+        "instructor/_accident_report_rows.html",
+        {"reports": reports},
+        request=request,
+    )
+    return JsonResponse({"html": rows_html})
