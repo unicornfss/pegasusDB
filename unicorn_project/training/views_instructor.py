@@ -10,7 +10,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
 from django.forms import modelformset_factory
-from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed, HttpResponse, Http404, HttpResponseServerError, HttpRequest
+from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed, HttpResponse, Http404, HttpResponseServerError, HttpRequest, HttpResponseBadRequest
 from django.shortcuts import redirect, render, get_object_or_404
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -869,6 +869,68 @@ def instructor_booking_detail(request, pk):
         ctx.update({"delegates": [], "competencies": [], "existing": {}, "levels": []})
 
     return render(request, "instructor/booking_detail.html", ctx)
+
+@login_required
+@require_POST
+def instructor_assessment_autosave(request, pk):
+    """
+    Autosave a single assessment cell (checkbox) via AJAX.
+    POST expects:
+      - register_id: DelegateRegister PK (the delegate row)
+      - competency_id: CourseCompetency PK (the competency column)
+      - checked: "true"/"false" (if the cell is ticked)
+    Saves level "c" when checked; deletes the record when unchecked.
+    """
+    # AuthZ: instructor must own the booking
+    instr = getattr(request.user, "instructor", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("instructor"),
+        pk=pk,
+    )
+    if not instr or booking.instructor_id != instr.id:
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+
+    # Parse payload
+    reg_id = request.POST.get("register_id")
+    comp_id = request.POST.get("competency_id")
+    checked = (request.POST.get("checked") or "").lower() in ("1", "true", "yes", "on")
+
+    if not (reg_id and comp_id):
+        return HttpResponseBadRequest("Missing register_id or competency_id")
+
+    # Validate the IDs belong to this booking/course
+    try:
+        reg = DelegateRegister.objects.select_related("booking_day").get(pk=reg_id)
+    except DelegateRegister.DoesNotExist:
+        return HttpResponseBadRequest("Bad register_id")
+
+    if reg.booking_day.booking_id != booking.id:
+        return JsonResponse({"ok": False, "error": "mismatch"}, status=400)
+
+    try:
+        comp = CourseCompetency.objects.select_related("course_type").get(pk=comp_id)
+    except CourseCompetency.DoesNotExist:
+        return HttpResponseBadRequest("Bad competency_id")
+
+    if comp.course_type_id != booking.course_type_id:
+        return JsonResponse({"ok": False, "error": "wrong_course"}, status=400)
+
+    # Upsert / delete CompetencyAssessment
+    from .models import CompetencyAssessment
+    if checked:
+        obj, _ = CompetencyAssessment.objects.update_or_create(
+            register_id=reg.id,
+            course_competency_id=comp.id,
+            defaults={"level": "c"},   # mark competent when checked
+        )
+    else:
+        CompetencyAssessment.objects.filter(
+            register_id=reg.id,
+            course_competency_id=comp.id,
+        ).delete()
+
+    return JsonResponse({"ok": True})
+
 
 @login_required
 def instructor_day_registers(request, pk: int):

@@ -44,7 +44,9 @@
                          value="{% if a and a.level %}{{ a.level }}{% else %}na{% endif %}"
                          class="level-input" />
                   <input type="checkbox"
-                         class="lv-chk"
+                         class="lv-chk assess-toggle"
+                         data-register="{{ d.id }}"
+                         data-competency="{{ comp.id }}"
                          {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
                          aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
                 </td>
@@ -183,21 +185,14 @@
 /* checkboxes */
 .cell .lv-chk { width: 16px; height: 16px; }
 
-/* === Column outcome overlays ===
-   We overlay colors with a giant inset box-shadow so row zebras still show subtly underneath.
-   We vary shade by odd/even parity:
-   - DNF  : amber (odd lighter, even slightly darker)
-   - FAIL : red   (odd lighter, even slightly darker)
-   - PASS : solid green background (full override)
-   - PENDING: no overlay (just zebra rows)
-*/
+/* === Column outcome overlays === */
 td.cell.dnf.is-odd,      td.outcome-cell.dnf.is-odd,      th.top.dnf.is-odd      { box-shadow: inset 0 0 0 9999px rgba(255, 200, 0, 0.20); }
 td.cell.dnf.is-even,     td.outcome-cell.dnf.is-even,     th.top.dnf.is-even     { box-shadow: inset 0 0 0 9999px rgba(255, 185, 0, 0.28); }
 
 td.cell.fail.is-odd,     td.outcome-cell.fail.is-odd,     th.top.fail.is-odd     { box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.18); }
 td.cell.fail.is-even,    td.outcome-cell.fail.is-even,    th.top.fail.is-even    { box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.28); }
 
-/* PASS: full background override (keeps green consistent) */
+/* PASS */
 td.cell.pass,            td.outcome-cell.pass             { background: #e6f7ea !important; box-shadow: none !important; }
 th.top.pass                                          { background: #def3e6 !important; box-shadow: none !important; }
 
@@ -217,6 +212,41 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
   if(!table) return;
 
   const exportBtn = document.getElementById('export-pdf-btn');
+
+  // --- Autosave (reliable, with cookies + better errors) ----------------
+  const AUTOSAVE_URL = "{% url 'instructor_assessment_autosave' booking.pk %}";
+
+  function getCookie(name){
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? m.pop() : '';
+  }
+  const CSRF = getCookie('csrftoken');
+
+  function autosaveCell(regId, compId, checked){
+    return fetch(AUTOSAVE_URL, {
+      method: 'POST',
+      credentials: 'same-origin',           // include session cookie
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': CSRF,
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: new URLSearchParams({
+        register_id: regId,
+        competency_id: compId,
+        checked: checked ? 'true' : 'false'
+      })
+    }).then(async (r) => {
+      let data = null;
+      try { data = await r.json(); } catch(_) {}
+      if (!r.ok || (data && data.ok === false)) {
+        const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
+        throw new Error(msg);
+      }
+      return data || { ok: true };
+    });
+  }
+  // ----------------------------------------------------------------------
 
   // Tag column parity once (odd/even) for header, cells, and outcome cells
   function tagParity(){
@@ -247,6 +277,53 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
       exportBtn.setAttribute('tabindex','-1');
     }
   }
+
+  // ---- Live update of the Course closure pane (assessments section) ----
+  function updateClosurePaneAssessStatus(){
+    // Determine if ALL columns are decided (no "pending")
+    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
+    const assessAllOk = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
+
+    const pane      = document.getElementById('closure-pane');
+    const badge     = document.getElementById('closure-assess-status');
+    const manualBox = document.getElementById('closure-assess-manual');
+    const regManual = document.getElementById('closure-register-manual');
+    const closeBtn  = document.getElementById('close-course-btn');
+
+    if (!pane || !badge || !manualBox) return;
+
+    // Set flag on pane (used by other logic too)
+    pane.dataset.assessOk = assessAllOk ? 'true' : 'false';
+
+    // Mirror the status UI like your original logic
+    if (assessAllOk) {
+      manualBox.checked = false;
+      manualBox.disabled = true;
+      badge.textContent = 'OK';
+      badge.className = 'badge bg-success';
+    } else {
+      manualBox.disabled = false;
+      if (manualBox.checked) {
+        badge.textContent = 'Manual submission(s)';
+        badge.className = 'badge bg-primary';
+      } else {
+        badge.textContent = 'Delegate(s) still "Pending" on matrix';
+        badge.className = 'badge bg-warning text-dark';
+      }
+    }
+
+    // Control the "Close course" button visibility consistently:
+    // Section considered "okish" if (auto OK) OR (manual box checked)
+    const assessOkish = assessAllOk || manualBox.checked;
+
+    // Registers okish = registersOk (from data attr) OR register manual checked
+    const registersOk = (pane.dataset.registersOk === 'true');
+    const regOkish = registersOk || (regManual && regManual.checked);
+
+    const allOkish = assessOkish && regOkish;
+    if (closeBtn) closeBtn.style.display = allOkish ? '' : 'none';
+  }
+  // ----------------------------------------------------------------------
 
   // Set visual outcome & hidden input; also handle pass badge/select visibility
   function applyOutcomeClasses(colIndex, outcome){
@@ -280,10 +357,12 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 
     if (outInp) outInp.value = outcome;
 
-    // Pending: no overlay at all (keep zebra), but still refresh export state
-    if (outcome === 'pending') { refreshExportState(); return; }
+    if (outcome === 'pending') { 
+      refreshExportState();
+      updateClosurePaneAssessStatus();
+      return; 
+    }
 
-    // Add overlay classes for DNF / FAIL; solid override for PASS
     if (outcome === 'dnf') {
       header?.classList.add('dnf');
       outTd?.classList.add('dnf');
@@ -299,6 +378,7 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     }
 
     refreshExportState();
+    updateClosurePaneAssessStatus();
   }
 
   // Compute outcome from checkboxes + selector
@@ -314,15 +394,10 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     const outSel = outTd?.querySelector('.outcome-select');
     const manual = outSel ? outSel.value : 'pending';
 
-    // Rules:
-    // - All checked => PASS (not selectable)
-    // - Else manual DNF / FAIL if chosen
-    // - Else PENDING (no column overlay)
     const outcome = allChecked ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
-
     applyOutcomeClasses(colIndex, outcome);
 
-    // also keep hidden level inputs synced
+    // keep hidden level inputs synced
     cells.forEach(td => {
       const chk = td.querySelector('.lv-chk');
       const hidden = td.querySelector('.level-input');
@@ -330,14 +405,29 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     });
   }
 
-  // Wire checkboxes -> update column
+  // Wire checkboxes -> update column + AUTOSAVE
   table.querySelectorAll('td.cell').forEach(td => {
     const chk = td.querySelector('.lv-chk');
     const setVal = () => {
       const hidden = td.querySelector('.level-input');
       if (hidden) hidden.value = chk.checked ? 'c' : 'na';
     };
-    chk.addEventListener('change', () => { setVal(); updateColumnState(td.dataset.col); });
+    chk.addEventListener('change', () => {
+      setVal();
+      updateColumnState(td.dataset.col);
+
+      // autosave this single cell
+      const regId = chk.getAttribute('data-register');
+      const compId = chk.getAttribute('data-competency');
+      autosaveCell(regId, compId, chk.checked).catch((err) => {
+        console.error('Autosave failed:', err && err.message ? err.message : err);
+        // revert UI on failure
+        chk.checked = !chk.checked;
+        setVal();
+        updateColumnState(td.dataset.col);
+        alert('Saving failed. Please try again.');
+      });
+    });
     setVal();
   });
 
@@ -352,6 +442,7 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
   Array.from(table.querySelectorAll('thead th.top')).forEach(th => updateColumnState(th.dataset.col));
 })();
 </script>
+
 {% else %}
   <div class="text-muted">No delegates or competencies found for this booking.</div>
 {% endif %}

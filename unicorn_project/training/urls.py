@@ -111,6 +111,7 @@ urlpatterns = [
     # (matrix is embedded in booking detail; these are save/export endpoints)
     path("app/instructor/booking/<uuid:pk>/assessment/save/", instv.instructor_assessment_save, name="instructor_assessment_save"),
     path("app/instructor/booking/<uuid:pk>/assessment/pdf/", instv.instructor_assessment_pdf, name="instructor_assessment_pdf"),
+    path("app/instructor/booking/<uuid:pk>/assessments/autosave/", views_instructor.instructor_assessment_autosave,name="instructor_assessment_autosave"),
 
     # ---------- Public Feedback (QR-driven form) ----------
     path("feedback/", views.public_feedback_form, name="public_feedback_form"),
