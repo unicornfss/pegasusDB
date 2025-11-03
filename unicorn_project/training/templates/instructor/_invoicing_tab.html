@@ -12,14 +12,18 @@
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>Invoice details</span>
-        <span class="badge text-bg-secondary">
-          {% if invoice and invoice.status %}
-            {{ invoice.status|capfirst }}
-          {% else %}
-            Awaiting completion and sending
-          {% endif %}
-        </span>
+        <div class="d-flex align-items-center gap-2">
+          <small id="autosave-status" class="text-muted" style="min-width:120px;text-align:right;"></small>
+          <span class="badge text-bg-secondary">
+            {% if invoice and invoice.status %}
+              {{ invoice.status|capfirst }}
+            {% else %}
+              Awaiting completion and sending
+            {% endif %}
+          </span>
+        </div>
       </div>
+
       <div class="card-body">
 
         <div class="row g-3">
@@ -284,6 +288,85 @@
   recalc();
 })();
 </script>
+<script>
+(function(){
+  // Don’t autosave if already sent
+  const INVOICE_SENT = {% if inv_lower == "sent" %}true{% else %}false{% endif %};
+  if (INVOICE_SENT) return;
+
+  const form = document.getElementById('invoice-form');
+  if (!form) return;
+
+  const statusEl = document.getElementById('autosave-status');
+  const csrf = form.querySelector('input[name=csrfmiddlewaretoken]');
+  const endpoint = window.location.href.split('#')[0]; // post back to same URL
+  let timer = null, inflight = false;
+
+  function mark(msg, cls){
+    if (!statusEl) return;
+    statusEl.classList.remove('text-danger','text-success','text-muted');
+    statusEl.classList.add(cls || 'text-muted');
+    statusEl.textContent = msg || '';
+  }
+
+  function schedule(){
+    if (timer) clearTimeout(timer);
+    mark('Saving…','text-muted');
+    timer = setTimeout(save, 600); // debounce
+  }
+
+  async function save(){
+    if (inflight) return;
+    inflight = true;
+    try {
+      const fd = new FormData(form);
+      fd.set('action', 'save_draft');    // force save_draft
+      fd.delete('invoice_date');         // server sets today
+
+      const resp = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'X-CSRFToken': csrf ? csrf.value : ''
+        },
+        body: fd
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.ok) {
+        mark(`Saved ${data.saved_at || ''}`, 'text-success');
+      } else if (data.locked) {
+        mark('Locked', 'text-danger');
+      } else {
+        mark('Save failed', 'text-danger');
+      }
+    } catch (e) {
+      mark('Save failed', 'text-danger');
+    } finally {
+      inflight = false;
+      setTimeout(() => mark('', 'text-muted'), 3500);
+    }
+  }
+
+  // Watch these fields (matches your form names)
+  const names = ['instructor_ref','account_name','sort_code','account_number','item_desc','item_amount'];
+  function watch(el){
+    if (!el) return;
+    ['input','change'].forEach(evt => el.addEventListener(evt, schedule));
+  }
+  names.forEach(nm => form.querySelectorAll(`[name="${nm}"]`).forEach(watch));
+
+  // Also watch for dynamically added extra rows
+  const extrasBody = document.getElementById('extras-body');
+  if (extrasBody && 'MutationObserver' in window) {
+    new MutationObserver(muts => {
+      muts.forEach(m => m.addedNodes.forEach(node => {
+        if (node.nodeType === 1) node.querySelectorAll('input[name="item_desc"],input[name="item_amount"]').forEach(watch);
+      }));
+    }).observe(extrasBody, { childList: true });
+  }
+})();
+</script>
+
 
 
 {% endif %}

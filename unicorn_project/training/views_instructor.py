@@ -595,7 +595,6 @@ def instructor_booking_detail(request, pk):
     if prefilled:
         inv.save(update_fields=["account_name", "sort_code", "account_number"])
 
-
     # ----------------------------- POST handling (notes, closure, invoicing) -----------------------------
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip().lower()
@@ -678,9 +677,12 @@ def instructor_booking_detail(request, pk):
                     items.append((d, val))
             return items
 
-        # Save draft invoice (updates ref/bank fields + extra items; date always today)
+        # Save draft invoice (AJAX-friendly; date always today)
         if action == "save_draft":
             if (inv.status or "").lower() == "sent":
+                # If autosave (AJAX), return JSON; else behave as before
+                if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                    return JsonResponse({"ok": False, "locked": True, "message": "Invoice already sent — draft is locked."})
                 messages.info(request, "Invoice already sent — draft is locked.")
                 return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing")
 
@@ -701,6 +703,10 @@ def instructor_booking_detail(request, pk):
                 InvoiceItem.objects.filter(invoice=inv).delete()
                 for desc, amount in line_items:
                     InvoiceItem.objects.create(invoice=inv, description=desc, amount=amount)
+
+            # If this was an autosave (AJAX), reply JSON; else redirect+flash
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"ok": True, "saved_at": localtime(now()).strftime("%H:%M:%S")})
 
             messages.success(request, "Invoice draft saved.")
             return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing")
