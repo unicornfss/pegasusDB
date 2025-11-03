@@ -833,6 +833,44 @@ def instructor_booking_detail(request, pk):
         getattr(booking.instructor, "postcode", ""),
     ] if (p or "").strip()])
 
+    # ---------- Exams tab data ----------
+    # Be robust to different related_name: "exams" OR default "exam_set"
+    exams_rel = getattr(booking.course_type, "exams", None) or getattr(booking.course_type, "exam_set", None)
+
+    if exams_rel is not None:
+        try:
+            course_exams = list(exams_rel.all().order_by("sequence"))
+        except Exception:
+            # if "sequence" isn't on the model, just return all
+            course_exams = list(exams_rel.all())
+    else:
+        course_exams = []
+
+    # Attempts for exams on this course type, limited to this booking's dates
+    from collections import defaultdict
+    try:
+        from .models import ExamAttempt  # local import to avoid circulars
+    except Exception:
+        ExamAttempt = None
+
+    if ExamAttempt and booking_dates and course_exams:
+        attempts_qs = (
+            ExamAttempt.objects
+            .select_related("exam", "exam__course_type", "instructor")
+            .filter(
+                exam__course_type=booking.course_type,
+                exam_date__in=booking_dates,
+            )
+            .order_by("exam__sequence", "started_at", "pk")
+        )
+    else:
+        attempts_qs = []
+
+    attempts_by_exam = defaultdict(list)
+    for att in attempts_qs:
+        attempts_by_exam[att.exam_id].append(att)
+
+
     # ---------- base context ----------
     ctx = {
         "title": booking.course_type.name,
@@ -841,12 +879,14 @@ def instructor_booking_detail(request, pk):
         "day_rows": day_rows,
         "back_url": redirect("instructor_bookings").url,
         "notes_form": None,  # filled below
-        "has_exam": getattr(booking.course_type, "has_exam", False),
         "fb_qs": fb_qs,
         "fb_count": fb_count,
         "fb_avg": fb_avg,
         "registers_all_days": registers_all_days,
         "assessments_all_complete": assessments_all_complete,
+        "course_exams": course_exams,
+        "attempts_by_exam": dict(attempts_by_exam),
+        "has_exam": bool(course_exams) or getattr(booking.course_type, "has_exam", False),
         "is_locked": is_locked,
         "instructor_address": instructor_address,
         "active_tab": request.GET.get("tab", ""),
