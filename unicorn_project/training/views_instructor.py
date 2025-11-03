@@ -29,7 +29,7 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
 import subprocess, tempfile, os
-from .models import Instructor, Booking, BookingDay, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
+from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm
 
 from .utils.invoice import (
@@ -874,62 +874,83 @@ def instructor_booking_detail(request, pk):
 @require_POST
 def instructor_assessment_autosave(request, pk):
     """
-    Autosave a single assessment cell (checkbox) via AJAX.
-    POST expects:
-      - register_id: DelegateRegister PK (the delegate row)
-      - competency_id: CourseCompetency PK (the competency column)
-      - checked: "true"/"false" (if the cell is ticked)
-    Saves level "c" when checked; deletes the record when unchecked.
+    AJAX: toggle a single competency checkbox for a delegate register row.
+    Creates/updates CompetencyAssessment with the correct foreign keys.
     """
-    # AuthZ: instructor must own the booking
-    instr = getattr(request.user, "instructor", None)
-    booking = get_object_or_404(
-        Booking.objects.select_related("instructor"),
-        pk=pk,
-    )
-    if not instr or booking.instructor_id != instr.id:
-        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+    if request.method != "POST" or not request.headers.get("x-requested-with"):
+        return JsonResponse({"ok": False, "error": "Bad request"}, status=400)
 
-    # Parse payload
-    reg_id = request.POST.get("register_id")
+    # --- lookups
+    reg_id  = request.POST.get("register_id")
     comp_id = request.POST.get("competency_id")
     checked = (request.POST.get("checked") or "").lower() in ("1", "true", "yes", "on")
 
-    if not (reg_id and comp_id):
-        return HttpResponseBadRequest("Missing register_id or competency_id")
-
-    # Validate the IDs belong to this booking/course
     try:
-        reg = DelegateRegister.objects.select_related("booking_day").get(pk=reg_id)
+        reg = DelegateRegister.objects.select_related("booking_day__booking").get(id=reg_id)
     except DelegateRegister.DoesNotExist:
-        return HttpResponseBadRequest("Bad register_id")
+        return JsonResponse({"ok": False, "error": "Register not found"}, status=404)
 
-    if reg.booking_day.booking_id != booking.id:
-        return JsonResponse({"ok": False, "error": "mismatch"}, status=400)
+    # safety: make sure this register belongs to the current booking
+    if str(reg.booking_day.booking_id) != str(pk):
+        return JsonResponse({"ok": False, "error": "Mismatched booking"}, status=400)
 
     try:
-        comp = CourseCompetency.objects.select_related("course_type").get(pk=comp_id)
+        comp = CourseCompetency.objects.get(id=comp_id)
     except CourseCompetency.DoesNotExist:
-        return HttpResponseBadRequest("Bad competency_id")
+        return JsonResponse({"ok": False, "error": "Competency not found"}, status=404)
 
-    if comp.course_type_id != booking.course_type_id:
-        return JsonResponse({"ok": False, "error": "wrong_course"}, status=400)
+    # we must store an Instructor instance, not a User
+    instr = Instructor.objects.filter(user=request.user).first()
+    if not instr:
+        return JsonResponse({"ok": False, "error": "No instructor profile found"}, status=400)
 
-    # Upsert / delete CompetencyAssessment
-    from .models import CompetencyAssessment
-    if checked:
-        obj, _ = CompetencyAssessment.objects.update_or_create(
-            register_id=reg.id,
-            course_competency_id=comp.id,
-            defaults={"level": "c"},   # mark competent when checked
+    # --- create / update
+    try:
+        ca, created = CompetencyAssessment.objects.get_or_create(
+            register=reg,
+            course_competency=comp,            # 👈 correct field name
+            defaults={
+                "assessed_by": instr,          # 👈 must be Instructor
+                "level": "c" if checked else "na",
+            },
         )
-    else:
-        CompetencyAssessment.objects.filter(
-            register_id=reg.id,
-            course_competency_id=comp.id,
-        ).delete()
+        if not created:
+            ca.level = "c" if checked else "na"
+            ca.assessed_by = instr
+            ca.save(update_fields=["level", "assessed_by"])
+    except Exception as e:
+        return JsonResponse({"ok": False, "error": str(e)}, status=500)
 
     return JsonResponse({"ok": True})
+
+@login_required
+@require_POST
+def instructor_assessment_outcome_autosave(request, pk):
+    """
+    Persist a column outcome for a delegate.
+    POST: register_id, outcome ("pending"|"dnf"|"fail"|"pass")
+    """
+    instr = getattr(request.user, "instructor", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "instructor"),
+        pk=pk
+    )
+    if not instr or booking.instructor_id != getattr(instr, "id", None):
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    reg_id = request.POST.get("register_id")
+    outcome = (request.POST.get("outcome") or "").lower().strip()
+    if outcome not in {"pending", "dnf", "fail", "pass"}:
+        return JsonResponse({"ok": False, "error": "Bad outcome"}, status=400)
+
+    reg = get_object_or_404(
+        DelegateRegister.objects.select_related("booking_day__booking"),
+        pk=reg_id, booking_day__booking=booking,
+    )
+
+    reg.outcome = outcome
+    reg.save(update_fields=["outcome"])
+    return JsonResponse({"ok": True, "outcome": reg.outcome})
 
 
 @login_required
