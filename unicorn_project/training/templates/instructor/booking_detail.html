@@ -95,7 +95,9 @@
       <div class="col-lg-4">
         <form method="post" class="h-100 d-flex flex-column">
           {% csrf_token %}
+          <input type="hidden" name="action" value="save_notes">
           <div class="mb-2 text-muted small">Course notes</div>
+
           {% if is_locked %}
             {{ notes_form.booking_notes }}
             <script>
