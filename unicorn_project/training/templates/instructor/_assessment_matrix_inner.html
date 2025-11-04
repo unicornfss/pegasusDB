@@ -393,6 +393,20 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 
     if (outInp) outInp.value = outcome;
 
+    // 🔒 Lock checkboxes for DNF/Fail, unlock for Pending + tooltip
+    const lock = (outcome === 'dnf' || outcome === 'fail');
+    const tip  = lock ? 'Locked — set outcome to Pending to edit' : '';
+    cells.forEach(td => {
+        const chk = td.querySelector('.lv-chk');
+        if (!chk) return;
+        chk.disabled = lock;
+        if (tip) {
+          chk.setAttribute('title', tip);   // native tooltip
+        } else {
+          chk.removeAttribute('title');
+        }
+    });
+
     if (outcome === 'pending') { 
       refreshExportState();
       updateClosurePaneAssessStatus();

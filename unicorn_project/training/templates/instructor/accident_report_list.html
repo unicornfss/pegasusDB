@@ -30,7 +30,7 @@
   </div>
 
   <div class="table-responsive">
-    <table class="table table-sm align-middle">
+    <table class="table table-sm align-middle table-hover">
       <thead>
         <tr>
           <th style="width:36px;">
@@ -51,6 +51,11 @@
     </table>
   </div>
 </form>
+
+<style>
+  /* Make it obvious rows are clickable */
+  #report-rows tr[data-href] { cursor: pointer; }
+</style>
 
 <script>
   // Select all toggle
