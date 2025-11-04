@@ -35,8 +35,8 @@ urlpatterns = [
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
     path("app/instructor/profile/", views.instructor_profile, name="instructor_profile"),
+    path("app/instructor/day/<int:pk>/registers/send-pdf/", views_instructor.instructor_send_register_pdf, name="instructor_send_register_pdf"),
     
-
     # Instructor: delete a delegate row
     path("app/instructor/register/<int:pk>/delete/", instv.instructor_delegate_delete, name="instructor_delegate_delete"),
 

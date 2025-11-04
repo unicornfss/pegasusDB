@@ -121,3 +121,81 @@ def send_admin_email(
             detail = r.text
         raise RuntimeError(f"{provider} API {r.status_code}: {detail}")
     return 1
+
+def send_pdf_to_booking_contacts(
+    subject: str,
+    body: str,
+    to: list[str],
+    attachments: Optional[Iterable[tuple[str, bytes, str]]] = None,  # (filename, content, mimetype)
+    reply_to: Optional[Iterable[str]] = None,
+    html: bool = False,
+) -> int:
+    """
+    Dev-safe external mailer:
+      - In DEBUG, routes to settings.DEV_CATCH_ALL_EMAIL and prefixes subject with intended recipients.
+      - In production, sends to the 'to' list as-is.
+    Uses Resend (RESEND_API_KEY) as provider.
+    Attachments: iterable of (filename, raw_bytes, mimetype).
+    Returns 1 on success.
+    """
+    provider = (getattr(settings, "EMAIL_PROVIDER", None) or os.getenv("EMAIL_PROVIDER", "resend")).lower()
+
+    # From address
+    default_from = getattr(settings, "DEFAULT_FROM_EMAIL", None)
+    if not default_from:
+        raise RuntimeError("DEFAULT_FROM_EMAIL missing in settings.")
+    from_email = default_from  # keep as is; if you store "Name <email>", Resend accepts that.
+
+    # Determine recipients (dev-safe routing)
+    dev_mode = bool(getattr(settings, "DEBUG", False))
+    if dev_mode:
+        catch_all = getattr(settings, "DEV_CATCH_ALL_EMAIL", None)
+        if not catch_all:
+            raise RuntimeError("DEBUG=True but DEV_CATCH_ALL_EMAIL is not set.")
+        to_list = [catch_all]
+        intended = ", ".join([x for x in (to or []) if x])
+        subject = f"{subject}  [DEV — would send to: {intended or '—'}]"
+    else:
+        to_list = list(dict.fromkeys([x for x in (to or []) if x]))
+        if not to_list:
+            raise RuntimeError("No recipient email(s) provided.")
+
+    # Build attachment payload (Resend expects base64 strings)
+    resend_attachments = []
+    for (fname, raw, _mime) in (attachments or []):
+        resend_attachments.append({
+            "filename": fname,
+            "content": base64.b64encode(raw).decode("ascii"),
+        })
+
+    # Text vs HTML
+    text_part = None if html else (body or "")
+    html_part = body if html else None
+
+    if provider != "resend":
+        raise RuntimeError(f"Unsupported EMAIL_PROVIDER for this helper: {provider}")
+
+    api_key = getattr(settings, "RESEND_API_KEY", None) or os.getenv("RESEND_API_KEY")
+    if not api_key:
+        raise RuntimeError("RESEND_API_KEY missing.")
+
+    payload = {
+        "from": from_email,
+        "to": to_list,
+        "subject": subject,
+        "text": text_part,
+        "html": html_part,
+        "attachments": resend_attachments or None,
+    }
+    if reply_to:
+        # Resend expects a single address string or list
+        payload["reply_to"] = list(reply_to)
+
+    r = requests.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json=payload,
+        timeout=30,
+    )
+    r.raise_for_status()
+    return 1

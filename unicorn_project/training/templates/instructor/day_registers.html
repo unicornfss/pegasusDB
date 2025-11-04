@@ -11,15 +11,15 @@
   <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_new' day.pk %}">
     <i class="bi bi-person-plus"></i> Add delegate
   </a>
-<a class="btn btn-outline-primary btn-sm"
-   href="{% url 'instructor_day_registers_pdf' day.id %}"
-   download>
-  <i class="bi bi-filetype-pdf"></i> Export PDF
-</a>
 
+  <a class="btn btn-outline-primary btn-sm"
+     href="{% url 'instructor_day_registers_pdf' day.id %}"
+     download>
+    <i class="bi bi-filetype-pdf"></i> Export PDF
+  </a>
 </div>
 
-<div class="table-responsive">
+<div class="table-responsive mb-3">
   <table class="table table-sm align-middle">
     <thead>
       <tr>
@@ -38,8 +38,6 @@
           <td>{{ r.obj.name }}</td>
           <td>{{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}</td>
           <td>{{ r.obj.job_title|default:"—" }}</td>
-
-          {# Notes (more important than Emp ID); truncate for neat rows #}
           <td class="text-muted">
             {% if r.obj.notes %}
               {{ r.obj.notes|truncatechars:140 }}
@@ -47,18 +45,16 @@
               —
             {% endif %}
           </td>
-
           <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
-
           <td class="text-center">
-            <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">{{ r.health_symbol }}</span>
+            <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">
+              {{ r.health_symbol }}
+            </span>
           </td>
           <td class="text-end">
             <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_edit' r.obj.pk %}">
               Edit
             </a>
-
-            <!-- DELETE (POST + confirm) -->
             <form method="post"
                   action="{% url 'instructor_delegate_delete' r.obj.pk %}"
                   class="d-inline js-delete-form">
@@ -70,11 +66,96 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="7" class="text-muted">No delegates yet.</td></tr>
+        <tr>
+          <td colspan="7" class="text-muted">No delegates yet.</td>
+        </tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+{# ===== EMAIL REGISTER BOX (below the list) ===== #}
+<div class="card mb-3">
+  <div class="card-body py-3">
+    <div class="mb-2 fw-semibold">Email attendance registers to:</div>
+
+    <form id="send-register-form"
+          method="post"
+          action="{% url 'instructor_send_register_pdf' day.id %}">
+      {% csrf_token %}
+
+      <div class="row g-3 align-items-center">
+        <div class="col-md-auto">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="to_location" id="to_location">
+            <label class="form-check-label" for="to_location">
+              Location contact
+              {% if day.booking.training_location and day.booking.training_location.email %}
+                <span class="text-muted">({{ day.booking.training_location.email }})</span>
+              {% endif %}
+            </label>
+          </div>
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" name="to_business" id="to_business">
+            <label class="form-check-label" for="to_business">
+              Business contact
+              {% if day.booking.business and day.booking.business.email %}
+                <span class="text-muted">({{ day.booking.business.email }})</span>
+              {% endif %}
+            </label>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="mb-2">
+            <a href="#" id="toggle-other" class="small text-decoration-underline">+ Send to another authorised email</a>
+          </div>
+          <div id="other-wrap" class="border rounded p-2 d-none">
+            <div class="mb-2">
+              <label for="other_email" class="form-label mb-1 small">Other email address</label>
+              <input type="email" class="form-control form-control-sm" name="other_email" id="other_email" placeholder="name@example.com">
+            </div>
+            <div class="mb-2">
+              <label for="other_reason" class="form-label mb-1 small">Reason (required)</label>
+              <textarea class="form-control form-control-sm" name="other_reason" id="other_reason" rows="2"
+                        placeholder="Why does this person need the register?"></textarea>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="other_confirm" name="other_confirm">
+              <label class="form-check-label small" for="other_confirm">
+                I confirm this person is authorised to receive delegate attendance information.
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-md-auto">
+          <button id="send-register-btn" type="submit" class="btn btn-primary">
+            <i class="bi bi-send"></i> Send PDF
+          </button>
+        </div>
+
+        {% if register_email_logs %}
+          <div class="col-md small text-muted">
+            Already sent {{ register_email_logs|length }} time{{ register_email_logs|length|pluralize }}.
+          </div>
+        {% endif %}
+      </div>
+    </form>
+
+    {% if register_email_logs %}
+      <div class="mt-2 small">
+        <div class="text-muted">Recent sends:</div>
+        <ul class="mb-0">
+          {% for log in register_email_logs|slice:":5" %}
+            <li>{{ log.created_at|date:"d/m/Y H:i" }} to {{ log.recipients }}{% if log.reason %} — {{ log.reason }}{% endif %}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{# ===== END EMAIL BOX ===== #}
 
 <div class="mt-2 small">
   <strong>Key:</strong>
@@ -83,10 +164,12 @@
   {% endfor %}
 </div>
 
-<a class="btn btn-secondary mt-3" href="{{ back_url }}"><i class="bi bi-arrow-left"></i> Back to booking</a>
+<a class="btn btn-secondary mt-3" href="{{ back_url }}">
+  <i class="bi bi-arrow-left"></i> Back to booking
+</a>
 
 <script>
-  // Ask for confirmation before any delete POST
+  // Confirm before delete
   document.querySelectorAll('.js-delete-form').forEach(function (form) {
     form.addEventListener('submit', function (e) {
       if (!confirm('Delete this delegate? This cannot be undone.')) {
@@ -94,5 +177,49 @@
       }
     });
   });
+
+  // Email panel behaviour
+  (function(){
+    const form = document.getElementById('send-register-form');
+    if (!form) return;
+    const btn  = document.getElementById('send-register-btn');
+    const toLoc = document.getElementById('to_location');
+    const toBus = document.getElementById('to_business');
+    const toggleOther = document.getElementById('toggle-other');
+    const otherWrap = document.getElementById('other-wrap');
+    const otherEmail = document.getElementById('other_email');
+    const otherReason = document.getElementById('other_reason');
+    const otherConfirm = document.getElementById('other_confirm');
+
+    toggleOther.addEventListener('click', function(e){
+      e.preventDefault();
+      otherWrap.classList.toggle('d-none');
+    });
+
+    function validEmail(v){
+      // simple but good-enough validation (server also validates)
+      return !!v && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    }
+
+    function isOtherValid(){
+      if (otherWrap.classList.contains('d-none')) return false;
+      return validEmail(otherEmail.value.trim()) &&
+             otherReason.value.trim().length > 0 &&
+             otherConfirm.checked;
+    }
+
+    function updateBtn(){
+      const anyChecked = (toLoc && toLoc.checked) || (toBus && toBus.checked) || isOtherValid();
+      btn.disabled = !anyChecked;
+    }
+
+    [toLoc, toBus, otherEmail, otherReason, otherConfirm].forEach(el => {
+      if (!el) return;
+      el.addEventListener('change', updateBtn);
+      el.addEventListener('keyup', updateBtn);
+      el.addEventListener('input', updateBtn);
+    });
+    updateBtn();
+  })();
 </script>
 {% endblock %}

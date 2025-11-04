@@ -2,6 +2,7 @@
 import uuid
 from datetime import date
 from decimal import Decimal
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
@@ -720,3 +721,17 @@ class AccidentReport(models.Model):
         self.reporter_name = "*****"
         self.anonymized_at = timezone.now()
         self.save(update_fields=["injured_name", "injured_address", "anonymized_at"])
+
+class RegisterEmailLog(models.Model):
+    day = models.ForeignKey("BookingDay", on_delete=models.CASCADE, related_name="register_email_logs")
+    recipients = models.TextField()  # comma-separated list
+    subject = models.TextField(blank=True)
+    sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.created_at:%Y-%m-%d %H:%M} -> {self.recipients}"

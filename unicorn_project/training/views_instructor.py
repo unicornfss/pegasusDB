@@ -5,7 +5,9 @@ from decimal import Decimal, InvalidOperation
 from datetime import timedelta, datetime
 from django.contrib import messages
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.core.validators import validate_email
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
@@ -29,7 +31,7 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
 import subprocess, tempfile, os
-from .models import AccidentReport, Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
+from .models import AccidentReport, Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, RegisterEmailLog
 from .forms import AccidentReportForm, DelegateRegisterInstructorForm, BookingNotesForm
 
 from .utils.invoice import (
@@ -38,6 +40,27 @@ from .utils.invoice import (
     render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
     send_invoice_email,      # email helper with dev/admin routing
 )
+
+def _get_register_pdf_bytes_via_existing_view(request, pk: int) -> tuple[bytes, str]:
+    """
+    Calls the existing instructor_day_registers_pdf view to obtain the PDF HttpResponse,
+    then returns (raw_bytes, filename). No duplication of PDF drawing code.
+    """
+    # Import locally to avoid circulars if file is reorganised
+    from .views_instructor import instructor_day_registers_pdf  # this is the existing download view
+
+    resp: HttpResponse = instructor_day_registers_pdf(request, pk)
+    data = resp.content or b""
+
+    # Try to parse filename from Content-Disposition; fall back to a generic one
+    filename = "registers.pdf"
+    cd = resp.get("Content-Disposition") or resp.get("content-disposition")
+    if cd:
+        m = re.search(r'filename="?([^";]+)"?', cd)
+        if m:
+            filename = m.group(1)
+
+    return data, filename
 
 def _extract_line_items(post):
     keys = set(post.keys())
@@ -1025,6 +1048,8 @@ def instructor_day_registers(request, pk: int):
             "health_class": cls,
             "health_title": title,
         })
+    
+    register_email_logs = day.register_email_logs.all()
 
     return render(request, "instructor/day_registers.html", {
         "title": f"Registers — {day.booking.course_type.name} — {date_format(day.date, 'j M Y')}",
@@ -1037,6 +1062,7 @@ def instructor_day_registers(request, pk: int):
             ("▲", "bg-warning", "Impairment – will discuss with instructor"),
             ("✖", "bg-danger", "Not fit to take part today"),
         ],
+        "register_email_logs": register_email_logs,
     })
 
 
@@ -2867,3 +2893,120 @@ def whoami(request):
         "is_staff": u.is_staff,
         "has_instructor": has_instructor,
     })
+
+@login_required
+@require_POST
+def instructor_send_register_pdf(request, pk: int):
+    """
+    Emails the attendance/register PDF to location and/or business contact and/or a one-off authorised recipient.
+    Dev-safe: in DEBUG routes to DEV_CATCH_ALL_EMAIL and notes intended recipients in subject.
+    """
+    # Resolve Day + access check
+    day = get_object_or_404(
+        BookingDay.objects.select_related(
+            "booking", "booking__business", "booking__training_location",
+            "booking__course_type", "booking__instructor"
+        ),
+        pk=pk,
+    )
+    booking = day.booking
+
+    # Instructor must match
+    instr = getattr(request.user, "instructor", None)
+    if not instr or instr.id != booking.instructor_id:
+        return HttpResponseForbidden("Not allowed")
+
+    # Read form flags/fields
+    send_to_loc   = bool(request.POST.get("to_location"))
+    send_to_bus   = bool(request.POST.get("to_business"))
+    other_email   = (request.POST.get("other_email") or "").strip()
+    other_reason  = (request.POST.get("other_reason") or "").strip()
+    other_confirm = bool(request.POST.get("other_confirm"))
+
+    # Allow "other only" by including it in the guard
+    if not (send_to_loc or send_to_bus or (other_email and other_confirm)):
+        messages.warning(request, "Choose at least one recipient.")
+        return redirect("instructor_day_registers", pk=day.pk)
+
+    # Collect recipients
+    loc_email = getattr(booking.training_location, "email", "") or ""
+    bus_email = getattr(booking.business, "email", "") or ""
+
+    recipients: list[str] = []
+    if send_to_loc and loc_email:
+        recipients.append(loc_email)
+    if send_to_bus and bus_email:
+        recipients.append(bus_email)
+
+    # Validate and include "other" if provided & confirmed
+    if other_email and other_confirm:
+        # Basic server-side validation
+        try:
+            from django.core.validators import validate_email
+            from django.core.exceptions import ValidationError
+            validate_email(other_email)
+        except Exception:
+            messages.error(request, "The ‘Other email’ address isn’t valid.")
+            return redirect("instructor_day_registers", pk=day.pk)
+        if not other_reason:
+            messages.error(request, "Please provide a reason for the additional authorised recipient.")
+            return redirect("instructor_day_registers", pk=day.pk)
+        recipients.append(other_email)
+
+    # Deduplicate/clean, final sanity
+    recipients = list(dict.fromkeys([x for x in recipients if x]))
+    if not recipients:
+        messages.error(request, "No recipient email found on the booking.")
+        return redirect("instructor_day_registers", pk=day.pk)
+
+    # Render PDF bytes using your existing PDF view
+    try:
+        pdf_bytes, filename = _get_register_pdf_bytes_via_existing_view(request, pk)
+    except Exception as e:
+        messages.error(request, f"Failed to render PDF: {e}")
+        return redirect("instructor_day_registers", pk=day.pk)
+
+    # Email
+    subj = f"[Unicorn] Attendance sheet — {booking.course_type.name} — {date_format(day.date, 'j M Y')} ({booking.course_reference})"
+    body = (
+        f"Please find attached the attendance sheet for {booking.course_type.name} on "
+        f"{date_format(day.date, 'j M Y')} (reference {booking.course_reference})."
+    )
+    reply_to = [booking.instructor.email] if getattr(booking.instructor, "email", "") else None
+
+    try:
+        # correct path for your helper
+        from .utils.emailing import send_pdf_to_booking_contacts
+
+        send_pdf_to_booking_contacts(
+            subject=subj,
+            body=body,
+            to=recipients,
+            attachments=[(filename, pdf_bytes, "application/pdf")],
+            reply_to=reply_to,
+            html=False,
+        )
+
+        # Write an audit log of this send (include reason if your model has it)
+        try:
+            RegisterEmailLog.objects.create(
+                day=day,
+                recipients=", ".join(recipients),
+                subject=subj,
+                sent_by=request.user if request.user.is_authenticated else None,
+                reason=other_reason,  # if your model lacks this field, the except below handles it
+            )
+        except TypeError:
+            # Fallback if RegisterEmailLog doesn't have a 'reason' field yet
+            RegisterEmailLog.objects.create(
+                day=day,
+                recipients=", ".join(recipients),
+                subject=subj,
+                sent_by=request.user if request.user.is_authenticated else None,
+            )
+
+        messages.success(request, "Attendance PDF emailed.")
+    except Exception as e:
+        messages.error(request, f"Email failed: {e}")
+
+    return redirect("instructor_day_registers", pk=day.pk)
