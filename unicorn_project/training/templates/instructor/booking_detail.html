@@ -217,9 +217,17 @@
   {% if has_exam %}
   <!-- Pane: Exams (only when course type has exams) -->
   <div class="tab-pane fade" id="exams-pane" role="tabpanel" aria-labelledby="exams-tab" tabindex="0">
+     <div id="exams-refresh-indicator" class="text-end small text-muted" style="opacity:0; transition:opacity .25s;">Updating…</div>
 
     {% if course_exams %}
+
+      <div class="alert alert-info py-2 small" style="font-size:0.85rem;">
+        <strong>Note:</strong> Live exam results refresh automatically when you are not interacting with this section.<br>
+        Move your mouse away from the table to allow refreshing.
+      </div>
+
       <div class="accordion" id="examAccordion">
+
         {% for ex in course_exams %}
           {% with seq=ex.sequence code=ex.exam_code %}
           <div class="accordion-item mb-2">
@@ -241,6 +249,8 @@
                         <th>Delegate</th>
                         <th style="width: 120px;">DOB</th>
                         <th style="width: 90px;">Attempt</th>
+                        <th style="width: 110px;" class="text-center">Score</th>
+                        <th style="width: 90px;"  class="text-center">%</th>
                         <th style="width: 120px;">Result</th>
                         <th class="text-end" style="width: 260px;">Actions</th>
                       </tr>
@@ -259,20 +269,49 @@
                                 {% endif %}
                               </td>
                               <td>{{ att.attempt_number|default:"1" }}</td>
-                              <td>
-                                {% if att.passed %}
-                                  <span class="badge bg-success">Pass</span>
-                                {% elif att.viva_eligible %}
-                                  <span class="badge bg-warning text-dark">Viva</span>
+
+                              <!-- Score (only when finished) -->
+                              <td class="text-center">
+                                {% if att.finished_at %}
+                                  {% if att.total_questions %}
+                                    {{ att.score_correct }}/{{ att.total_questions }}
+                                  {% else %}
+                                    {{ att.score_correct }}
+                                  {% endif %}
                                 {% else %}
-                                  <span class="badge bg-danger">Fail</span>
+                                  <span class="text-muted">—</span>
+                                {% endif %}
+                              </td>
+
+                              <!-- Percentage (only when finished) -->
+                              <td class="text-center">
+                                {% if att.finished_at and att.total_questions %}
+                                  {% widthratio att.score_correct att.total_questions 100 %}%
+                                {% else %}
+                                  <span class="text-muted">—</span>
+                                {% endif %}
+                              </td>
+
+                              <td>
+                                {% if att.finished_at %}
+                                  {% if att.passed %}
+                                    <span class="badge bg-success">Pass</span>
+                                  {% elif att.viva_eligible %}
+                                    <span class="badge bg-warning text-dark">Viva</span>
+                                  {% else %}
+                                    <span class="badge bg-danger">Fail</span>
+                                  {% endif %}
+                                {% else %}
+                                  <span class="badge bg-info text-dark">In progress</span>
                                 {% endif %}
                               </td>
                               <td class="text-end">
+
                                 <a class="btn btn-sm btn-outline-primary"
                                   href="{% url 'instructor_attempt_review' att.id %}?back={{ booking.id }}&tab=exams">
                                   Review exam
                                 </a>
+
                                 <a class="btn btn-sm btn-outline-secondary"
                                   href="{% url 'instructor_attempt_incorrect' att.id %}?back={{ booking.id }}&tab=exams">
                                   See incorrect & authorise re-test
@@ -281,7 +320,7 @@
                             </tr>
                           {% endfor %}
                         {% else %}
-                          <tr><td colspan="5" class="text-muted p-3">No attempts yet for this exam.</td></tr>
+                          <tr><td colspan="7" class="text-muted p-3">No attempts yet for this exam.</td></tr>
                         {% endif %}
                       {% endwith %}
                     </tbody>
@@ -396,90 +435,109 @@ document.addEventListener("DOMContentLoaded", function () {
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-  // Read-only lock: disable all panes except Invoicing when locked
-  const isLocked = {{ is_locked|yesno:'true,false' }};
-  if (isLocked) {
-    const invoicingPane = document.getElementById('invoicing-pane');
-    document.querySelectorAll('#bookingTabsContent .tab-pane').forEach(function(pane){
-      if (pane !== invoicingPane) {
-        pane.querySelectorAll('input, select, textarea, button, a.btn').forEach(function(el){
-          if (el.closest('#close-course-form')) return;
-          if (el.tagName.toLowerCase() === 'a') {
-            el.classList.add('disabled'); el.setAttribute('tabindex','-1'); el.setAttribute('aria-disabled','true');
-          } else {
-            el.setAttribute('disabled','disabled');
-          }
-        });
-      }
-    });
+  var examsTabBtn = document.getElementById('exams-tab');
+  var examsPane   = document.getElementById('exams-pane');
+  var indicator   = document.getElementById('exams-refresh-indicator');
+
+  console.log('[ExamsRefresh] DOM ready');
+
+  if (!examsPane) {
+    console.log('[ExamsRefresh] exams-pane not found — abort');
     return;
   }
 
-  // ----- Course closure dynamic logic (when NOT locked) -----
-  const pane = document.getElementById('closure-pane');
-  if (!pane) return;
+  var timer = null;
 
-  const regBadge = document.getElementById('closure-register-status');
-  const regBox   = document.getElementById('closure-register-manual');
-  const asBadge  = document.getElementById('closure-assess-status');
-  const asBox    = document.getElementById('closure-assess-manual');
-  const regsOk   = (pane.dataset.registersOk === 'true');
-  const assessOk = (pane.dataset.assessOk === 'true');
-
-  const closeBtn  = document.getElementById('close-course-btn');
-  const closeForm = document.getElementById('close-course-form');
-  const hfReg     = document.getElementById('hf-reg-manual');
-  const hfAssess  = document.getElementById('hf-assess-manual');
-
-  function setBadge(el, text, cls) {
-    el.textContent = text;
-    el.className = 'badge ' + cls;
+  function isPaneActive() {
+    return examsPane.classList.contains('active') && examsPane.classList.contains('show');
   }
 
-  function syncSection(ok, box, badge, notCompleteText) {
-    if (!box || !badge) return { okish: ok };
-    if (ok) {
-      box.checked = false;
-      box.disabled = true;
-      setBadge(badge, 'OK', 'bg-success');
-      return { okish: true };
+  function isUserInteracting() {
+    if (examsPane.matches(':hover')) return true;
+    var ae = document.activeElement;
+    return !!(ae && examsPane.contains(ae));
+  }
+
+  function showIndicator(on) {
+    if (indicator) indicator.style.opacity = on ? '1' : '0';
+  }
+
+  async function refreshExams() {
+    if (!isPaneActive()) return;
+    if (isUserInteracting()) return;
+
+    console.log('[ExamsRefresh] refreshing…');
+    showIndicator(true);
+
+    try {
+      var url = window.location.href.split('#')[0];
+      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'fetch' }
+      });
+
+      if (!res.ok) return;
+
+      var html = await res.text();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      var freshPane = tmp.querySelector('#exams-pane');
+      if (!freshPane) return;
+
+      var freshSections = freshPane.querySelectorAll('.accordion-collapse[id^="ex-c-"]');
+      var changed = false;
+
+      freshSections.forEach(function (freshSection) {
+        var id = freshSection.id;
+        var currentSection = examsPane.querySelector('#' + CSS.escape(id));
+        if (!currentSection) return;
+
+        var freshTbody = freshSection.querySelector('table tbody');
+        var currTbody  = currentSection.querySelector('table tbody');
+
+        if (freshTbody && currTbody) {
+          var freshHTML = freshTbody.innerHTML.trim();
+          if (currTbody.innerHTML.trim() !== freshHTML) {
+            currTbody.innerHTML = freshHTML;
+            changed = true;
+          }
+        }
+      });
+
+      console.log('[ExamsRefresh] done' + (changed ? ' (content updated)' : ' (no changes)'));
+    } catch (e) {
+      console.log('[ExamsRefresh] error:', e);
+    } finally {
+      setTimeout(function(){ showIndicator(false); }, 300);
     }
-    box.disabled = false;
-    if (box.checked) {
-      setBadge(badge, 'Manual submission(s)', 'bg-primary');
-      return { okish: true };
-    } else {
-      setBadge(badge, notCompleteText, 'bg-warning text-dark');
-      return { okish: false };
+  }
+
+  function start() {
+    if (!timer) {
+      console.log('[ExamsRefresh] starting interval');
+      timer = setInterval(refreshExams, 5000);
     }
   }
 
-  function syncAll() {
-    const regState = syncSection(regsOk, regBox, regBadge, 'Not complete');
-    const asState  = syncSection(assessOk, asBox, asBadge, 'Delegate(s) still "Pending" on matrix');
-    const allOkish = (!!regState.okish) && (!!asState.okish);
-    if (closeBtn) closeBtn.style.display = allOkish ? '' : 'none';
-
-    // Keep hidden fields in step with UI
-    if (hfReg)    hfReg.value    = regBox && regBox.checked ? '1' : '0';
-    if (hfAssess) hfAssess.value = asBox && asBox.checked   ? '1' : '0';
+  function stop() {
+    if (timer) {
+      console.log('[ExamsRefresh] stopping interval');
+      clearInterval(timer);
+      timer = null;
+    }
   }
 
-  if (regBox) regBox.addEventListener('change', syncAll);
-  if (asBox)  asBox.addEventListener('change',  syncAll);
-  syncAll();
+  start();
 
-  if (closeBtn && closeForm) {
-    closeBtn.addEventListener('click', function(){
-      if (!confirm(
-        "Once you close this course you will no longer be able to edit registers or assessments.\n" +
-        "You’ll still be able to use the Invoicing tab.\n\n" +
-        "Are you sure you wish to proceed?"
-      )) return;
-      // Hidden fields already synced, just submit
-      closeForm.submit();
-    });
+  if (examsTabBtn) {
+    examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
   }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stop();
+    else start();
+  });
 });
 </script>
 
