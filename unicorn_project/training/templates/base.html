@@ -32,7 +32,7 @@
     {# LEFT: Sidebar (offcanvas on mobile, static on lg+) #}
     <!-- Sidebar: off-canvas on <lg, static on ≥lg -->
 <aside id="sidebar"
-       class="sidebar offcanvas-lg offcanvas-start bg-unicorn text-white p-0 border-end"
+       class="sidebar offcanvas-lg offcanvas-start bg-unicorn text-white p-0 border-end vh-100 sticky-lg-top"
        tabindex="-1" aria-labelledby="sidebarLabel">
 
 
@@ -183,15 +183,27 @@
       </div> {# /offcanvas-body #}
     </aside>
 
-    {# RIGHT: Content #}
-    <main class="flex-grow-1 p-3">
-      {% if messages %}
-        {% for m in messages %}
-          <div class="alert alert-{{ m.tags }}">{{ m }}</div>
-        {% endfor %}
-      {% endif %}
-      {% block content %}{% endblock %}
-    </main>
+    {# RIGHT: Content + Footer live in the right column #}
+    <div class="flex-grow-1 d-flex flex-column">
+
+      <main class="flex-grow-1 p-3">
+        {% if messages %}
+          {% for m in messages %}
+            <div class="alert alert-{{ m.tags }}">{{ m }}</div>
+          {% endfor %}
+        {% endif %}
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="py-3 border-top text-muted small">
+        <div class="container d-flex justify-content-between align-items-center" style="max-width: 960px;">
+          <div>&copy; {% now "Y" %} Unicorn Safety</div>
+          <div><a href="{% url 'privacy_notices' %}">Privacy notices</a></div>
+        </div>
+      </footer>
+
+    </div>
+
   </div>
 
   <script>
@@ -213,12 +225,6 @@
     onload="document.dispatchEvent(new Event('gmaps:ready'))">
   </script>
   {% endif %}
-  <footer class="mt-5 py-3 border-top text-muted small">
-  <div class="container d-flex justify-content-between align-items-center" style="max-width: 960px;">
-    <div>&copy; {% now "Y" %} Unicorn Safety</div>
-    <div><a href="{% url 'privacy_notices' %}">Privacy notices</a></div>
-  </div>
-</footer>
 
 </body>
 </html>
