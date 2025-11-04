@@ -15,6 +15,13 @@
     </button>
 
     <button type="submit"
+            class="btn btn-warning"
+            formaction="{% url 'accident_report_anonymise' %}"
+            onclick="return confirm('Anonymise the selected reports now? This cannot be undone.');">
+      <i class="bi bi-shield-lock"></i> Anonymise selected
+    </button>
+
+    <button type="submit"
             class="btn btn-danger"
             formaction="{% url 'accident_report_delete' %}"
             onclick="return confirmDeleteSelected();">
@@ -117,6 +124,20 @@
         });
       });
     }
+  })();
+</script>
+
+<script>
+  (function(){
+    const tbody = document.getElementById('report-rows');
+    if (!tbody) return;
+
+    tbody.addEventListener('click', function(e){
+      const tag = e.target.tagName.toLowerCase();
+      if (tag === 'input' || tag === 'button' || tag === 'a' || e.target.closest('a,button,input,label')) return;
+      const tr = e.target.closest('tr[data-href]');
+      if (tr && tr.dataset.href) window.location = tr.dataset.href;
+    });
   })();
 </script>
 

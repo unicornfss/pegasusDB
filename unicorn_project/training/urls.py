@@ -143,6 +143,7 @@ urlpatterns = [
     path("accident-reports/export-pptx/", views.accident_report_export_pptx, name="accident_report_export_pptx"),
     path("accident-reports/delete/", views.accident_report_delete, name="accident_report_delete"),
     path("accident-reports/poll/", views.accident_report_poll, name="accident_report_poll"),
+    path("accident-reports/anonymise", views.accident_report_anonymise, name="accident_report_anonymise"),
     
     path(
         "app/instructor/exams/attempt/<int:attempt_id>/review/",

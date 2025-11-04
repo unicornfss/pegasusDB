@@ -942,3 +942,18 @@ def accident_report_poll(request):
         request=request,
     )
     return JsonResponse({"html": rows_html})
+
+@require_POST
+def accident_report_anonymise(request):
+    ids = request.POST.getlist("ids")  # matches name="ids" in the list form rows
+    if not ids:
+        messages.warning(request, "Select at least one report to anonymise.")
+        return redirect("accident_report_list")
+
+    qs = AccidentReport.objects.filter(id__in=ids, anonymized_at__isnull=True)
+    # Use update for speed, then set anonymized_at in a second pass
+    now = timezone.now()
+    updated = qs.update(injured_name="", injured_address="", anonymized_at=now)
+
+    messages.success(request, f"Anonymised {updated} report{'s' if updated != 1 else ''}.")
+    return redirect("accident_report_list")

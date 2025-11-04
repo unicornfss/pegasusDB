@@ -696,6 +696,8 @@ class AccidentReport(models.Model):
     injured_name = models.CharField(max_length=255)
     injured_address = models.TextField(blank=True, null=True)
 
+    anonymized_at = models.DateTimeField(null=True, blank=True)
+
     what_happened = models.TextField()
     injuries_sustained = models.TextField()
     actions_carried_out = models.TextField()
@@ -708,3 +710,13 @@ class AccidentReport(models.Model):
 
     def __str__(self):
         return f"Incident at {self.location} on {self.date}"
+    
+    def anonymize(self):
+        if self.anonymized_at:
+            return
+        self.injured_name = "*****"
+        self.injured_address = "*****"
+        self.first_aider_name = "*****"
+        self.reporter_name = "*****"
+        self.anonymized_at = timezone.now()
+        self.save(update_fields=["injured_name", "injured_address", "anonymized_at"])
