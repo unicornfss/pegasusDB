@@ -193,7 +193,7 @@
         </thead>
         <tbody>
           {% for d in day_rows %}
-            <tr>
+              <tr class="{% if d.warn %}table-warning{% endif %}">
               <td>{{ d.date }}</td>
               <td>{% if d.start_time %}{{ d.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
               <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
@@ -203,6 +203,17 @@
                 </a>
               </td>
             </tr>
+              {% if d.warn %}
+                <tr class="table-warning">
+                  <td colspan="4" class="small text-danger">
+                    ⚠️ Date of birth mismatch detected on this register
+                    ({{ d.warn_count }} item{{ d.warn_count|pluralize }}).
+                    Please open the register and correct the affected delegate(s).
+                  </td>
+                </tr>
+              {% endif %}
+
+
           {% empty %}
             <tr><td colspan="4" class="text-muted">No days created for this booking.</td></tr>
           {% endfor %}

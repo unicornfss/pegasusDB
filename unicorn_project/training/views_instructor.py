@@ -811,13 +811,46 @@ def instructor_booking_detail(request, pk):
         .order_by("date")
         .annotate(n=Count("delegateregister"))
     )
+
+    # --- flag days with any DOB mismatch (uses earlier days as the reference) ---
+    dob_mismatch_ids = set()
+    dob_mismatch_counts = defaultdict(int)
+
+    prior = {}  # key -> prior DOB (prefer employee_id, else casefold(name))
+    for d in days_qs:
+        regs = (
+            DelegateRegister.objects
+            .filter(booking_day=d)
+            .only("name", "employee_id", "date_of_birth")
+        )
+        day_has_mismatch = False
+        for r in regs:
+            key = (r.employee_id or "").strip() or (r.name or "").casefold().strip()
+            expected = prior.get(key)
+            if expected and r.date_of_birth and r.date_of_birth != expected:
+                day_has_mismatch = True
+                dob_mismatch_counts[d.id] += 1
+        if day_has_mismatch:
+            dob_mismatch_ids.add(d.id)
+        # update "prior" with today's info (keep first seen)
+        for r in regs:
+            key = (r.employee_id or "").strip() or (r.name or "").casefold().strip()
+            if key and r.date_of_birth and key not in prior:
+                prior[key] = r.date_of_birth
+
     day_rows = [{
         "id": d.id,
         "date": date_format(d.date, "j M Y"),
         "start_time": d.start_time,
         "n": d.n or 0,
+
+        # NEW: per-row flags used by the template
+        "warn": d.id in dob_mismatch_ids,
+        "warn_count": dob_mismatch_counts.get(d.id, 0),
+
         "edit_url": redirect("instructor_day_registers", pk=d.id).url,
     } for d in days_qs]
+
 
     day_counts = list(days_qs.values_list("n", flat=True))
     registers_all_days = bool(day_counts) and all((n or 0) > 0 for n in day_counts)
@@ -870,7 +903,7 @@ def instructor_booking_detail(request, pk):
         course_exams = []
 
     # Attempts for exams on this course type, limited to this booking's dates
-    from collections import defaultdict
+    # from collections import defaultdict
     try:
         from .models import ExamAttempt  # local import to avoid circulars
     except Exception:
