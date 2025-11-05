@@ -38,7 +38,8 @@
         <th style="width:10%" class="text-end">Actions</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="reg-body"
+       data-poll-url="{% url 'instructor_day_registers_poll' day.id %}">
       {% for r in rows %}
         <tr>
           <td>{{ r.obj.name }}</td>
@@ -235,6 +236,48 @@
       el.addEventListener('input', updateBtn);
     });
     updateBtn();
+  })();
+</script>
+
+<script>
+  // Silent rows refresh: fetch fragment and swap <tbody> without touching the email form
+  (function(){
+    const tbody = document.getElementById('reg-body');
+    if (!tbody) return;
+    const pollUrl = tbody.dataset.pollUrl;
+    const INTERVAL = 5000;
+
+    // Don't refresh while user is interacting with table inputs or delete forms
+    function isBusy() {
+      const a = document.activeElement;
+      if (!a) return false;
+      const isField = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(a.tagName);
+      // also avoid while a delete confirm is open — crude but safe
+      return isField && tbody.contains(a);
+    }
+
+    async function tick() {
+      try {
+        if (!document.hidden && !isBusy()) {
+          const resp = await fetch(pollUrl, {headers: {"X-Requested-With": "XMLHttpRequest"}});
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data && typeof data.html === "string") {
+              // Only replace if content actually changed
+              if (tbody.getAttribute('data-last') !== data.html) {
+                tbody.innerHTML = data.html;
+                tbody.setAttribute('data-last', data.html);
+              }
+            }
+          }
+        }
+      } catch (e) { /* swallow errors silently */ }
+      setTimeout(tick, INTERVAL);
+    }
+    setTimeout(tick, INTERVAL);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) setTimeout(tick, 200);
+    });
   })();
 </script>
 {% endblock %}

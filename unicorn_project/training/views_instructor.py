@@ -255,7 +255,8 @@ W, H = landscape(A4)   # use these for your coordinates
 
 HEALTH_BADGE = {
     "fit":            ("✔", "bg-success", "Fit to take part"),
-    "agreed_adjust":  ("■", "bg-warning text-dark", "Impairment – agreed adjustments"),
+    "agreed_adjustments": ("■", "badge bg-warning text-dark",    "Impairment – agreed adjustments"),
+    "agreed_adjust":      ("■", "badge bg-warning text-dark",    "Impairment – agreed adjustments"),
     "will_discuss":   ("▲", "bg-orange text-dark" if False else "bg-warning", "Impairment – will discuss"),
     "not_fit":        ("✖", "bg-danger", "Not fit to take part"),
 }
@@ -3071,3 +3072,41 @@ def instructor_send_register_pdf(request, pk: int):
         messages.error(request, f"Email failed: {e}")
 
     return redirect("instructor_day_registers", pk=day.pk)
+
+@login_required
+def instructor_day_registers_poll(request, pk: int):
+    """
+    Return just the <tbody> rows for the day registers table so the UI can
+    hot-swap them without reloading the whole page.
+    """
+    instr = getattr(request.user, "instructor", None)
+    day = get_object_or_404(
+        BookingDay.objects.select_related(
+            "booking__course_type", "booking__business", "booking__instructor"
+        ),
+        pk=pk,
+    )
+    if not instr or day.booking.instructor_id != instr.id:
+        return HttpResponseForbidden("Not allowed")
+
+    # same queryset as the main page
+    qs = (
+        DelegateRegister.objects.filter(booking_day=day)
+        .order_by("name")
+        .only("name", "date_of_birth", "job_title", "employee_id", "health_status", "notes")
+    )
+
+    rows = []
+    for r in qs:
+        symbol, cls, title = _health_badge_tuple(r.health_status)
+        rows.append({
+            "obj": r,
+            "health_symbol": symbol,
+            "health_class": cls,
+            "health_title": title,
+        })
+
+    # Render rows only
+    html = render_to_string("instructor/_day_register_rows.html", {"rows": rows}, request=request)
+    return JsonResponse({"html": html})
+

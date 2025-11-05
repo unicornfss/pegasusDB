@@ -1,0 +1,35 @@
+{% for r in rows %}
+<tr>
+  <td>{{ r.obj.name }}</td>
+  <td>
+    {{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}
+    {% if r.dob_mismatch %}
+      <span class="badge bg-danger ms-1" title="Does not match previous day{% if r.dob_expected %} (expected {{ r.dob_expected|date:'d/m/Y' }}){% endif %}">DOB?</span>
+    {% endif %}
+  </td>
+  <td>{{ r.obj.job_title|default:"—" }}</td>
+
+  <td class="text-muted">
+    {% if r.obj.notes %}
+      {{ r.obj.notes|truncatechars:140 }}
+    {% else %}
+      —
+    {% endif %}
+  </td>
+
+  <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
+
+  <td class="text-center">
+    <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">{{ r.health_symbol }}</span>
+  </td>
+  <td class="text-end">
+    <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_edit' r.obj.pk %}">Edit</a>
+    <form method="post" action="{% url 'instructor_delegate_delete' r.obj.pk %}" class="d-inline js-delete-form">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+    </form>
+  </td>
+</tr>
+{% empty %}
+<tr><td colspan="7" class="text-muted">No delegates yet.</td></tr>
+{% endfor %}
