@@ -19,6 +19,12 @@
   </a>
 </div>
 
+{% if any_dob_mismatch %}
+<div class="alert alert-warning py-2">
+  Some dates of birth don’t match what was entered on previous day(s). Look for the red “DOB?” badge.
+</div>
+{% endif %}
+
 <div class="table-responsive mb-3">
   <table class="table table-sm align-middle">
     <thead>
@@ -36,7 +42,16 @@
       {% for r in rows %}
         <tr>
           <td>{{ r.obj.name }}</td>
-          <td>{{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}</td>
+
+          <td>
+            {{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}
+            {% if r.dob_mismatch %}
+              <span class="badge bg-danger ms-1" title="Does not match previous day{% if r.dob_expected %} (expected {{ r.dob_expected|date:'d/m/Y' }}){% endif %}">
+                DOB?
+              </span>
+            {% endif %}
+          </td>
+          
           <td>{{ r.obj.job_title|default:"—" }}</td>
           <td class="text-muted">
             {% if r.obj.notes %}

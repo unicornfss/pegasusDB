@@ -1048,6 +1048,33 @@ def instructor_day_registers(request, pk: int):
             "health_class": cls,
             "health_title": title,
         })
+
+        # --- NEW: flag DOB mismatches against previous days of the *same booking* ---
+    # Build a lookup of "who" -> prior_dob from earlier days (prefer employee_id, fallback to case-insensitive name)
+    prior = {}
+    # all prior registers in this booking before this day
+    prior_qs = (
+        DelegateRegister.objects
+        .filter(booking_day__booking=day.booking, booking_day__date__lt=day.date)
+        .only("name", "employee_id", "date_of_birth", "booking_day_id")
+    )
+    for pr in prior_qs:
+        key = (pr.employee_id or "").strip() or pr.name.casefold().strip()
+        # keep the first seen (earliest) dob for comparison
+        if key and key not in prior and pr.date_of_birth:
+            prior[key] = pr.date_of_birth
+
+    any_dob_mismatch = False
+    for row in rows:
+        dr = row["obj"]
+        key = (dr.employee_id or "").strip() or dr.name.casefold().strip()
+        expected = prior.get(key)
+        mismatch = bool(expected and dr.date_of_birth and dr.date_of_birth != expected)
+        row["dob_mismatch"] = mismatch
+        row["dob_expected"] = expected
+        if mismatch:
+            any_dob_mismatch = True
+
     
     register_email_logs = day.register_email_logs.all()
 
@@ -1063,6 +1090,7 @@ def instructor_day_registers(request, pk: int):
             ("✖", "bg-danger", "Not fit to take part today"),
         ],
         "register_email_logs": register_email_logs,
+        "any_dob_mismatch": any_dob_mismatch,
     })
 
 
