@@ -5,9 +5,7 @@ from decimal import Decimal, InvalidOperation
 from datetime import timedelta, datetime
 from django.contrib import messages
 from django.conf import settings
-from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.core.validators import validate_email
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.db.models import Count, Max, Avg, Q
@@ -31,8 +29,8 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
 import subprocess, tempfile, os
-from .models import AccidentReport, Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, RegisterEmailLog
-from .forms import AccidentReportForm, DelegateRegisterInstructorForm, BookingNotesForm
+from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
+from .forms import DelegateRegisterInstructorForm, BookingNotesForm
 
 from .utils.invoice import (
     get_invoice_template_path,
@@ -40,27 +38,6 @@ from .utils.invoice import (
     render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
     send_invoice_email,      # email helper with dev/admin routing
 )
-
-def _get_register_pdf_bytes_via_existing_view(request, pk: int) -> tuple[bytes, str]:
-    """
-    Calls the existing instructor_day_registers_pdf view to obtain the PDF HttpResponse,
-    then returns (raw_bytes, filename). No duplication of PDF drawing code.
-    """
-    # Import locally to avoid circulars if file is reorganised
-    from .views_instructor import instructor_day_registers_pdf  # this is the existing download view
-
-    resp: HttpResponse = instructor_day_registers_pdf(request, pk)
-    data = resp.content or b""
-
-    # Try to parse filename from Content-Disposition; fall back to a generic one
-    filename = "registers.pdf"
-    cd = resp.get("Content-Disposition") or resp.get("content-disposition")
-    if cd:
-        m = re.search(r'filename="?([^";]+)"?', cd)
-        if m:
-            filename = m.group(1)
-
-    return data, filename
 
 def _extract_line_items(post):
     keys = set(post.keys())
@@ -255,8 +232,7 @@ W, H = landscape(A4)   # use these for your coordinates
 
 HEALTH_BADGE = {
     "fit":            ("✔", "bg-success", "Fit to take part"),
-    "agreed_adjustments": ("■", "badge bg-warning text-dark",    "Impairment – agreed adjustments"),
-    "agreed_adjust":      ("■", "badge bg-warning text-dark",    "Impairment – agreed adjustments"),
+    "agreed_adjust":  ("■", "bg-warning text-dark", "Impairment – agreed adjustments"),
     "will_discuss":   ("▲", "bg-orange text-dark" if False else "bg-warning", "Impairment – will discuss"),
     "not_fit":        ("✖", "bg-danger", "Not fit to take part"),
 }
@@ -812,46 +788,13 @@ def instructor_booking_detail(request, pk):
         .order_by("date")
         .annotate(n=Count("delegateregister"))
     )
-
-    # --- flag days with any DOB mismatch (uses earlier days as the reference) ---
-    dob_mismatch_ids = set()
-    dob_mismatch_counts = defaultdict(int)
-
-    prior = {}  # key -> prior DOB (prefer employee_id, else casefold(name))
-    for d in days_qs:
-        regs = (
-            DelegateRegister.objects
-            .filter(booking_day=d)
-            .only("name", "employee_id", "date_of_birth")
-        )
-        day_has_mismatch = False
-        for r in regs:
-            key = (r.employee_id or "").strip() or (r.name or "").casefold().strip()
-            expected = prior.get(key)
-            if expected and r.date_of_birth and r.date_of_birth != expected:
-                day_has_mismatch = True
-                dob_mismatch_counts[d.id] += 1
-        if day_has_mismatch:
-            dob_mismatch_ids.add(d.id)
-        # update "prior" with today's info (keep first seen)
-        for r in regs:
-            key = (r.employee_id or "").strip() or (r.name or "").casefold().strip()
-            if key and r.date_of_birth and key not in prior:
-                prior[key] = r.date_of_birth
-
     day_rows = [{
         "id": d.id,
         "date": date_format(d.date, "j M Y"),
         "start_time": d.start_time,
         "n": d.n or 0,
-
-        # NEW: per-row flags used by the template
-        "warn": d.id in dob_mismatch_ids,
-        "warn_count": dob_mismatch_counts.get(d.id, 0),
-
         "edit_url": redirect("instructor_day_registers", pk=d.id).url,
     } for d in days_qs]
-
 
     day_counts = list(days_qs.values_list("n", flat=True))
     registers_all_days = bool(day_counts) and all((n or 0) > 0 for n in day_counts)
@@ -890,44 +833,6 @@ def instructor_booking_detail(request, pk):
         getattr(booking.instructor, "postcode", ""),
     ] if (p or "").strip()])
 
-    # ---------- Exams tab data ----------
-    # Be robust to different related_name: "exams" OR default "exam_set"
-    exams_rel = getattr(booking.course_type, "exams", None) or getattr(booking.course_type, "exam_set", None)
-
-    if exams_rel is not None:
-        try:
-            course_exams = list(exams_rel.all().order_by("sequence"))
-        except Exception:
-            # if "sequence" isn't on the model, just return all
-            course_exams = list(exams_rel.all())
-    else:
-        course_exams = []
-
-    # Attempts for exams on this course type, limited to this booking's dates
-    # from collections import defaultdict
-    try:
-        from .models import ExamAttempt  # local import to avoid circulars
-    except Exception:
-        ExamAttempt = None
-
-    if ExamAttempt and booking_dates and course_exams:
-        attempts_qs = (
-            ExamAttempt.objects
-            .select_related("exam", "exam__course_type", "instructor")
-            .filter(
-                exam__course_type=booking.course_type,
-                exam_date__in=booking_dates,
-            )
-            .order_by("exam__sequence", "started_at", "pk")
-        )
-    else:
-        attempts_qs = []
-
-    attempts_by_exam = defaultdict(list)
-    for att in attempts_qs:
-        attempts_by_exam[att.exam_id].append(att)
-
-
     # ---------- base context ----------
     ctx = {
         "title": booking.course_type.name,
@@ -936,14 +841,12 @@ def instructor_booking_detail(request, pk):
         "day_rows": day_rows,
         "back_url": redirect("instructor_bookings").url,
         "notes_form": None,  # filled below
+        "has_exam": getattr(booking.course_type, "has_exam", False),
         "fb_qs": fb_qs,
         "fb_count": fb_count,
         "fb_avg": fb_avg,
         "registers_all_days": registers_all_days,
         "assessments_all_complete": assessments_all_complete,
-        "course_exams": course_exams,
-        "attempts_by_exam": dict(attempts_by_exam),
-        "has_exam": bool(course_exams) or getattr(booking.course_type, "has_exam", False),
         "is_locked": is_locked,
         "instructor_address": instructor_address,
         "active_tab": request.GET.get("tab", ""),
@@ -1102,35 +1005,6 @@ def instructor_day_registers(request, pk: int):
             "health_title": title,
         })
 
-        # --- NEW: flag DOB mismatches against previous days of the *same booking* ---
-    # Build a lookup of "who" -> prior_dob from earlier days (prefer employee_id, fallback to case-insensitive name)
-    prior = {}
-    # all prior registers in this booking before this day
-    prior_qs = (
-        DelegateRegister.objects
-        .filter(booking_day__booking=day.booking, booking_day__date__lt=day.date)
-        .only("name", "employee_id", "date_of_birth", "booking_day_id")
-    )
-    for pr in prior_qs:
-        key = (pr.employee_id or "").strip() or pr.name.casefold().strip()
-        # keep the first seen (earliest) dob for comparison
-        if key and key not in prior and pr.date_of_birth:
-            prior[key] = pr.date_of_birth
-
-    any_dob_mismatch = False
-    for row in rows:
-        dr = row["obj"]
-        key = (dr.employee_id or "").strip() or dr.name.casefold().strip()
-        expected = prior.get(key)
-        mismatch = bool(expected and dr.date_of_birth and dr.date_of_birth != expected)
-        row["dob_mismatch"] = mismatch
-        row["dob_expected"] = expected
-        if mismatch:
-            any_dob_mismatch = True
-
-    
-    register_email_logs = day.register_email_logs.all()
-
     return render(request, "instructor/day_registers.html", {
         "title": f"Registers — {day.booking.course_type.name} — {date_format(day.date, 'j M Y')}",
         "day": day,
@@ -1142,8 +1016,6 @@ def instructor_day_registers(request, pk: int):
             ("▲", "bg-warning", "Impairment – will discuss with instructor"),
             ("✖", "bg-danger", "Not fit to take part today"),
         ],
-        "register_email_logs": register_email_logs,
-        "any_dob_mismatch": any_dob_mismatch,
     })
 
 
@@ -2974,158 +2846,3 @@ def whoami(request):
         "is_staff": u.is_staff,
         "has_instructor": has_instructor,
     })
-
-@login_required
-@require_POST
-def instructor_send_register_pdf(request, pk: int):
-    """
-    Emails the attendance/register PDF to location and/or business contact and/or a one-off authorised recipient.
-    Dev-safe: in DEBUG routes to DEV_CATCH_ALL_EMAIL and notes intended recipients in subject.
-    """
-    # Resolve Day + access check
-    day = get_object_or_404(
-        BookingDay.objects.select_related(
-            "booking", "booking__business", "booking__training_location",
-            "booking__course_type", "booking__instructor"
-        ),
-        pk=pk,
-    )
-    booking = day.booking
-
-    # Instructor must match
-    instr = getattr(request.user, "instructor", None)
-    if not instr or instr.id != booking.instructor_id:
-        return HttpResponseForbidden("Not allowed")
-
-    # Read form flags/fields
-    send_to_loc   = bool(request.POST.get("to_location"))
-    send_to_bus   = bool(request.POST.get("to_business"))
-    other_email   = (request.POST.get("other_email") or "").strip()
-    other_reason  = (request.POST.get("other_reason") or "").strip()
-    other_confirm = bool(request.POST.get("other_confirm"))
-
-    # Allow "other only" by including it in the guard
-    if not (send_to_loc or send_to_bus or (other_email and other_confirm)):
-        messages.warning(request, "Choose at least one recipient.")
-        return redirect("instructor_day_registers", pk=day.pk)
-
-    # Collect recipients
-    loc_email = getattr(booking.training_location, "email", "") or ""
-    bus_email = getattr(booking.business, "email", "") or ""
-
-    recipients: list[str] = []
-    if send_to_loc and loc_email:
-        recipients.append(loc_email)
-    if send_to_bus and bus_email:
-        recipients.append(bus_email)
-
-    # Validate and include "other" if provided & confirmed
-    if other_email and other_confirm:
-        # Basic server-side validation
-        try:
-            from django.core.validators import validate_email
-            from django.core.exceptions import ValidationError
-            validate_email(other_email)
-        except Exception:
-            messages.error(request, "The ‘Other email’ address isn’t valid.")
-            return redirect("instructor_day_registers", pk=day.pk)
-        if not other_reason:
-            messages.error(request, "Please provide a reason for the additional authorised recipient.")
-            return redirect("instructor_day_registers", pk=day.pk)
-        recipients.append(other_email)
-
-    # Deduplicate/clean, final sanity
-    recipients = list(dict.fromkeys([x for x in recipients if x]))
-    if not recipients:
-        messages.error(request, "No recipient email found on the booking.")
-        return redirect("instructor_day_registers", pk=day.pk)
-
-    # Render PDF bytes using your existing PDF view
-    try:
-        pdf_bytes, filename = _get_register_pdf_bytes_via_existing_view(request, pk)
-    except Exception as e:
-        messages.error(request, f"Failed to render PDF: {e}")
-        return redirect("instructor_day_registers", pk=day.pk)
-
-    # Email
-    subj = f"[Unicorn] Attendance sheet — {booking.course_type.name} — {date_format(day.date, 'j M Y')} ({booking.course_reference})"
-    body = (
-        f"Please find attached the attendance sheet for {booking.course_type.name} on "
-        f"{date_format(day.date, 'j M Y')} (reference {booking.course_reference})."
-    )
-    reply_to = [booking.instructor.email] if getattr(booking.instructor, "email", "") else None
-
-    try:
-        # correct path for your helper
-        from .utils.emailing import send_pdf_to_booking_contacts
-
-        send_pdf_to_booking_contacts(
-            subject=subj,
-            body=body,
-            to=recipients,
-            attachments=[(filename, pdf_bytes, "application/pdf")],
-            reply_to=reply_to,
-            html=False,
-        )
-
-        # Write an audit log of this send (include reason if your model has it)
-        try:
-            RegisterEmailLog.objects.create(
-                day=day,
-                recipients=", ".join(recipients),
-                subject=subj,
-                sent_by=request.user if request.user.is_authenticated else None,
-                reason=other_reason,  # if your model lacks this field, the except below handles it
-            )
-        except TypeError:
-            # Fallback if RegisterEmailLog doesn't have a 'reason' field yet
-            RegisterEmailLog.objects.create(
-                day=day,
-                recipients=", ".join(recipients),
-                subject=subj,
-                sent_by=request.user if request.user.is_authenticated else None,
-            )
-
-        messages.success(request, "Attendance PDF emailed.")
-    except Exception as e:
-        messages.error(request, f"Email failed: {e}")
-
-    return redirect("instructor_day_registers", pk=day.pk)
-
-@login_required
-def instructor_day_registers_poll(request, pk: int):
-    """
-    Return just the <tbody> rows for the day registers table so the UI can
-    hot-swap them without reloading the whole page.
-    """
-    instr = getattr(request.user, "instructor", None)
-    day = get_object_or_404(
-        BookingDay.objects.select_related(
-            "booking__course_type", "booking__business", "booking__instructor"
-        ),
-        pk=pk,
-    )
-    if not instr or day.booking.instructor_id != instr.id:
-        return HttpResponseForbidden("Not allowed")
-
-    # same queryset as the main page
-    qs = (
-        DelegateRegister.objects.filter(booking_day=day)
-        .order_by("name")
-        .only("name", "date_of_birth", "job_title", "employee_id", "health_status", "notes")
-    )
-
-    rows = []
-    for r in qs:
-        symbol, cls, title = _health_badge_tuple(r.health_status)
-        rows.append({
-            "obj": r,
-            "health_symbol": symbol,
-            "health_class": cls,
-            "health_title": title,
-        })
-
-    # Render rows only
-    html = render_to_string("instructor/_day_register_rows.html", {"rows": rows}, request=request)
-    return JsonResponse({"html": html})
-
