@@ -929,7 +929,13 @@ def instructor_assessment_outcome_autosave(request, pk):
     """
     Persist a column outcome for a delegate.
     POST: register_id, outcome ("pending"|"dnf"|"fail"|"pass")
+
+    IMPORTANT:
+      - Enforces that the register belongs to this booking/instructor.
+      - Propagates the outcome across *all days* of the same booking
+        for the same person (match by normalized name + DOB when present).
     """
+    # Guard: instructor & booking match
     instr = getattr(request.user, "instructor", None)
     booking = get_object_or_404(
         Booking.objects.select_related("course_type", "instructor"),
@@ -938,20 +944,33 @@ def instructor_assessment_outcome_autosave(request, pk):
     if not instr or booking.instructor_id != getattr(instr, "id", None):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
 
-    reg_id = request.POST.get("register_id")
+    # Inputs
+    reg_id  = request.POST.get("register_id")
     outcome = (request.POST.get("outcome") or "").lower().strip()
     if outcome not in {"pending", "dnf", "fail", "pass"}:
-        return JsonResponse({"ok": False, "error": "Bad outcome"}, status=400)
+        return JsonResponse({"ok": False, "error": "Invalid outcome"}, status=400)
 
+    # The specific row that was changed (must belong to this booking)
     reg = get_object_or_404(
         DelegateRegister.objects.select_related("booking_day__booking"),
         pk=reg_id, booking_day__booking=booking,
     )
 
-    reg.outcome = outcome
-    reg.save(update_fields=["outcome"])
-    return JsonResponse({"ok": True, "outcome": reg.outcome})
+    # Build a queryset for "same person on this booking"
+    # (name case-insensitive; require DOB match if present)
+    q = DelegateRegister.objects.filter(
+        booking_day__booking=booking,
+        name__iexact=(reg.name or "").strip(),
+    )
+    dob = getattr(reg, "date_of_birth", None)
+    if dob:
+        q = q.filter(date_of_birth=dob)
 
+    # Update *all* matched rows (every day on this booking)
+    updated = q.update(outcome=outcome)
+
+    return JsonResponse({"ok": True, "outcome": outcome, "updated": int(updated)})
+    
 
 @login_required
 def instructor_day_registers(request, pk: int):

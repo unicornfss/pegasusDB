@@ -15,7 +15,7 @@
         <tr>
           <th class="sticky corner">Competency</th>
           {% for d in delegates %}
-            <th class="sticky top rotate" data-col="{{ forloop.counter0 }}" data-delegate-id="{{ d.id }}">
+            <th class="sticky top rotate" data-col="{{ forloop.counter0 }}" data-register-id="{{ d.register_id|default:d.id }}">
               {% with parts=d.name|split_name %}
                 <div class="name-rotator">
                   <span class="first">{{ parts.0 }}</span>
@@ -45,7 +45,7 @@
                          class="level-input" />
                   <input type="checkbox"
                          class="lv-chk assess-toggle"
-                         data-register="{{ d.id }}"
+                         data-register="{{ d.register_id|default:d.id }}"
                          data-competency="{{ comp.id }}"
                          {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
                          aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
@@ -69,8 +69,9 @@
               <input type="hidden" name="outcome_{{ d.id }}" class="outcome-input" value="{{ d.outcome|default:'pending' }}" />
               <!-- visible selector for manual states (no 'Pass') -->
               <select class="form-select form-select-sm outcome-select"
-                      data-register="{{ d.id }}"
+                      data-register="{{ d.register_id|default:d.id }}"
                       aria-label="Outcome for {{ d.name }}">
+
                 <option value="pending" {% if d.outcome == 'pending' or not d.outcome %}selected{% endif %}>Pending</option>
                 <option value="dnf"     {% if d.outcome == 'dnf' %}selected{% endif %}>DNF</option>
                 <option value="fail"    {% if d.outcome == 'fail' %}selected{% endif %}>Fail</option>
@@ -213,17 +214,123 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 </style>
 
 <script>
-(function(){
+(function () {
   const table = document.getElementById('assessment-matrix');
-  if(!table) return;
+  if (!table) return;
 
   const exportBtn = document.getElementById('export-pdf-btn');
 
-  // --- Autosave (reliable, with cookies + better errors) ----------------
+  // --- endpoints ------------------------------------------------------------
   const AUTOSAVE_URL = "{% url 'instructor_assessment_autosave' booking.pk %}";
-    // outcome autosave endpoint (per-delegate outcome)
-  const OUTCOME_URL = "{% url 'instructor_assessment_outcome_autosave' booking.pk %}";
+  const OUTCOME_URL  = "{% url 'instructor_assessment_outcome_autosave' booking.pk %}";
 
+  // --- csrf helper ----------------------------------------------------------
+  function getCookie(name){
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? m.pop() : '';
+  }
+  const CSRF = getCookie('csrftoken');
+
+  // --- small utils ----------------------------------------------------------
+  function getRegisterIdForColumn(colIndex){
+    const th = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
+    return th ? th.getAttribute('data-register-id') : null;
+  }
+
+
+  function tagParity(){
+    table.querySelectorAll('thead th.top').forEach(th => {
+      const idx = parseInt(th.dataset.col, 10);
+      th.classList.toggle('is-even', idx % 2 === 0);
+      th.classList.toggle('is-odd',  idx % 2 === 1);
+    });
+    table.querySelectorAll('td.cell, td.outcome-cell').forEach(td => {
+      const idx = parseInt(td.dataset.col, 10);
+      td.classList.toggle('is-even', idx % 2 === 0);
+      td.classList.toggle('is-odd',  idx % 2 === 1);
+    });
+  }
+
+  function refreshExportState(){
+    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
+    const allDecided = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
+    if (!exportBtn) return;
+    if (allDecided) {
+      exportBtn.classList.remove('disabled');
+      exportBtn.removeAttribute('aria-disabled');
+      exportBtn.removeAttribute('tabindex');
+    } else {
+      exportBtn.classList.add('disabled');
+      exportBtn.setAttribute('aria-disabled','true');
+      exportBtn.setAttribute('tabindex','-1');
+    }
+  }
+
+  // ---- Live update of the Course closure pane (assessments section) ----
+  function updateClosurePaneAssessStatus(){
+    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
+    const assessAllOk = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
+
+    const pane      = document.getElementById('closure-pane');
+    const badge     = document.getElementById('closure-assess-status');
+    const manualBox = document.getElementById('closure-assess-manual');
+    const regManual = document.getElementById('closure-register-manual');
+    const closeBtn  = document.getElementById('close-course-btn');
+
+    if (!pane || !badge || !manualBox) return;
+
+    pane.dataset.assessOk = assessAllOk ? 'true' : 'false';
+
+    if (assessAllOk) {
+      manualBox.checked = false;
+      manualBox.disabled = true;
+      badge.textContent = 'OK';
+      badge.className = 'badge bg-success';
+    } else {
+      manualBox.disabled = false;
+      if (manualBox.checked) {
+        badge.textContent = 'Manual submission(s)';
+        badge.className = 'badge bg-primary';
+      } else {
+        badge.textContent = 'Delegate(s) still "Pending" on matrix';
+        badge.className = 'badge bg-warning text-dark';
+      }
+    }
+
+    const assessOkish = assessAllOk || manualBox.checked;
+    const registersOk = (pane.dataset.registersOk === 'true');
+    const regOkish = registersOk || (regManual && regManual.checked);
+
+    const allOkish = assessOkish && regOkish;
+    if (closeBtn) closeBtn.style.display = allOkish ? '' : 'none';
+  }
+  // ----------------------------------------------------------------------
+
+  // --- server calls ------------------------------------------------------
+  function autosaveCell(regId, compId, checked){
+    return fetch(AUTOSAVE_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': CSRF,
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: new URLSearchParams({
+        register_id: regId,
+        competency_id: compId,
+        checked: checked ? 'true' : 'false'
+      })
+    }).then(async (r) => {
+      let data = null;
+      try { data = await r.json(); } catch(_) {}
+      if (!r.ok || (data && data.ok === false)) {
+        const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
+        throw new Error(msg);
+      }
+      return data || { ok: true };
+    });
+  }
 
   function autosaveOutcome(registerId, outcome){
     return fetch(OUTCOME_URL, {
@@ -245,123 +352,9 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
       return data || { ok: true };
     });
   }
-
-  function getRegisterIdForColumn(colIndex){
-    const th = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
-    return th ? th.getAttribute('data-delegate-id') : null;
-  }
-
-
-  function getCookie(name){
-    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return m ? m.pop() : '';
-  }
-  const CSRF = getCookie('csrftoken');
-
-  function autosaveCell(regId, compId, checked){
-    return fetch(AUTOSAVE_URL, {
-      method: 'POST',
-      credentials: 'same-origin',           // include session cookie
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRFToken': CSRF,
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-      },
-      body: new URLSearchParams({
-        register_id: regId,
-        competency_id: compId,
-        checked: checked ? 'true' : 'false'
-      })
-    }).then(async (r) => {
-      let data = null;
-      try { data = await r.json(); } catch(_) {}
-      if (!r.ok || (data && data.ok === false)) {
-        const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
-        throw new Error(msg);
-      }
-      return data || { ok: true };
-    });
-  }
   // ----------------------------------------------------------------------
 
-  // Tag column parity once (odd/even) for header, cells, and outcome cells
-  function tagParity(){
-    table.querySelectorAll('thead th.top').forEach(th => {
-      const idx = parseInt(th.dataset.col, 10);
-      th.classList.toggle('is-even', idx % 2 === 0);
-      th.classList.toggle('is-odd',  idx % 2 === 1);
-    });
-    table.querySelectorAll('td.cell, td.outcome-cell').forEach(td => {
-      const idx = parseInt(td.dataset.col, 10);
-      td.classList.toggle('is-even', idx % 2 === 0);
-      td.classList.toggle('is-odd',  idx % 2 === 1);
-    });
-  }
-
-  // Enable/disable export button based on outcomes (no "pending" allowed)
-  function refreshExportState(){
-    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
-    const allDecided = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
-    if (!exportBtn) return;
-    if (allDecided) {
-      exportBtn.classList.remove('disabled');
-      exportBtn.removeAttribute('aria-disabled');
-      exportBtn.removeAttribute('tabindex');
-    } else {
-      exportBtn.classList.add('disabled');
-      exportBtn.setAttribute('aria-disabled','true');
-      exportBtn.setAttribute('tabindex','-1');
-    }
-  }
-
-  // ---- Live update of the Course closure pane (assessments section) ----
-  function updateClosurePaneAssessStatus(){
-    // Determine if ALL columns are decided (no "pending")
-    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
-    const assessAllOk = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
-
-    const pane      = document.getElementById('closure-pane');
-    const badge     = document.getElementById('closure-assess-status');
-    const manualBox = document.getElementById('closure-assess-manual');
-    const regManual = document.getElementById('closure-register-manual');
-    const closeBtn  = document.getElementById('close-course-btn');
-
-    if (!pane || !badge || !manualBox) return;
-
-    // Set flag on pane (used by other logic too)
-    pane.dataset.assessOk = assessAllOk ? 'true' : 'false';
-
-    // Mirror the status UI like your original logic
-    if (assessAllOk) {
-      manualBox.checked = false;
-      manualBox.disabled = true;
-      badge.textContent = 'OK';
-      badge.className = 'badge bg-success';
-    } else {
-      manualBox.disabled = false;
-      if (manualBox.checked) {
-        badge.textContent = 'Manual submission(s)';
-        badge.className = 'badge bg-primary';
-      } else {
-        badge.textContent = 'Delegate(s) still "Pending" on matrix';
-        badge.className = 'badge bg-warning text-dark';
-      }
-    }
-
-    // Control the "Close course" button visibility consistently:
-    // Section considered "okish" if (auto OK) OR (manual box checked)
-    const assessOkish = assessAllOk || manualBox.checked;
-
-    // Registers okish = registersOk (from data attr) OR register manual checked
-    const registersOk = (pane.dataset.registersOk === 'true');
-    const regOkish = registersOk || (regManual && regManual.checked);
-
-    const allOkish = assessOkish && regOkish;
-    if (closeBtn) closeBtn.style.display = allOkish ? '' : 'none';
-  }
-  // ----------------------------------------------------------------------
-
-  // Set visual outcome & hidden input; also handle pass badge/select visibility
+  // --- UI helpers --------------------------------------------------------
   function applyOutcomeClasses(colIndex, outcome){
     const header = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
     const cells  = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
@@ -370,14 +363,12 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     const outInp = outTd?.querySelector('.outcome-input');
     const badge  = outTd?.querySelector('.outcome-badge');
 
-    // Clear previous outcome classes/overlays
     [header, ...cells, outTd].forEach(el => {
       if(!el) return;
       el.classList.remove('dnf','fail','pass');
       el.style.boxShadow = '';
     });
 
-    // UI: pass badge vs select
     if (badge && outSel) {
       if (outcome === 'pass') {
         badge.classList.remove('d-none');
@@ -417,31 +408,42 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     updateClosurePaneAssessStatus();
   }
 
-  // Compute outcome from checkboxes + selector
   function updateColumnState(colIndex){
     const cells = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
     if(!cells.length) return;
 
-    // All checked?
     let allChecked = true;
     cells.forEach(td => { if(!td.querySelector('.lv-chk').checked) allChecked = false; });
 
     const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
     const outSel = outTd?.querySelector('.outcome-select');
+    const outInp = outTd?.querySelector('.outcome-input');
     const manual = outSel ? outSel.value : 'pending';
 
     const outcome = allChecked ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
+
+    // capture previous BEFORE UI apply
+    const prev = (outInp && outInp.value) ? outInp.value : 'pending';
+
     applyOutcomeClasses(colIndex, outcome);
 
-    // keep hidden level inputs synced
     cells.forEach(td => {
       const chk = td.querySelector('.lv-chk');
       const hidden = td.querySelector('.level-input');
       if (hidden) hidden.value = chk.checked ? 'c' : 'na';
     });
-  }
 
-  // Wire checkboxes -> update column + AUTOSAVE
+    const regId = getRegisterIdForColumn(colIndex);
+    if (regId && outcome !== prev) {
+      if (outInp) outInp.value = outcome;
+      autosaveOutcome(regId, outcome).catch(err => {
+        console.error('Autosave outcome failed:', err && err.message ? err.message : err);
+      });
+    }
+  }
+  // ----------------------------------------------------------------------
+
+  // --- wire UI events ----------------------------------------------------
   table.querySelectorAll('td.cell').forEach(td => {
     const chk = td.querySelector('.lv-chk');
     const setVal = () => {
@@ -452,12 +454,10 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
       setVal();
       updateColumnState(td.dataset.col);
 
-      // autosave this single cell
       const regId = chk.getAttribute('data-register');
       const compId = chk.getAttribute('data-competency');
       autosaveCell(regId, compId, chk.checked).catch((err) => {
         console.error('Autosave failed:', err && err.message ? err.message : err);
-        // revert UI on failure
         chk.checked = !chk.checked;
         setVal();
         updateColumnState(td.dataset.col);
@@ -467,14 +467,11 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     setVal();
   });
 
-  // Wire selects -> update column + AUTOSAVE outcome
   table.querySelectorAll('td.outcome-cell .outcome-select').forEach(sel => {
     const colIndex = sel.closest('td.outcome-cell').dataset.col;
     sel.addEventListener('change', () => {
-      // Update UI immediately
       updateColumnState(colIndex);
 
-      // Persist chosen outcome ('pending' | 'dnf' | 'fail')
       const regId = sel.getAttribute('data-register');
       const outcome = sel.value;
 
@@ -500,16 +497,58 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
       .catch(err => {
         console.error('Outcome autosave failed:', err && err.message ? err.message : err);
         alert('Saving failed. Please try again.');
-        // Best-effort revert: recompute the UI from current checkboxes
         updateColumnState(colIndex);
       });
     });
   });
+  // ----------------------------------------------------------------------
 
-
-  // Initial paint
+  // --- initial paint + persist (this is the important bit) ----------------
   tagParity();
-  Array.from(table.querySelectorAll('thead th.top')).forEach(th => updateColumnState(th.dataset.col));
+
+  function computeOutcomeForCol(colIndex){
+    const cells = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
+    let allChecked = true;
+    cells.forEach(td => {
+      const chk = td.querySelector('.lv-chk');
+      if (!chk || !chk.checked) allChecked = false;
+
+      const hidden = td.querySelector('.level-input');
+      if (hidden) hidden.value = chk && chk.checked ? 'c' : 'na';
+    });
+
+    const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
+    const outSel = outTd?.querySelector('.outcome-select');
+    const outInp = outTd?.querySelector('.outcome-input');
+    const manual = outSel ? outSel.value : 'pending';
+
+    const outcome = allChecked ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
+    return { outcome, outInp };
+  }
+
+  function persistOutcomeIfChanged(colIndex, outInp, outcome){
+    const prev = outInp ? outInp.value : 'pending';
+    applyOutcomeClasses(colIndex, outcome);
+    if (outInp) outInp.value = outcome;
+
+    const regId = getRegisterIdForColumn(colIndex);
+    if (regId && outcome !== prev) {
+      autosaveOutcome(regId, outcome).catch(err => {
+        console.error('Initial outcome persist failed:', err && err.message ? err.message : err);
+      });
+    }
+  }
+
+  Array.from(table.querySelectorAll('thead th.top')).forEach(th => {
+    const col = th.dataset.col;
+    const { outcome, outInp } = computeOutcomeForCol(col);
+    persistOutcomeIfChanged(col, outInp, outcome);
+  });
+
+  refreshExportState();
+  updateClosurePaneAssessStatus();
+  // ----------------------------------------------------------------------
+
 })();
 </script>
 
