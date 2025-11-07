@@ -65,21 +65,17 @@
 
           {% for d in delegates %}
             <td class="outcome-cell" data-col="{{ forloop.counter0 }}">
-              <!-- hidden value that mirrors the effective outcome -->
+              <!-- hidden value submitted -->
               <input type="hidden" name="outcome_{{ d.id }}" class="outcome-input" value="{{ d.outcome|default:'pending' }}" />
-              <!-- visible selector for manual states (no 'Pass') -->
-              <select class="form-select form-select-sm outcome-select"
-                      data-register="{{ d.register_id|default:d.id }}"
-                      aria-label="Outcome for {{ d.name }}">
-
+              <!-- visible selector (no 'Pass' option) -->
+              <select class="form-select form-select-sm outcome-select" aria-label="Outcome for {{ d.name }}">
                 <option value="pending" {% if d.outcome == 'pending' or not d.outcome %}selected{% endif %}>Pending</option>
                 <option value="dnf"     {% if d.outcome == 'dnf' %}selected{% endif %}>DNF</option>
                 <option value="fail"    {% if d.outcome == 'fail' %}selected{% endif %}>Fail</option>
               </select>
-              <!-- shown only when auto-pass (all boxes ticked) -->
+              <!-- shown when auto-pass -->
               <span class="badge bg-success-subtle text-success-emphasis outcome-badge d-none">Pass</span>
             </td>
-
           {% endfor %}
         </tr>
       </tbody>
@@ -87,19 +83,16 @@
   </div>
 
   <div class="mt-3 d-flex gap-2">
-    <noscript>
-      <button class="btn btn-primary btn-sm" type="submit">Save assessments</button>
-    </noscript>
+    <button class="btn btn-primary btn-sm" type="submit">Save</button>
 
     <a href="{% url 'instructor_assessment_pdf' booking.id %}"
-      class="btn btn-outline-secondary btn-sm disabled"
-      id="export-pdf-btn"
-      aria-disabled="true"
-      tabindex="-1">
+       class="btn btn-outline-secondary btn-sm disabled"
+       id="export-pdf-btn"
+       aria-disabled="true"
+       tabindex="-1">
       Export PDF
     </a>
   </div>
-
 
 </form>
 
@@ -222,9 +215,7 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 
   // --- endpoints ------------------------------------------------------------
   const AUTOSAVE_URL = "{% url 'instructor_assessment_autosave' booking.pk %}";
-  const OUTCOME_URL  = "{% url 'instructor_assessment_outcome_autosave' booking.pk %}";
 
-  // --- csrf helper ----------------------------------------------------------
   function getCookie(name){
     const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
     return m ? m.pop() : '';
@@ -384,20 +375,6 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 
     if (outInp) outInp.value = outcome;
 
-    // 🔒 Lock checkboxes for DNF/Fail, unlock for Pending + tooltip
-    const lock = (outcome === 'dnf' || outcome === 'fail');
-    const tip  = lock ? 'Locked — set outcome to Pending to edit' : '';
-    cells.forEach(td => {
-        const chk = td.querySelector('.lv-chk');
-        if (!chk) return;
-        chk.disabled = lock;
-        if (tip) {
-          chk.setAttribute('title', tip);   // native tooltip
-        } else {
-          chk.removeAttribute('title');
-        }
-    });
-
     if (outcome === 'pending') { 
       refreshExportState();
       updateClosurePaneAssessStatus();
@@ -481,43 +458,13 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     setVal();
   });
 
+  // Wire selects -> update column
   table.querySelectorAll('td.outcome-cell .outcome-select').forEach(sel => {
     const colIndex = sel.closest('td.outcome-cell').dataset.col;
-    sel.addEventListener('change', () => {
-      updateColumnState(colIndex);
-
-      const regId = sel.getAttribute('data-register');
-      const outcome = sel.value;
-
-      fetch(OUTCOME_URL, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': CSRF,
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-        },
-        body: new URLSearchParams({ register_id: regId, outcome })
-      })
-      .then(async (r) => {
-        let data = null;
-        try { data = await r.json(); } catch(_) {}
-        if (!r.ok || (data && data.ok === false)) {
-          const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
-          throw new Error(msg);
-        }
-        return data || { ok: true };
-      })
-      .catch(err => {
-        console.error('Outcome autosave failed:', err && err.message ? err.message : err);
-        alert('Saving failed. Please try again.');
-        updateColumnState(colIndex);
-      });
-    });
+    sel.addEventListener('change', () => updateColumnState(colIndex));
   });
-  // ----------------------------------------------------------------------
 
-  // --- initial paint + persist (this is the important bit) ----------------
+  // Initial paint
   tagParity();
 
   function computeOutcomeForCol(colIndex){
