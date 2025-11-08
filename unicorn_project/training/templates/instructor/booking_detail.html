@@ -360,24 +360,21 @@
   </div>
 
   <!-- Pane: Course closure -->
-  <div class="tab-pane fade" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0"
-       data-registers-ok="{{ registers_all_days|yesno:'true,false' }}"
-       data-assess-ok="{{ assessments_all_complete|yesno:'true,false' }}">
-
+  <div class="tab-pane fade" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0">
     <!-- Registers status -->
     <div class="row g-3 align-items-center mb-3">
       <div class="col-auto">
         <div class="text-muted small">Register status</div>
         <span id="closure-register-status"
-              class="badge {% if registers_all_days %}bg-success{% elif registers_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
-          {% if registers_all_days %}OK{% elif registers_manual %}Manual submission(s){% else %}Not complete{% endif %}
+              class="badge {% if registers_all_days %}bg-success{% elif reg_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+          {% if registers_all_days %}OK{% elif reg_manual %}Manual submission(s){% else %}Not complete{% endif %}
         </span>
       </div>
       <div class="col-auto">
         <div class="form-check mt-3">
           <input class="form-check-input" type="checkbox" id="closure-register-manual"
-                 {% if registers_all_days %}disabled{% endif %}
-                 {% if registers_manual and not registers_all_days %}checked{% endif %}>
+                {% if registers_all_days %}disabled{% endif %}
+                {% if reg_manual and not registers_all_days %}checked{% endif %}>
           <label class="form-check-label" for="closure-register-manual">
             Manual submission to follow
           </label>
@@ -389,16 +386,16 @@
     <div class="row g-3 align-items-center">
       <div class="col-auto">
         <div class="text-muted small">Assessments status</div>
-        <span id="closure-assess-status"
-              class="badge {% if assessments_all_complete %}bg-success{% elif assessments_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
-          {% if assessments_all_complete %}OK{% elif assessments_manual %}Manual submission(s){% else %}Delegate(s) still &quot;Pending&quot; on matrix{% endif %}
+        <span id="assessments-status-pill"
+              class="badge {% if assessments_all_complete %}bg-success{% elif assess_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+          {% if assessments_all_complete %}OK{% elif assess_manual %}Manual submission(s){% else %}Delegate(s) still &quot;Pending&quot; on matrix{% endif %}
         </span>
       </div>
       <div class="col-auto">
         <div class="form-check mt-3">
           <input class="form-check-input" type="checkbox" id="closure-assess-manual"
-                 {% if assessments_all_complete %}disabled{% endif %}
-                 {% if assessments_manual and not assessments_all_complete %}checked{% endif %}>
+                {% if assessments_all_complete %}disabled{% endif %}
+                {% if assess_manual and not assessments_all_complete %}checked{% endif %}>
           <label class="form-check-label" for="closure-assess-manual">
             Manual submission to follow
           </label>
@@ -410,22 +407,27 @@
       <form id="close-course-form" method="post" class="mt-3">
         {% csrf_token %}
         <input type="hidden" name="action" value="close_course">
-        <!-- Hidden fields capture current checkbox states for persistence -->
-        <input type="hidden" id="hf-reg-manual" name="reg_manual" value="{{ registers_manual|yesno:'1,0' }}">
-        <input type="hidden" id="hf-assess-manual" name="assess_manual" value="{{ assessments_manual|yesno:'1,0' }}">
+
+        <!-- manual flags -->
+        <input type="hidden" id="hf-reg-manual"    name="reg_manual"       value="{{ reg_manual|yesno:'1,0' }}">
+        <input type="hidden" id="hf-assess-manual" name="assess_manual"    value="{{ assess_manual|yesno:'1,0' }}">
+
+        <!-- current OK states as seen in the UI -->
+        <input type="hidden" id="hf-registers-ok"   name="registers_ok"   value="{{ registers_all_days|yesno:'1,0' }}">
+        <input type="hidden" id="hf-assessments-ok" name="assessments_ok" value="{{ assessments_all_complete|yesno:'1,0' }}">
+
         <button type="submit" id="close-course-btn" class="btn btn-danger"
-                {% if not can_close_course %}style="display:none"{% endif %}>
+                {% if not can_close_course %}disabled{% endif %}>
           <i class="bi bi-check2-circle"></i> Close course and prepare invoice
         </button>
-
       </form>
     {% else %}
       <div class="mt-3 alert alert-info">
         Course already closed — proceed to the <strong>Invoicing</strong> tab.
       </div>
     {% endif %}
-
   </div>
+
 
    <!-- Pane: Invoicing -->
   <div class="tab-pane fade" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
@@ -437,180 +439,115 @@
 
 <a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
 
-<!-- NEW live button / manual sync script -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const pane        = document.getElementById('closure-pane');
-  const form        = document.getElementById('close-course-form');
-  const btn         = document.getElementById('close-course-btn');
-
-  const regManual   = document.getElementById('closure-register-manual');
-  const assessManual= document.getElementById('closure-assess-manual');
-
-  const hfReg       = document.getElementById('hf-reg-manual');
-  const hfAssess    = document.getElementById('hf-assess-manual');
-
-  function syncHidden() {
-    if (hfReg && regManual)    hfReg.value    = regManual.checked ? '1' : '0';
-    if (hfAssess && assessManual) hfAssess.value = assessManual.checked ? '1' : '0';
-  }
-
-  function canCloseNow() {
-    if (!pane) return false;
-    const registersOk  = (pane.dataset.registersOk === 'true') || (regManual && regManual.checked);
-    const assessOk     = (pane.dataset.assessOk === 'true')     || (assessManual && assessManual.checked);
-    return registersOk && assessOk;
-  }
-
-  function refreshButton() {
-    if (!btn) return;
-    btn.style.display = canCloseNow() ? '' : 'none';
-  }
-
-  [regManual, assessManual].forEach(el => {
-    if (!el) return;
-    el.addEventListener('change', () => { syncHidden(); refreshButton(); });
-  });
-
-  if (pane && 'MutationObserver' in window) {
-    new MutationObserver(refreshButton).observe(pane, {
-      attributes: true,
-      attributeFilter: ['data-assess-ok','data-registers-ok']
-    });
-  }
-
-  syncHidden();
-  refreshButton();
-});
-</script>
-<!-- END new script -->
-
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const hash = window.location.hash;
-  ...
-});
-</script>
+  // --- elements we touch on the closure tab ---
+  const REG_PILL        = document.getElementById("closure-register-status");
+  const ASSESS_PILL     = document.getElementById("assessments-status-pill");
+  const CLOSE_BTN       = document.getElementById("close-course-btn");
+  const REG_MANUAL_CB   = document.getElementById("closure-register-manual");
+  const ASSESS_MANUAL_CB= document.getElementById("closure-assess-manual");
+  const REG_MANUAL_HF   = document.getElementById("hf-reg-manual");
+  const ASSESS_MANUAL_HF= document.getElementById("hf-assess-manual");
 
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-  const hash = window.location.hash;
-  if (!hash) return;
-  const tabTrigger =
-    document.querySelector('button[data-bs-target="' + hash + '"]') ||
-    document.querySelector(hash + '[data-bs-toggle="tab"]');
-  if (tabTrigger && window.bootstrap && bootstrap.Tab) {
-    new bootstrap.Tab(tabTrigger).show();
-  }
-});
-</script>
-
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  var examsTabBtn = document.getElementById('exams-tab');
-  var examsPane   = document.getElementById('exams-pane');
-  var indicator   = document.getElementById('exams-refresh-indicator');
-
-  console.log('[ExamsRefresh] DOM ready');
-
-  if (!examsPane) {
-    console.log('[ExamsRefresh] exams-pane not found — abort');
-    return;
+  // ---- helpers ----
+  function outcomeCellComplete(cell) {
+    if (!cell) return false;
+    // “Pass” badge present?
+    if (cell.querySelector('.badge') && /pass/i.test(cell.textContent)) return true;
+    // Or manual select set to DNF/Fail
+    const sel = cell.querySelector('select[name^="outcome_"]');
+    if (!sel) return false;
+    const v = (sel.value || "").toLowerCase();
+    return v === "dnf" || v === "fail";
   }
 
-  var timer = null;
-
-  function isPaneActive() {
-    return examsPane.classList.contains('active') && examsPane.classList.contains('show');
+  function assessmentsCompleteNow() {
+    const cells = Array.from(document.querySelectorAll('.outcome-cell'));
+    if (!cells.length) return false;
+    return cells.every(outcomeCellComplete);
   }
 
-  function isUserInteracting() {
-    if (examsPane.matches(':hover')) return true;
-    var ae = document.activeElement;
-    return !!(ae && examsPane.contains(ae));
+  function registersCompleteNow() {
+    return !!(REG_PILL && REG_PILL.classList.contains("bg-success"));
   }
 
-  function showIndicator(on) {
-    if (indicator) indicator.style.opacity = on ? '1' : '0';
+  function setAssessBadge(ok) {
+    if (!ASSESS_PILL) return;
+    ASSESS_PILL.className = ok ? "badge bg-success"
+                               : "badge bg-warning text-dark";
+    ASSESS_PILL.textContent = ok ? "OK" : 'Delegate(s) still "Pending" on matrix';
   }
 
-  async function refreshExams() {
-    if (!isPaneActive()) return;
-    if (isUserInteracting()) return;
+  function refreshClosureStateImmediate() {
+    const assessComplete = assessmentsCompleteNow();
+    const regsComplete   = registersCompleteNow();
 
-    console.log('[ExamsRefresh] refreshing…');
-    showIndicator(true);
-
-    try {
-      var url = window.location.href.split('#')[0];
-      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
-        cache: 'no-store',
-        headers: { 'X-Requested-With': 'fetch' }
-      });
-
-      if (!res.ok) return;
-
-      var html = await res.text();
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-
-      var freshPane = tmp.querySelector('#exams-pane');
-      if (!freshPane) return;
-
-      var freshSections = freshPane.querySelectorAll('.accordion-collapse[id^="ex-c-"]');
-      var changed = false;
-
-      freshSections.forEach(function (freshSection) {
-        var id = freshSection.id;
-        var currentSection = examsPane.querySelector('#' + CSS.escape(id));
-        if (!currentSection) return;
-
-        var freshTbody = freshSection.querySelector('table tbody');
-        var currTbody  = currentSection.querySelector('table tbody');
-
-        if (freshTbody && currTbody) {
-          var freshHTML = freshTbody.innerHTML.trim();
-          if (currTbody.innerHTML.trim() !== freshHTML) {
-            currTbody.innerHTML = freshHTML;
-            changed = true;
-          }
-        }
-      });
-
-      console.log('[ExamsRefresh] done' + (changed ? ' (content updated)' : ' (no changes)'));
-    } catch (e) {
-      console.log('[ExamsRefresh] error:', e);
-    } finally {
-      setTimeout(function(){ showIndicator(false); }, 300);
+    // badge + manual toggle for assessments
+    setAssessBadge(assessComplete);
+    if (ASSESS_MANUAL_CB) {
+      ASSESS_MANUAL_CB.disabled = assessComplete;
+      if (ASSESS_MANUAL_HF) {
+        ASSESS_MANUAL_HF.value = assessComplete ? "0" : (ASSESS_MANUAL_CB.checked ? "1" : "0");
+      }
+      if (assessComplete) ASSESS_MANUAL_CB.checked = false;
     }
-  }
 
-  function start() {
-    if (!timer) {
-      console.log('[ExamsRefresh] starting interval');
-      timer = setInterval(refreshExams, 5000);
+    // manual toggle for registers
+    if (REG_MANUAL_CB) {
+      REG_MANUAL_CB.disabled = regsComplete;
+      if (REG_MANUAL_HF) {
+        REG_MANUAL_HF.value = regsComplete ? "0" : (REG_MANUAL_CB.checked ? "1" : "0");
+      }
+      if (regsComplete) REG_MANUAL_CB.checked = false;
     }
+
+    // enable button if (regs OK or manual) AND (assess OK or manual)
+    const canClose = (regsComplete   || (REG_MANUAL_CB    && REG_MANUAL_CB.checked)) &&
+                     (assessComplete || (ASSESS_MANUAL_CB && ASSESS_MANUAL_CB.checked));
+    if (CLOSE_BTN) CLOSE_BTN.disabled = !canClose;
   }
 
-  function stop() {
-    if (timer) {
-      console.log('[ExamsRefresh] stopping interval');
-      clearInterval(timer);
-      timer = null;
+  // Expose a single hook the assessments matrix can call with payloads
+  // (we still recompute from the DOM afterwards).
+  window.applyClosurePayload = function (payload) {
+    if (payload && typeof payload === "object") {
+      if (payload.hasOwnProperty("assessments_complete")) {
+        setAssessBadge(!!payload.assessments_complete);
+      }
     }
-  }
+    refreshClosureStateImmediate();
+  };
 
-  start();
-
-  if (examsTabBtn) {
-    examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
-  }
-
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden) stop();
-    else start();
+  // React to matrix changes + manual checkboxes
+  document.addEventListener("change", function (e) {
+    const t = e.target;
+    if (!t) return;
+    if (t.matches('.outcome-cell select[name^="outcome_"]')) {
+      refreshClosureStateImmediate();
+    } else if (t.matches('.cell input[type="checkbox"][name^="level_"]')) {
+      refreshClosureStateImmediate();
+    } else if (t === ASSESS_MANUAL_CB) {
+      if (ASSESS_MANUAL_HF) ASSESS_MANUAL_HF.value = ASSESS_MANUAL_CB.checked ? "1" : "0";
+      refreshClosureStateImmediate();
+    } else if (t === REG_MANUAL_CB) {
+      if (REG_MANUAL_HF) REG_MANUAL_HF.value = REG_MANUAL_CB.checked ? "1" : "0";
+      refreshClosureStateImmediate();
+    }
   });
+
+  // When switching between Assessments/Closure tabs, recompute
+  document.addEventListener('shown.bs.tab', function (ev) {
+    const targetPane = ev.target?.getAttribute('data-bs-target') || "";
+    if (targetPane === '#assessments-pane' || targetPane === '#closure-pane') {
+      refreshClosureStateImmediate();
+    }
+  });
+
+  // Initial compute
+  refreshClosureStateImmediate();
 });
 </script>
+
 
 {% endblock %}

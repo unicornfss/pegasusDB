@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.db.models import Q
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, post_delete
 from django.contrib.auth.models import User
 from django.dispatch import receiver
 from django.utils import timezone
@@ -318,6 +318,31 @@ class DelegateRegister(models.Model):
             self.HealthStatus.WILL_DISCUSS: "",  # we'll style inline orange
             self.HealthStatus.NOT_FIT: "bg-danger",
         }.get(self.health_status, "bg-secondary")
+    
+    def recompute_outcome_from_assessments(self, save=True):
+        from .models import AssessmentLevel, CourseOutcome
+        # Don’t override explicit DNF/Fail
+        if self.outcome in (CourseOutcome.FAIL, CourseOutcome.DNF):
+            return
+        levels = list(self.assessments.values_list("level", flat=True))
+        if not levels:
+            new_outcome = CourseOutcome.PENDING if self.outcome == CourseOutcome.PASS else self.outcome
+        else:
+            all_competent = all(l in (AssessmentLevel.COMPETENT, AssessmentLevel.EXCEEDED) for l in levels)
+            any_not_assessed = any(l == AssessmentLevel.NOT_ASSESSED for l in levels)
+            any_needs_improvement = any(l == AssessmentLevel.NEEDS_IMPROVEMENT for l in levels)
+            if all_competent:
+                new_outcome = CourseOutcome.PASS
+            elif self.outcome == CourseOutcome.PASS and (any_not_assessed or any_needs_improvement):
+                new_outcome = CourseOutcome.PENDING
+            else:
+                new_outcome = self.outcome
+        if new_outcome != self.outcome:
+            self.outcome = new_outcome
+            if save:
+                self.save(update_fields=["outcome"])
+
+
 
 class CourseCompetency(models.Model):
     course_type = models.ForeignKey(
@@ -367,6 +392,16 @@ class CompetencyAssessment(models.Model):
     class Meta:
         unique_together = ("register", "course_competency")
         ordering = ["register_id", "course_competency_id"]
+    
+# --- Auto-recompute delegate outcome whenever assessments change ---
+@receiver(post_save, sender=CompetencyAssessment)
+def _recompute_register_outcome_on_assessment_save(sender, instance, **kwargs):
+    instance.register.recompute_outcome_from_assessments()
+
+@receiver(post_delete, sender=CompetencyAssessment)
+def _recompute_register_outcome_on_assessment_delete(sender, instance, **kwargs):
+    instance.register.recompute_outcome_from_assessments()
+
 
 # --- Feedback ---------------------------------------------------------------
 class FeedbackResponse(models.Model):

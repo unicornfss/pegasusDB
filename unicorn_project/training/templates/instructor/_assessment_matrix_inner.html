@@ -39,16 +39,14 @@
               {% with key=d.id|pair:comp.id %}
                 {% with a=existing|get_item:key %}
                 <td class="cell" data-col="{{ forloop.counter0 }}">
-                  <input type="hidden"
-                         name="level_{{ d.id }}_{{ comp.id }}"
-                         value="{% if a and a.level %}{{ a.level }}{% else %}na{% endif %}"
-                         class="level-input" />
+                  <!-- Submit 'na' when unchecked, 'c' when checked -->
+                  <input type="hidden" name="level_{{ d.id }}_{{ comp.id }}" value="na">
                   <input type="checkbox"
-                         class="lv-chk assess-toggle"
-                         data-register="{{ d.id }}"
-                         data-competency="{{ comp.id }}"
-                         {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
-                         aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
+                        name="level_{{ d.id }}_{{ comp.id }}"
+                        value="c"
+                        class="lv-chk"
+                        {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
+                        aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
                 </td>
                 {% endwith %}
               {% endwith %}
@@ -64,20 +62,20 @@
           </th>
 
           {% for d in delegates %}
-            <td class="outcome-cell" data-col="{{ forloop.counter0 }}">
-              <!-- hidden value that mirrors the effective outcome -->
-              <input type="hidden" name="outcome_{{ d.id }}" class="outcome-input" value="{{ d.outcome|default:'pending' }}" />
-              <!-- visible selector for manual states (no 'Pass') -->
-              <select class="form-select form-select-sm outcome-select"
-                      data-register="{{ d.id }}"
-                      aria-label="Outcome for {{ d.name }}">
-                <option value="pending" {% if d.outcome == 'pending' or not d.outcome %}selected{% endif %}>Pending</option>
-                <option value="dnf"     {% if d.outcome == 'dnf' %}selected{% endif %}>DNF</option>
-                <option value="fail"    {% if d.outcome == 'fail' %}selected{% endif %}>Fail</option>
-              </select>
-              <!-- shown only when auto-pass (all boxes ticked) -->
-              <span class="badge bg-success-subtle text-success-emphasis outcome-badge d-none">Pass</span>
+            <td class="outcome-cell" data-col="{{ forloop.counter0 }}" data-register-id="{{ d.id }}">
+              {% if d.outcome == 'pass' %}
+                <span class="badge bg-success-subtle text-success-emphasis">Pass</span>
+                <input type="hidden" name="outcome_{{ d.id }}" value="pending">
+              {% else %}
+                <select name="outcome_{{ d.id }}" class="form-select form-select-sm" aria-label="Outcome for {{ d.name }}">
+                  <option value="pending" {% if d.outcome == 'pending' or not d.outcome %}selected{% endif %}>Pending</option>
+                  <option value="dnf"     {% if d.outcome == 'dnf' %}selected{% endif %}>DNF</option>
+                  <option value="fail"    {% if d.outcome == 'fail' %}selected{% endif %}>Fail</option>
+                </select>
+              {% endif %}
             </td>
+
+
 
           {% endfor %}
         </tr>
@@ -86,18 +84,169 @@
   </div>
 
   <div class="mt-3 d-flex gap-2">
-    <noscript>
-      <button class="btn btn-primary btn-sm" type="submit">Save assessments</button>
-    </noscript>
+  <button class="btn btn-primary btn-sm" type="submit">Save assessments</button>
 
-    <a href="{% url 'instructor_assessment_pdf' booking.id %}"
-      class="btn btn-outline-secondary btn-sm disabled"
-      id="export-pdf-btn"
-      aria-disabled="true"
-      tabindex="-1">
-      Export PDF
-    </a>
-  </div>
+  <a href="{% url 'instructor_assessment_pdf' booking.id %}"
+     class="btn btn-outline-secondary btn-sm disabled"
+     id="export-pdf-btn"
+     aria-disabled="true"
+     tabindex="-1">
+    Export PDF
+  </a>
+</div>
+
+<script>
+(function () {
+  const form = document.getElementById("matrix-form");
+  if (!form) return;
+
+  const saveUrl = form.action;
+  const csrf = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+
+  // Add parity classes once (for striping)
+  (function addParityOnce() {
+    const headers = form.querySelectorAll('th.top[data-col]');
+    headers.forEach(h => {
+      const col = parseInt(h.dataset.col || "0", 10);
+      h.classList.add(col % 2 ? "is-odd" : "is-even");
+    });
+    const cells = form.querySelectorAll('td.cell[data-col], tr.outcome-row td.outcome-cell[data-col]');
+    cells.forEach(td => {
+      const col = parseInt(td.dataset.col || "0", 10);
+      td.classList.add(col % 2 ? "is-odd" : "is-even");
+    });
+  })();
+
+  function markColumn(col, status) {
+    const header = form.querySelector('th.top[data-col="' + col + '"]');
+    const cellNodes = form.querySelectorAll(
+      'td.cell[data-col="' + col + '"], tr.outcome-row td.outcome-cell[data-col="' + col + '"]'
+    );
+
+    // Clear prior classes/lock
+    [header, ...cellNodes].forEach(el => {
+      if (!el) return;
+      el.classList.remove("dnf", "fail");
+      el.classList.remove("locked");
+      el.removeAttribute("data-locked");
+    });
+
+    if (status === "dnf" || status === "fail") {
+      [header, ...cellNodes].forEach(el => {
+        if (!el) return;
+        el.classList.add(status);
+      });
+      // Lock: do NOT disable checkboxes (they must still submit);
+      // just prevent interaction.
+      form.querySelectorAll('td.cell[data-col="' + col + '"]').forEach(td => {
+        td.classList.add("locked");
+        td.setAttribute("data-locked", "1");
+      });
+    }
+    // pending/pass => no lock; checkboxes remain interactive and keep their state
+  }
+
+  function setOutcomeUIByReg(regId, outcome) {
+    const outCell = form.querySelector('.outcome-cell[data-register-id="' + regId + '"]');
+    if (!outCell) return;
+    const col = outCell.dataset.col;
+
+    if (outcome === "pass") {
+      outCell.innerHTML =
+        '<span class="badge bg-success-subtle text-success-emphasis">Pass</span>' +
+        '<input type="hidden" name="outcome_' + regId + '" value="pending">';
+      markColumn(col, "pass");
+    } else {
+      let sel = outCell.querySelector('select[name="outcome_' + regId + '"]');
+      if (!sel) {
+        outCell.innerHTML =
+          '<select name="outcome_' + regId + '" class="form-select form-select-sm" aria-label="Outcome">' +
+          '<option value="pending">Pending</option>' +
+          '<option value="dnf">DNF</option>' +
+          '<option value="fail">Fail</option>' +
+          '</select>';
+        sel = outCell.querySelector("select");
+        sel.addEventListener("change", onOutcomeChange);
+      }
+      sel.value = outcome || "pending";
+      markColumn(col, sel.value);
+    }
+  }
+
+  function autosave(key, value, onDone) {
+    const fd = new FormData();
+    fd.append("csrfmiddlewaretoken", csrf);
+    fd.append(key, value);
+
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+
+    fetch(saveUrl, {
+      method: "POST",
+      body: fd,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.ok && data.reg_id) {
+          setOutcomeUIByReg(data.reg_id, data.outcome || "pending");
+        }
+        if (onDone) onDone(data);
+      })
+      .catch(() => { if (onDone) onDone(null); })
+      .finally(() => {
+        if (btn) { btn.disabled = false; btn.textContent = "Save assessments"; }
+      });
+  }
+
+  function onLevelChange(e) {
+    const cb = e.target;
+    if (cb.type !== "checkbox") return;
+
+    // Guard: if the column is locked, revert the visual toggle immediately (no submit)
+    const td = cb.closest("td.cell");
+    if (td && td.classList.contains("locked")) {
+      cb.checked = !cb.checked; // revert
+      return;
+    }
+
+    const key = cb.name;                 // "level_<reg>_<comp>"
+    const value = cb.checked ? "c" : "na";
+    autosave(key, value);
+  }
+
+  function onOutcomeChange(e) {
+    const sel = e.target;
+    const key = sel.name;                // "outcome_<reg>"
+    const value = sel.value;             // pending/dnf/fail
+    // Local lock/tint immediately
+    const td = sel.closest("td.outcome-cell");
+    if (td && td.dataset.col) {
+      markColumn(td.dataset.col, value);
+    }
+    autosave(key, value);
+  }
+
+  // Wire up inputs
+  form.querySelectorAll('td.cell input[type="checkbox"][name^="level_"]').forEach(cb => {
+    cb.addEventListener("change", onLevelChange);
+  });
+  form.querySelectorAll('tr.outcome-row select[name^="outcome_"]').forEach(sel => {
+    sel.addEventListener("change", onOutcomeChange);
+  });
+
+  // Initial lock/tint for DNF/Fail on load
+  form.querySelectorAll('tr.outcome-row .outcome-cell').forEach(cell => {
+    const sel = cell.querySelector('select[name^="outcome_"]');
+    if (!sel) return;
+    const val = sel.value;
+    if (val === "dnf" || val === "fail") {
+      markColumn(cell.dataset.col, val);
+    }
+  });
+})();
+</script>
 
 
 </form>
@@ -116,17 +265,18 @@
   border: 1px solid var(--bs-border-color, #dee2e6);
   border-radius: .5rem;
   background: #fff;
+  position: relative; /* ensure a sane stacking context */
 }
 
 /* === table === */
 .matrix-table {
-  --delegate-col-width: 110px;   /* adjust if needed */
-  --zebra-even:  #d1deec;        /* darker zebra */
+  --delegate-col-width: 110px;
+  --zebra-even:  #d1deec;
   --zebra-odd:   #ffffff;
-  --zebra-hover: #c4d4ea;        /* darker hover */
+  --zebra-hover: #c4d4ea;
 
   border-collapse: separate;
-  width: auto;                   /* only as wide as needed */
+  width: auto;               /* only as wide as needed */
   table-layout: fixed;
   font-size: .9rem;
   border-spacing: 0;
@@ -136,7 +286,7 @@
 .col-comp { width: 240px; }
 .col-delegate { width: var(--delegate-col-width); }
 
-/* base cells */
+/* base cells & crisp vertical borders */
 .matrix-table th,
 .matrix-table td {
   border-bottom: 1px solid #dfe3e7;
@@ -155,7 +305,7 @@
 .matrix-table tr.outcome-row th.outcome-label {
   position: sticky;
   left: 0;
-  z-index: 4;
+  z-index: 260;                 /* above body cells & overlays */
   background: #fff;
   box-shadow: 1px 0 0 rgba(0,0,0,.05);
 }
@@ -164,11 +314,20 @@
   border-top: 2px solid #e3e7ec;
 }
 
-/* Sticky (inherit zebra for left column; header stays white) */
-.sticky { position: sticky; z-index: 2; background: transparent; }
-.sticky.top { top: 0; z-index: 5; background: #fff; }
-.sticky.left { left: 0; text-align: left; z-index: 4; background: inherit; }
-.sticky.corner { top: 0; left: 0; z-index: 6; background: #fff; }
+/* Sticky */
+.sticky { position: sticky; background: transparent; }
+.sticky.top    { top: 0;    z-index: 250; background: #fff; }
+.sticky.corner { top: 0; left: 0; z-index: 300; background: #fff; }
+
+/* left sticky column ALWAYS above overlays; keep zebra look */
+.sticky.left {
+  left: 0;
+  text-align: left;
+  z-index: 270 !important;
+  background: #fff; /* overridden per-row below */
+}
+tbody tr.row-even th.sticky.left { background: var(--zebra-even) !important; }
+tbody tr.row-odd  th.sticky.left { background: var(--zebra-odd)  !important; }
 
 /* first column content */
 .comp-code { font-weight: 600; color: #6c757d; font-size: .85rem; }
@@ -191,16 +350,81 @@
 /* checkboxes */
 .cell .lv-chk { width: 16px; height: 16px; }
 
-/* === Column outcome overlays === */
-td.cell.dnf.is-odd,      td.outcome-cell.dnf.is-odd,      th.top.dnf.is-odd      { box-shadow: inset 0 0 0 9999px rgba(255, 200, 0, 0.20); }
-td.cell.dnf.is-even,     td.outcome-cell.dnf.is-even,     th.top.dnf.is-even     { box-shadow: inset 0 0 0 9999px rgba(255, 185, 0, 0.28); }
+/* PASS tint */
+td.cell.pass, td.outcome-cell.pass { background: #e6f7ea !important; box-shadow: none !important; }
+th.top.pass { background: #def3e6 !important; box-shadow: none !important; }
 
-td.cell.fail.is-odd,     td.outcome-cell.fail.is-odd,     th.top.fail.is-odd     { box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.18); }
-td.cell.fail.is-even,    td.outcome-cell.fail.is-even,    th.top.fail.is-even    { box-shadow: inset 0 0 0 9999px rgba(220, 53, 69, 0.28); }
+/* ===== Column tint underlays (robust) ===== */
+/* Each cell/heading hosts an underlay clipped to itself */
+.matrix-table td.cell,
+.matrix-table td.outcome-cell {
+  position: relative;
+  overflow: hidden;     /* clip ::before inside each cell */
+}
 
-/* PASS */
-td.cell.pass,            td.outcome-cell.pass             { background: #e6f7ea !important; box-shadow: none !important; }
-th.top.pass                                          { background: #def3e6 !important; box-shadow: none !important; }
+/* keep the header row sticky */
+.matrix-table th.top,
+.sticky.top {
+  position: sticky;
+  top: 0;
+  z-index: 250;
+  background: #fff;
+}
+
+
+/* content stays above the underlay */
+.matrix-table td.cell > *,
+.matrix-table td.outcome-cell > *,
+.matrix-table th.top > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* DNF underlay (odd/even striping) */
+td.cell.dnf.is-odd::before,
+td.outcome-cell.dnf.is-odd::before,
+th.top.dnf.is-odd::before,
+td.cell.dnf.is-even::before,
+td.outcome-cell.dnf.is-even::before,
+th.top.dnf.is-even::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+td.cell.dnf.is-odd::before,
+td.outcome-cell.dnf.is-odd::before,
+th.top.dnf.is-odd::before { background: rgba(255,200,0,.20); }
+td.cell.dnf.is-even::before,
+td.outcome-cell.dnf.is-even::before,
+th.top.dnf.is-even::before { background: rgba(255,185,0,.28); }
+
+/* FAIL underlay (odd/even striping) */
+td.cell.fail.is-odd::before,
+td.outcome-cell.fail.is-odd::before,
+th.top.fail.is-odd::before,
+td.cell.fail.is-even::before,
+td.outcome-cell.fail.is-even::before,
+th.top.fail.is-even::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+td.cell.fail.is-odd::before,
+td.outcome-cell.fail.is-odd::before,
+th.top.fail.is-odd::before { background: rgba(220,53,69,.18); }
+td.cell.fail.is-even::before,
+td.outcome-cell.fail.is-even::before,
+th.top.fail.is-even::before { background: rgba(220,53,69,.28); }
+
+/* Lock a DNF/Fail column WITHOUT disabling inputs (so ticks still submit) */
+td.cell.locked input[type="checkbox"] { pointer-events: none; }
+
+/* Do not fade disabled checkboxes if any appear */
+.cell input[type="checkbox"]:disabled { opacity: 1; filter: none; }
 
 /* subtle sticky shadows */
 thead tr th.sticky { box-shadow: 0 1px 0 rgba(0,0,0,.05); }
@@ -212,321 +436,187 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 .d-none { display: none !important; }
 </style>
 
-<script>
-(function(){
-  const table = document.getElementById('assessment-matrix');
-  if(!table) return;
-
-  const exportBtn = document.getElementById('export-pdf-btn');
-
-  // --- Autosave (reliable, with cookies + better errors) ----------------
-  const AUTOSAVE_URL = "{% url 'instructor_assessment_autosave' booking.pk %}";
-    // outcome autosave endpoint (per-delegate outcome)
-  const OUTCOME_URL = "{% url 'instructor_assessment_outcome_autosave' booking.pk %}";
-
-
-  function autosaveOutcome(registerId, outcome){
-    return fetch(OUTCOME_URL, {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRFToken': CSRF,
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-      },
-      body: new URLSearchParams({ register_id: registerId, outcome })
-    }).then(async (r) => {
-      let data = null;
-      try { data = await r.json(); } catch(_) {}
-      if (!r.ok || (data && data.ok === false)) {
-        const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
-        throw new Error(msg);
-      }
-      return data || { ok: true };
-    });
-  }
-
-  function getRegisterIdForColumn(colIndex){
-    const th = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
-    return th ? th.getAttribute('data-delegate-id') : null;
-  }
-
-
-  function getCookie(name){
-    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-    return m ? m.pop() : '';
-  }
-  const CSRF = getCookie('csrftoken');
-
-  function autosaveCell(regId, compId, checked){
-    return fetch(AUTOSAVE_URL, {
-      method: 'POST',
-      credentials: 'same-origin',           // include session cookie
-      headers: {
-        'X-Requested-With': 'XMLHttpRequest',
-        'X-CSRFToken': CSRF,
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-      },
-      body: new URLSearchParams({
-        register_id: regId,
-        competency_id: compId,
-        checked: checked ? 'true' : 'false'
-      })
-    }).then(async (r) => {
-      let data = null;
-      try { data = await r.json(); } catch(_) {}
-      if (!r.ok || (data && data.ok === false)) {
-        const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
-        throw new Error(msg);
-      }
-      return data || { ok: true };
-    });
-  }
-  // ----------------------------------------------------------------------
-
-  // Tag column parity once (odd/even) for header, cells, and outcome cells
-  function tagParity(){
-    table.querySelectorAll('thead th.top').forEach(th => {
-      const idx = parseInt(th.dataset.col, 10);
-      th.classList.toggle('is-even', idx % 2 === 0);
-      th.classList.toggle('is-odd',  idx % 2 === 1);
-    });
-    table.querySelectorAll('td.cell, td.outcome-cell').forEach(td => {
-      const idx = parseInt(td.dataset.col, 10);
-      td.classList.toggle('is-even', idx % 2 === 0);
-      td.classList.toggle('is-odd',  idx % 2 === 1);
-    });
-  }
-
-  // Enable/disable export button based on outcomes (no "pending" allowed)
-  function refreshExportState(){
-    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
-    const allDecided = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
-    if (!exportBtn) return;
-    if (allDecided) {
-      exportBtn.classList.remove('disabled');
-      exportBtn.removeAttribute('aria-disabled');
-      exportBtn.removeAttribute('tabindex');
-    } else {
-      exportBtn.classList.add('disabled');
-      exportBtn.setAttribute('aria-disabled','true');
-      exportBtn.setAttribute('tabindex','-1');
-    }
-  }
-
-  // ---- Live update of the Course closure pane (assessments section) ----
-  function updateClosurePaneAssessStatus(){
-    // Determine if ALL columns are decided (no "pending")
-    const vals = Array.from(table.querySelectorAll('.outcome-input')).map(i => i.value);
-    const assessAllOk = vals.length > 0 && vals.every(v => v === 'pass' || v === 'fail' || v === 'dnf');
-
-    const pane      = document.getElementById('closure-pane');
-    const badge     = document.getElementById('closure-assess-status');
-    const manualBox = document.getElementById('closure-assess-manual');
-    const regManual = document.getElementById('closure-register-manual');
-    const closeBtn  = document.getElementById('close-course-btn');
-
-    if (!pane || !badge || !manualBox) return;
-
-    // Set flag on pane (used by other logic too)
-    pane.dataset.assessOk = assessAllOk ? 'true' : 'false';
-
-    // Mirror the status UI like your original logic
-    if (assessAllOk) {
-      manualBox.checked = false;
-      manualBox.disabled = true;
-      badge.textContent = 'OK';
-      badge.className = 'badge bg-success';
-    } else {
-      manualBox.disabled = false;
-      if (manualBox.checked) {
-        badge.textContent = 'Manual submission(s)';
-        badge.className = 'badge bg-primary';
-      } else {
-        badge.textContent = 'Delegate(s) still "Pending" on matrix';
-        badge.className = 'badge bg-warning text-dark';
-      }
-    }
-
-    // Control the "Close course" button visibility consistently:
-    // Section considered "okish" if (auto OK) OR (manual box checked)
-    const assessOkish = assessAllOk || manualBox.checked;
-
-    // Registers okish = registersOk (from data attr) OR register manual checked
-    const registersOk = (pane.dataset.registersOk === 'true');
-    const regOkish = registersOk || (regManual && regManual.checked);
-
-    const allOkish = assessOkish && regOkish;
-    if (closeBtn) closeBtn.style.display = allOkish ? '' : 'none';
-  }
-  // ----------------------------------------------------------------------
-
-  // Set visual outcome & hidden input; also handle pass badge/select visibility
-  function applyOutcomeClasses(colIndex, outcome){
-    const header = table.querySelector(`thead th.top[data-col="${colIndex}"]`);
-    const cells  = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
-    const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
-    const outSel = outTd?.querySelector('.outcome-select');
-    const outInp = outTd?.querySelector('.outcome-input');
-    const badge  = outTd?.querySelector('.outcome-badge');
-
-    // Clear previous outcome classes/overlays
-    [header, ...cells, outTd].forEach(el => {
-      if(!el) return;
-      el.classList.remove('dnf','fail','pass');
-      el.style.boxShadow = '';
-    });
-
-    // UI: pass badge vs select
-    if (badge && outSel) {
-      if (outcome === 'pass') {
-        badge.classList.remove('d-none');
-        outSel.classList.add('d-none');
-        outSel.disabled = true;
-      } else {
-        badge.classList.add('d-none');
-        outSel.classList.remove('d-none');
-        outSel.disabled = false;
-        outSel.value = ['pending','dnf','fail'].includes(outcome) ? outcome : 'pending';
-      }
-    }
-
-    if (outInp) outInp.value = outcome;
-
-    // 🔒 Lock checkboxes for DNF/Fail, unlock for Pending + tooltip
-    const lock = (outcome === 'dnf' || outcome === 'fail');
-    const tip  = lock ? 'Locked — set outcome to Pending to edit' : '';
-    cells.forEach(td => {
-        const chk = td.querySelector('.lv-chk');
-        if (!chk) return;
-        chk.disabled = lock;
-        if (tip) {
-          chk.setAttribute('title', tip);   // native tooltip
-        } else {
-          chk.removeAttribute('title');
-        }
-    });
-
-    if (outcome === 'pending') { 
-      refreshExportState();
-      updateClosurePaneAssessStatus();
-      return; 
-    }
-
-    if (outcome === 'dnf') {
-      header?.classList.add('dnf');
-      outTd?.classList.add('dnf');
-      cells.forEach(td => td.classList.add('dnf'));
-    } else if (outcome === 'fail') {
-      header?.classList.add('fail');
-      outTd?.classList.add('fail');
-      cells.forEach(td => td.classList.add('fail'));
-    } else if (outcome === 'pass') {
-      header?.classList.add('pass');
-      outTd?.classList.add('pass');
-      cells.forEach(td => td.classList.add('pass'));
-    }
-
-    refreshExportState();
-    updateClosurePaneAssessStatus();
-  }
-
-  // Compute outcome from checkboxes + selector
-  function updateColumnState(colIndex){
-    const cells = table.querySelectorAll(`td.cell[data-col="${colIndex}"]`);
-    if(!cells.length) return;
-
-    // All checked?
-    let allChecked = true;
-    cells.forEach(td => { if(!td.querySelector('.lv-chk').checked) allChecked = false; });
-
-    const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
-    const outSel = outTd?.querySelector('.outcome-select');
-    const manual = outSel ? outSel.value : 'pending';
-
-    const outcome = allChecked ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
-    applyOutcomeClasses(colIndex, outcome);
-
-    // keep hidden level inputs synced
-    cells.forEach(td => {
-      const chk = td.querySelector('.lv-chk');
-      const hidden = td.querySelector('.level-input');
-      if (hidden) hidden.value = chk.checked ? 'c' : 'na';
-    });
-  }
-
-  // Wire checkboxes -> update column + AUTOSAVE
-  table.querySelectorAll('td.cell').forEach(td => {
-    const chk = td.querySelector('.lv-chk');
-    const setVal = () => {
-      const hidden = td.querySelector('.level-input');
-      if (hidden) hidden.value = chk.checked ? 'c' : 'na';
-    };
-    chk.addEventListener('change', () => {
-      setVal();
-      updateColumnState(td.dataset.col);
-
-      // autosave this single cell
-      const regId = chk.getAttribute('data-register');
-      const compId = chk.getAttribute('data-competency');
-      autosaveCell(regId, compId, chk.checked).catch((err) => {
-        console.error('Autosave failed:', err && err.message ? err.message : err);
-        // revert UI on failure
-        chk.checked = !chk.checked;
-        setVal();
-        updateColumnState(td.dataset.col);
-        alert('Saving failed. Please try again.');
-      });
-    });
-    setVal();
-  });
-
-  // Wire selects -> update column + AUTOSAVE outcome
-  table.querySelectorAll('td.outcome-cell .outcome-select').forEach(sel => {
-    const colIndex = sel.closest('td.outcome-cell').dataset.col;
-    sel.addEventListener('change', () => {
-      // Update UI immediately
-      updateColumnState(colIndex);
-
-      // Persist chosen outcome ('pending' | 'dnf' | 'fail')
-      const regId = sel.getAttribute('data-register');
-      const outcome = sel.value;
-
-      fetch(OUTCOME_URL, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': CSRF,
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-        },
-        body: new URLSearchParams({ register_id: regId, outcome })
-      })
-      .then(async (r) => {
-        let data = null;
-        try { data = await r.json(); } catch(_) {}
-        if (!r.ok || (data && data.ok === false)) {
-          const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
-          throw new Error(msg);
-        }
-        return data || { ok: true };
-      })
-      .catch(err => {
-        console.error('Outcome autosave failed:', err && err.message ? err.message : err);
-        alert('Saving failed. Please try again.');
-        // Best-effort revert: recompute the UI from current checkboxes
-        updateColumnState(colIndex);
-      });
-    });
-  });
-
-
-  // Initial paint
-  tagParity();
-  Array.from(table.querySelectorAll('thead th.top')).forEach(th => updateColumnState(th.dataset.col));
-})();
-</script>
 
 {% else %}
   <div class="text-muted">No delegates or competencies found for this booking.</div>
 {% endif %}
+
+<script>
+(function () {
+  const form = document.getElementById("matrix-form");
+  if (!form) return;
+
+  const saveUrl = form.action;
+  const csrf = form.querySelector('input[name="csrfmiddlewaretoken"]').value;
+
+  function autosaveKV(key, val) {
+    const fd = new FormData();
+    fd.append("csrfmiddlewaretoken", csrf);
+    fd.append(key, val);
+    return fetch(saveUrl, {
+      method: "POST",
+      body: fd,
+      headers: { "X-Requested-With": "XMLHttpRequest" },
+      credentials: "same-origin",
+    }).then(r => (r.ok ? r.json() : null)).catch(() => null);
+  }
+
+  // Update closure UI (badge + button) without a full reload
+  function refreshClosureState() {
+    // Count outcomes from visible selects (pass/dnf/fail/pending)
+    const selects = Array.from(document.querySelectorAll('.outcome-cell select[name^="outcome_"]'));
+    const values  = selects.map(s => (s.value || "").toLowerCase());
+    const total   = selects.length;
+    const pending = values.filter(v => v === "" || v === "pending").length;
+    const complete = pending === 0 && total > 0;
+
+    // Status pill
+    const pill = document.getElementById("assessments-status-pill");
+    if (pill) {
+      if (complete) {
+        pill.className = "badge bg-success";
+        pill.textContent = "OK";
+      } else {
+        pill.className = "badge bg-warning text-dark";
+        pill.textContent = 'Delegate(s) still "Pending" on matrix';
+      }
+    }
+
+    // Manual checkbox for assessments
+    const manualCb = document.getElementById("closure-assess-manual");
+    const manualHidden = document.getElementById("hf-assess-manual"); // hidden field in the form
+    if (manualCb) {
+      if (complete) {
+        manualCb.checked = false;          // no manual needed when complete
+        manualCb.disabled = true;          // disable the checkbox
+        if (manualHidden) manualHidden.value = "0";
+      } else {
+        manualCb.disabled = false;         // let them tick manual if incomplete
+        // keep hidden value in sync with current checkbox state
+        if (manualHidden) manualHidden.value = manualCb.checked ? "1" : "0";
+      }
+    }
+
+    // Close course button
+    const btn = document.getElementById("close-course-btn");
+    if (btn) btn.disabled = !complete;
+  }
+
+  // expose to other handlers in this IIFE
+  window.__refreshClosureState = refreshClosureState;
+
+  // initial compute
+  refreshClosureState();
+})();
+</script>
+
+<script>
+(function () {
+  const MATRIX_SEL = '#assessment-matrix';
+
+  function colAllTicks(colIdx) {
+    const boxes = [...document.querySelectorAll(
+      `${MATRIX_SEL} td.cell[data-col="${colIdx}"] .lv-chk`
+    )];
+    return boxes.length > 0 && boxes.every(b => b.checked);
+  }
+
+  function colEffectiveFinal(colIdx) {
+    const th = document.querySelector(`${MATRIX_SEL} thead th[data-col="${colIdx}"]`);
+    const outTd = document.querySelector(`${MATRIX_SEL} .outcome-row td.outcome-cell[data-col="${colIdx}"]`);
+    if (!th || !outTd) return false;
+
+    // 1) UI classes already applied?
+    if (th.classList.contains('pass') || outTd.classList.contains('pass')) return true;
+    if (th.classList.contains('dnf')  || outTd.classList.contains('dnf'))  return true;
+    if (th.classList.contains('fail') || outTd.classList.contains('fail')) return true;
+
+    // 2) All ticks in the column => auto Pass
+    if (colAllTicks(colIdx)) return true;
+
+    // 3) Fall back to the select value
+    const sel = outTd.querySelector('select.outcome-select');
+    const v = sel ? (sel.value || '').toLowerCase() : 'pending';
+    return v !== 'pending';
+  }
+
+  function matrixAllFinal() {
+    const cols = [...document.querySelectorAll(`${MATRIX_SEL} thead th[data-col]`)];
+    if (cols.length === 0) return false;
+    return cols.every(th => colEffectiveFinal(th.dataset.col));
+  }
+
+  function updateExportBtn() {
+    const btn = document.getElementById('export-pdf-btn');
+    if (!btn) return;
+
+    if (matrixAllFinal()) {
+      btn.classList.remove('disabled');
+      btn.removeAttribute('aria-disabled');
+      btn.removeAttribute('tabindex');
+    } else {
+      btn.classList.add('disabled');
+      btn.setAttribute('aria-disabled', 'true');
+      btn.setAttribute('tabindex', '-1');
+    }
+  }
+
+  // Initial check
+  document.addEventListener('DOMContentLoaded', updateExportBtn);
+
+  // Recheck on any changes inside the matrix (ticks or outcomes)
+  document.addEventListener('change', (e) => {
+    if (e.target.closest(MATRIX_SEL)) updateExportBtn();
+  });
+
+  // If your autosave code runs after ajax, call updateExportBtn() on success too
+  window.updateExportBtn = updateExportBtn; // expose if needed by other scripts
+})();
+</script>
+
+<script>
+(function () {
+  const saveUrl = "{% url 'instructor_assessment_save' booking.id %}";
+  const csrf = document.querySelector('#matrix-form input[name=csrfmiddlewaretoken]')?.value;
+
+  function autosaveField(name, value) {
+    if (!csrf) return;
+    const fd = new FormData();
+    fd.append('csrfmiddlewaretoken', csrf);
+    fd.append(name, value);
+
+    fetch(saveUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(r => r.ok ? r.json().catch(() => ({})) : {})
+      .then(payload => {
+        // Ask the closure tab to refresh itself if the page exposes a helper
+        if (window.applyClosurePayload && payload) window.applyClosurePayload(payload);
+        if (window.updateExportBtn) window.updateExportBtn(); // keep Export PDF toggle correct
+      })
+      .catch(() => {});
+  }
+
+  // 1) AUTOSAVE OUTCOME SELECT (already present for you; keep it if you have it)
+  document.addEventListener('change', function (e) {
+    const sel = e.target.closest('.outcome-select');
+    if (!sel) return;
+    // name pattern in the form is outcome_<register_id>
+    const regId = sel.closest('td.outcome-cell')?.dataset.col; // not used for name; just for UI if needed
+    const inputName = sel.getAttribute('name'); // "outcome_<register_id>"
+    if (inputName) autosaveField(inputName, sel.value);
+  });
+
+  // 2) AUTOSAVE CHECKBOX LEVELS  <-- THIS IS THE NEW PART
+  // Your checkboxes already have name="level_<register>_<competency>" and value="c";
+  // we send 'c' when checked, 'na' when unchecked – the view maps 'c'/'na' to the model.
+  document.addEventListener('change', function (e) {
+    const box = e.target.closest('.lv-chk');
+    if (!box) return;
+    const name = box.getAttribute('name');     // e.g. "level_123_45"
+    if (!name) return;
+    const value = box.checked ? 'c' : 'na';
+    autosaveField(name, value);
+  });
+
+})();
+</script>
+

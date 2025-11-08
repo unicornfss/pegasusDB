@@ -31,8 +31,32 @@ from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
 import subprocess, tempfile, os
-from .models import AccidentReport, Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, RegisterEmailLog
-from .forms import AccidentReportForm, DelegateRegisterInstructorForm, BookingNotesForm
+
+from .models import (
+    AccidentReport,
+    AssessmentLevel,
+    Instructor,
+    Booking,
+    BookingDay,
+    CompetencyAssessment,
+    CourseOutcome,
+    DelegateRegister,
+    CourseCompetency,
+    FeedbackResponse,
+    Invoice,
+    InvoiceItem,
+    Exam,
+    ExamAttempt,
+    ExamAttemptAnswer,
+    RegisterEmailLog,
+)
+
+from .forms import (
+    AccidentReportForm,
+    DelegateRegisterInstructorForm,
+    BookingNotesForm,
+)
+
 
 from .utils.invoice import (
     get_invoice_template_path,
@@ -647,44 +671,31 @@ def instructor_booking_detail(request, pk):
                 messages.error(request, "Could not save notes. Please check the form.")
             return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}")
 
-        # Close course and move to invoicing (also email course docs to admin)
+               # Close course and move to invoicing (also email course docs to admin)
         if action == "close_course":
-            reg_manual    = request.POST.get("reg_manual") in ("1", "true", "on", "yes")
-            assess_manual = request.POST.get("assess_manual") in ("1", "true", "on", "yes")
+            # Read flags coming from the page (kept in sync by JS)
+            def _b(name: str) -> bool:
+                return request.POST.get(name) in ("1", "true", "on", "yes")
 
-            # Recompute completion state
-            days_qs_tmp = (
-                BookingDay.objects.filter(booking=booking)
-                .order_by("date")
-                .annotate(n=Count("delegateregister"))
-            )
-            regs_ok = bool(days_qs_tmp) and all(((d.n or 0) > 0) for d in days_qs_tmp)
-            outs = DelegateRegister.objects.filter(
-                booking_day__booking=booking
-            ).values_list("outcome", flat=True)
-            assess_ok = outs and all(((o or "").lower() in {"pass", "fail", "dnf"}) for o in outs)
+            reg_manual     = _b("reg_manual")
+            assess_manual  = _b("assess_manual")
+            registers_ok   = _b("registers_ok")
+            assessments_ok = _b("assessments_ok")
 
-            if not (regs_ok or reg_manual) or not (assess_ok or assess_manual):
-                messages.error(
-                    request,
-                    "Cannot close the course yet — complete registers/assessments or tick 'Manual submission to follow'."
-                )
-                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=closure")
-
-            # Persist flags if model has them
+            # Persist the manual flags if your model has them
             if hasattr(booking, "closure_register_manual"):
-                booking.closure_register_manual = bool(reg_manual)
+                booking.closure_register_manual = reg_manual
             if hasattr(booking, "closure_assess_manual"):
-                booking.closure_assess_manual = bool(assess_manual)
+                booking.closure_assess_manual = assess_manual
 
             booking.status = "completed"
             booking.save(update_fields=[
                 "status",
                 *(["closure_register_manual"] if hasattr(booking, "closure_register_manual") else []),
-                *(["closure_assess_manual"] if hasattr(booking, "closure_assess_manual") else []),
+                *(["closure_assess_manual"]   if hasattr(booking, "closure_assess_manual")   else []),
             ])
 
-            # Send course docs pack to admin
+            # Send the course docs pack to admin (your existing helper)
             try:
                 sent = email_all_course_docs_to_admin(request, booking)
                 if sent:
@@ -695,6 +706,8 @@ def instructor_booking_detail(request, pk):
                 messages.error(request, f"Course closed, but failed to email documents: {e}")
 
             return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing")
+
+
 
         # Helper to extract extra line items from POST (name='item_desc' / 'item_amount')
         def _extract_line_items_from_post(post):
@@ -1566,13 +1579,47 @@ def instructor_day_registers_pdf(request, pk: int):
         return y
 
     # --- Build PDF (force download) ---
-    filename = f"register-{day.pk}.pdf"
+
+    # 1) Course code (prefer explicit code, else short fallback from name)
+    booking_obj = day.booking
+    course_code = getattr(booking_obj.course_type, "code", None)
+    if not course_code:
+        course_code = (booking_obj.course_type.name or "").split()[0][:6].upper()
+
+    # 2) Booking reference (or pk fallback)
+    ref = (booking_obj.course_reference or str(booking_obj.pk)).strip()
+
+    # 3) De-duplicate: if ref already begins with the code (e.g. "FAAW-7Z78LF"),
+    #    strip the leading code + common separators.
+    ref_upper = ref.upper()
+    code_upper = (course_code or "").upper()
+    if code_upper and ref_upper.startswith(code_upper):
+        trimmed = ref[len(course_code):]          # remove the code
+        ref = trimmed.lstrip(" -_/")              # trim typical separators
+
+    # 4) Day number (01, 02, …) based on chronological order of booking days
+    try:
+        ordered_days = list(booking_obj.bookingday_set.order_by("date", "pk"))
+        day_index = ordered_days.index(day) + 1
+    except Exception:
+        day_index = 1
+
+    # 5) Assemble filename parts (skip any empty piece)
+    parts = [f"register_day_{day_index:02d}"]
+    if course_code:
+        parts.append(course_code)
+    if ref:
+        parts.append(ref)
+    filename = "_".join(parts) + ".pdf"
+
+    # Force download with this filename
     resp = HttpResponse(content_type="application/pdf")
-    resp["Content-Disposition"] = f'attachment; filename="{filename}"'  # << force download
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+
 
     c = canvas.Canvas(resp, pagesize=landscape(A4))
-    c.setTitle(f"Delegate Register — {booking.course_reference if booking else day.pk}")
-
+    c.setTitle(filename[:-4])   # strip ".pdf" so the document title matches the download name
+    
     def start_new_page():
         header_line_y = draw_header_block(c)
         y0 = header_line_y - header_pad
@@ -1608,76 +1655,123 @@ def instructor_day_registers_pdf(request, pk: int):
 
 
 @login_required
-@transaction.atomic
+@require_POST
 def instructor_assessment_save(request, pk):
-    booking = get_object_or_404(Booking, pk=pk)
-    instr = getattr(request.user, "instructor", None)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
-        return HttpResponseForbidden("You are not assigned to this booking.")
+    """
+    Save assessment matrix from a plain POST:
+    - level_<register_id>_<competency_id> = 'na' or 'c'
+    - outcome_<register_id> = 'pending' | 'dnf' | 'fail'  (no 'pass' here; server derives pass)
+    """
+    booking = get_object_or_404(Booking, pk=pk, instructor=request.user.instructor)
 
-    if request.method != "POST":
-        return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
-
-    # guard: only registers for this booking; only competencies for this course type
-    # Deduplicate delegates by (name + DOB)
-    delegates = _unique_delegates_for_booking(booking)
-
-    comps = list(CourseCompetency.objects.filter(course_type=booking.course_type).only("id"))
-    reg_map = {str(r.id): r for r in delegates}
-    comp_ids = [str(c.id) for c in comps]
-
-    # models
-    from .models import CompetencyAssessment, AssessmentLevel, CourseOutcome
-    valid_levels = {c[0] for c in AssessmentLevel.choices}
-    valid_outcomes = {c[0] for c in CourseOutcome.choices}
-
-    created = updated = 0
-
-    # --- Save per-cell levels ---
-    for key, val in request.POST.items():
+    # 1) Save levels. Use getlist so 'hidden' + 'checkbox' with same name
+    #    resolve to the *last* value (unchecked -> 'na'; checked -> 'c').
+    for key in request.POST.keys():
         if not key.startswith("level_"):
             continue
         try:
-            _, rid, cid = key.split("_", 2)
+            _, reg_id, comp_id = key.split("_", 2)
         except ValueError:
             continue
-        if rid not in reg_map or cid not in comp_ids:
+
+        vals = request.POST.getlist(key)
+        raw = (vals[-1] if vals else "na").lower().strip()
+        if raw in (AssessmentLevel.NOT_ASSESSED, AssessmentLevel.COMPETENT):
+            level = raw
+        elif raw == "e":   # treat 'e' as competent if it ever appears
+            level = AssessmentLevel.COMPETENT
+        elif raw == "ni":
+            level = AssessmentLevel.NOT_ASSESSED
+        else:
+            level = AssessmentLevel.NOT_ASSESSED
+
+        try:
+            ca = (CompetencyAssessment.objects
+                  .select_related("register", "register__booking_day")
+                  .get(register_id=reg_id,
+                       course_competency_id=comp_id,
+                       register__booking_day__booking=booking))
+        except CompetencyAssessment.DoesNotExist:
             continue
 
-        level = val if val in valid_levels else "na"
-        obj, was_created = CompetencyAssessment.objects.get_or_create(
-            register_id=reg_map[rid].id,
-            course_competency_id=cid,
-            defaults={"level": level, "assessed_by_id": booking.instructor_id},
-        )
-        if was_created:
-            created += 1
-        else:
-            if obj.level != level or obj.assessed_by_id != booking.instructor_id:
-                obj.level = level
-                obj.assessed_by_id = booking.instructor_id
-                obj.save(update_fields=["level", "assessed_by", "assessed_at"])
-                updated += 1
+        if ca.level != level:
+            ca.level = level
+            ca.save()  # signals will recompute DelegateRegister.outcome
 
-    # --- Save per-delegate outcome, enforcing PASS if all comps competent ---
-    for rid, reg in reg_map.items():
-        posted_outcome = request.POST.get(f"outcome_{rid}", "pending")
-        if posted_outcome not in valid_outcomes:
-            posted_outcome = "pending"
+    # 2) Save manual outcomes (pending/dnf/fail) — never set 'pass' here
+    for key in request.POST.keys():
+        if not key.startswith("outcome_"):
+            continue
+        reg_id = key.split("_", 1)[1]
+        v = (request.POST.get(key) or "").lower().strip()
+        if v not in (CourseOutcome.PENDING, CourseOutcome.DNF, CourseOutcome.FAIL):
+            continue
 
-        all_competent = True
-        for cid in comp_ids:
-            if request.POST.get(f"level_{rid}_{cid}", "na") not in {"c", "e"}:
-                all_competent = False
-                break
-        final_outcome = "pass" if all_competent else posted_outcome
+        try:
+            dr = DelegateRegister.objects.select_related("booking_day").get(
+                pk=reg_id, booking_day__booking=booking
+            )
+        except DelegateRegister.DoesNotExist:
+            continue
 
-        if getattr(reg, "outcome", None) != final_outcome:
-            reg.outcome = final_outcome
-            reg.save(update_fields=["outcome"])
+        if dr.outcome != v:
+            dr.outcome = v
+            dr.save(update_fields=["outcome"])
 
-    messages.success(request, f"Saved {created} new and {updated} updated assessment entr{'y' if (created+updated)==1 else 'ies'}.")
-    return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
+    # Back to the assessments tab
+
+    # Recompute outcomes for the registers we touched (or just all for this booking)
+    touched_reg_ids = set()
+
+    for key in request.POST.keys():
+        if key.startswith("level_"):
+            try:
+                _, reg_id, _ = key.split("_", 2)
+                touched_reg_ids.add(reg_id)
+            except ValueError:
+                pass
+        elif key.startswith("outcome_"):
+            try:
+                reg_id = key.split("_", 1)[1]
+                touched_reg_ids.add(reg_id)
+            except Exception:
+                pass
+
+    qs = DelegateRegister.objects.select_related("booking_day").filter(
+        booking_day__booking=booking
+    )
+    if touched_reg_ids:
+        qs = qs.filter(pk__in=touched_reg_ids)
+
+    for dr in qs:
+        # This uses the method you added on DelegateRegister
+        dr.recompute_outcome_from_assessments()
+
+    # If this was an autosave (XHR), return JSON instead of redirecting
+    if request.headers.get("x-requested-with") == "XMLHttpRequest":
+        reg_id = None
+        for key in request.POST.keys():
+            if key.startswith("level_"):
+                try:
+                    _, reg_id, _ = key.split("_", 2)
+                except ValueError:
+                    pass
+            elif key.startswith("outcome_"):
+                reg_id = key.split("_", 1)[1]
+
+        payload = {"ok": True}
+        if reg_id:
+            try:
+                dr = DelegateRegister.objects.select_related("booking_day").get(
+                    pk=reg_id, booking_day__booking=booking
+                )
+                payload.update({"reg_id": str(dr.pk), "outcome": (dr.outcome or "pending")})
+            except DelegateRegister.DoesNotExist:
+                payload.update({"reg_id": str(reg_id), "outcome": "pending"})
+
+        return JsonResponse(payload)
+
+    return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}#assessments-pane")
 
 @login_required
 def instructor_assessment_pdf(request, pk):
