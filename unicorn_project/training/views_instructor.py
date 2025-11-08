@@ -873,6 +873,37 @@ def instructor_booking_detail(request, pk):
         getattr(booking.instructor, "postcode", ""),
     ] if (p or "").strip()])
 
+    # --- Exams / attempts for the Exams tab ---
+    # all exams for this course type (ordered)
+    course_exams = list(
+        Exam.objects.filter(course_type=booking.course_type).order_by("sequence", "id")
+    )
+
+    # all attempts for this booking’s instructor on the booking’s dates
+    booking_dates = list(
+        BookingDay.objects.filter(booking=booking).values_list("date", flat=True)
+    )
+
+    attempts_by_exam = defaultdict(list)
+    if booking_dates:
+        attempts_qs = (
+            ExamAttempt.objects
+            .select_related("exam")
+            .filter(
+                exam__course_type=booking.course_type,
+                instructor=booking.instructor,
+                exam_date__in=booking_dates,
+            )
+            .order_by("exam_date", "id")
+        )
+        for att in attempts_qs:
+            seq = getattr(att.exam, "sequence", None) or getattr(att.exam, "id")
+            attempts_by_exam[seq].append(att)
+    else:
+        # still provide an empty mapping if there are no days
+        attempts_by_exam = defaultdict(list)
+
+
     # ---------- base context ----------
     ctx = {
         "title": booking.course_type.name,
@@ -964,6 +995,18 @@ def instructor_assessment_autosave(request, pk):
 
     return JsonResponse({"ok": True})
 
+@login_required
+def instructor_day_registers_poll(request, pk: int):
+    """
+    Lightweight GET endpoint used by client-side code to check how many
+    register rows exist for a given day. Extend as needed.
+    """
+    if request.method != "GET":
+        return JsonResponse({"ok": False, "error": "GET only"}, status=405)
+
+    day = get_object_or_404(BookingDay, pk=pk)
+    rows = DelegateRegister.objects.filter(booking_day=day).count()
+    return JsonResponse({"ok": True, "day_id": pk, "rows": rows})
 
 @login_required
 @require_POST
@@ -1464,9 +1507,46 @@ def instructor_day_registers_pdf(request, pk: int):
         return y
 
     # --- Build PDF (force download) ---
-    filename = f"register-{day.pk}.pdf"
+
+    # Course code from CourseType.code, else derive a short token from name
+    ct = getattr(day.booking, "course_type", None)
+    name = (getattr(ct, "name", "") or "").strip()
+    code = (getattr(ct, "code", "") or "").strip()
+    course_code = code or (name.split()[0][:6].upper() if name else "COURSE")
+
+    # Booking reference (fallback to booking PK)
+    ref_raw = str(getattr(day.booking, "course_reference", "") or day.booking.pk)
+
+    # If the reference already starts with the course code (e.g. "FAAW-7Z78LF"),
+    # strip that leading code so we don’t duplicate it in the filename.
+    ref_clean = ref_raw
+    if course_code:
+        up = course_code.upper()
+        rup = ref_raw.upper()
+        if rup.startswith(up):
+            ref_clean = ref_raw[len(course_code):].lstrip("-_ ")
+
+    # Day number within this booking (robust to related_name differences)
+    ordered_ids = list(
+        BookingDay.objects
+            .filter(booking=day.booking)
+            .order_by("date", "id")
+            .values_list("id", flat=True)
+    )
+    try:
+        day_number = ordered_ids.index(day.id) + 1
+    except ValueError:
+        day_number = 1
+
+    # Build final filename
+    filename = f"register_day_{day_number}_{course_code}"
+    if ref_clean:
+        filename += f"_{ref_clean}"
+    filename += ".pdf"
+
     resp = HttpResponse(content_type="application/pdf")
-    resp["Content-Disposition"] = f'attachment; filename="{filename}"'  # << force download
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+
 
     c = canvas.Canvas(resp, pagesize=landscape(A4))
     c.setTitle(f"Delegate Register — {booking.course_reference if booking else day.pk}")
