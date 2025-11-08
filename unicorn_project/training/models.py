@@ -292,6 +292,8 @@ class DelegateRegister(models.Model):
         max_length=8,
         choices=CourseOutcome.choices,
         default=CourseOutcome.PENDING,
+        null=False,
+        blank=False,    
     )
     notes = models.TextField(blank=True)
     booking_day = models.ForeignKey("BookingDay", on_delete=models.CASCADE, null=True, blank=True)
