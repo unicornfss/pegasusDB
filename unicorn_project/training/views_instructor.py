@@ -39,6 +39,40 @@ from .utils.invoice import (
     send_invoice_email,      # email helper with dev/admin routing
 )
 
+def _assessments_complete(booking):
+    """
+    True iff there are *some* register rows on this booking AND
+    none of them are pending/blank/NULL.
+    """
+    regs = DelegateRegister.objects.filter(booking_day__booking=booking)
+    if not regs.exists():
+        return False
+    return not regs.filter(
+        Q(outcome__iexact='pending') | Q(outcome__isnull=True) | Q(outcome__exact='')
+    ).exists()
+
+
+def _get_register_pdf_bytes_via_existing_view(request, pk: int) -> tuple[bytes, str]:
+    """
+    Calls the existing instructor_day_registers_pdf view to obtain the PDF HttpResponse,
+    then returns (raw_bytes, filename). No duplication of PDF drawing code.
+    """
+    # Import locally to avoid circulars if file is reorganised
+    from .views_instructor import instructor_day_registers_pdf  # this is the existing download view
+
+    resp: HttpResponse = instructor_day_registers_pdf(request, pk)
+    data = resp.content or b""
+
+    # Try to parse filename from Content-Disposition; fall back to a generic one
+    filename = "registers.pdf"
+    cd = resp.get("Content-Disposition") or resp.get("content-disposition")
+    if cd:
+        m = re.search(r'filename="?([^";]+)"?', cd)
+        if m:
+            filename = m.group(1)
+
+    return data, filename
+
 def _extract_line_items(post):
     keys = set(post.keys())
     desc_keys = [k for k in keys if k.startswith("item_desc")]
@@ -799,16 +833,22 @@ def instructor_booking_detail(request, pk):
     day_counts = list(days_qs.values_list("n", flat=True))
     registers_all_days = bool(day_counts) and all((n or 0) > 0 for n in day_counts)
 
-    delegate_outcomes = list(
-        DelegateRegister.objects
-        .filter(booking_day__booking=booking)
-        .values_list("outcome", flat=True)
-    )
-    completed_outcomes = {"pass", "fail", "dnf"}
-    has_any = bool(delegate_outcomes)
-    assessments_all_complete = has_any and all(
-        ((o or "").lower() in completed_outcomes) for o in delegate_outcomes
-    )
+    # Any register rows on this booking?
+    regs_qs = DelegateRegister.objects.filter(booking_day__booking=booking)
+    has_any = regs_qs.exists()
+    assessments_all_complete = _assessments_complete(booking)
+
+    # Your existing “registers are OK” rule from above (every day has rows)
+    registers_all_complete = registers_all_days
+
+    # Read current manual flags if your model has them (else they’re False)
+    reg_manual    = bool(getattr(booking, "closure_register_manual", False))
+    assess_manual = bool(getattr(booking, "closure_assess_manual", False))
+
+    # Server-side decision: can the course be closed right now?
+    can_close_course = (registers_all_complete or reg_manual) and \
+                    (assessments_all_complete or assess_manual)
+
 
     booking_dates = list(days_qs.values_list("date", flat=True))
     if booking_dates:
@@ -846,7 +886,14 @@ def instructor_booking_detail(request, pk):
         "fb_count": fb_count,
         "fb_avg": fb_avg,
         "registers_all_days": registers_all_days,
+        "registers_all_complete": registers_all_complete,
         "assessments_all_complete": assessments_all_complete,
+        "reg_manual": reg_manual,           # ← add
+        "assess_manual": assess_manual,     # ← add
+        "can_close_course": can_close_course,  # ← add
+        "course_exams": course_exams,
+        "attempts_by_exam": dict(attempts_by_exam),
+        "has_exam": bool(course_exams) or getattr(booking.course_type, "has_exam", False),
         "is_locked": is_locked,
         "instructor_address": instructor_address,
         "active_tab": request.GET.get("tab", ""),
@@ -890,7 +937,7 @@ def instructor_assessment_autosave(request, pk):
     except DelegateRegister.DoesNotExist:
         return JsonResponse({"ok": False, "error": "Register not found"}, status=404)
 
-    # safety: make sure this register belongs to the current booking
+    # safety: ensure this row belongs to the booking in the URL
     if str(reg.booking_day.booking_id) != str(pk):
         return JsonResponse({"ok": False, "error": "Mismatched booking"}, status=400)
 
@@ -904,24 +951,19 @@ def instructor_assessment_autosave(request, pk):
     if not instr:
         return JsonResponse({"ok": False, "error": "No instructor profile found"}, status=400)
 
-    # --- create / update
-    try:
-        ca, created = CompetencyAssessment.objects.get_or_create(
-            register=reg,
-            course_competency=comp,            # 👈 correct field name
-            defaults={
-                "assessed_by": instr,          # 👈 must be Instructor
-                "level": "c" if checked else "na",
-            },
-        )
-        if not created:
-            ca.level = "c" if checked else "na"
-            ca.assessed_by = instr
-            ca.save(update_fields=["level", "assessed_by"])
-    except Exception as e:
-        return JsonResponse({"ok": False, "error": str(e)}, status=500)
+    # --- create / update competency assessment
+    ca, created = CompetencyAssessment.objects.get_or_create(
+        register=reg,
+        course_competency=comp,
+        defaults={"assessed_by": instr, "level": "c" if checked else "na"},
+    )
+    if not created:
+        ca.level = "c" if checked else "na"
+        ca.assessed_by = instr
+        ca.save(update_fields=["level", "assessed_by"])
 
     return JsonResponse({"ok": True})
+
 
 @login_required
 @require_POST
@@ -930,10 +972,8 @@ def instructor_assessment_outcome_autosave(request, pk):
     Persist a column outcome for a delegate.
     POST: register_id, outcome ("pending"|"dnf"|"fail"|"pass")
 
-    IMPORTANT:
-      - Enforces that the register belongs to this booking/instructor.
-      - Propagates the outcome across *all days* of the same booking
-        for the same person (match by normalized name + DOB when present).
+    Propagates the outcome across *all days* of the same booking for the same
+    person (normalized name + DOB when present).
     """
     # Guard: instructor & booking match
     instr = getattr(request.user, "instructor", None)
@@ -944,7 +984,6 @@ def instructor_assessment_outcome_autosave(request, pk):
     if not instr or booking.instructor_id != getattr(instr, "id", None):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
 
-    # Inputs
     reg_id  = request.POST.get("register_id")
     outcome = (request.POST.get("outcome") or "").lower().strip()
     if outcome not in {"pending", "dnf", "fail", "pass"}:
@@ -956,21 +995,17 @@ def instructor_assessment_outcome_autosave(request, pk):
         pk=reg_id, booking_day__booking=booking,
     )
 
-    # Build a queryset for "same person on this booking"
-    # (name case-insensitive; require DOB match if present)
+    # same person (case-insensitive name) on the same booking; constrain by DOB if present
     q = DelegateRegister.objects.filter(
         booking_day__booking=booking,
         name__iexact=(reg.name or "").strip(),
     )
-    dob = getattr(reg, "date_of_birth", None)
-    if dob:
-        q = q.filter(date_of_birth=dob)
+    if reg.date_of_birth:
+        q = q.filter(date_of_birth=reg.date_of_birth)
 
-    # Update *all* matched rows (every day on this booking)
     updated = q.update(outcome=outcome)
-
     return JsonResponse({"ok": True, "outcome": outcome, "updated": int(updated)})
-    
+
 
 @login_required
 def instructor_day_registers(request, pk: int):

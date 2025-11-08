@@ -413,9 +413,11 @@
         <!-- Hidden fields capture current checkbox states for persistence -->
         <input type="hidden" id="hf-reg-manual" name="reg_manual" value="{{ registers_manual|yesno:'1,0' }}">
         <input type="hidden" id="hf-assess-manual" name="assess_manual" value="{{ assessments_manual|yesno:'1,0' }}">
-        <button type="button" id="close-course-btn" class="btn btn-danger" style="display:none">
+        <button type="submit" id="close-course-btn" class="btn btn-danger"
+                {% if not can_close_course %}style="display:none"{% endif %}>
           <i class="bi bi-check2-circle"></i> Close course and prepare invoice
         </button>
+
       </form>
     {% else %}
       <div class="mt-3 alert alert-info">
@@ -432,6 +434,63 @@
 </div>
 
 <a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
+
+<a href="{{ back_url }}" class="btn btn-secondary">Back to My bookings</a>
+
+<!-- NEW live button / manual sync script -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const pane        = document.getElementById('closure-pane');
+  const form        = document.getElementById('close-course-form');
+  const btn         = document.getElementById('close-course-btn');
+
+  const regManual   = document.getElementById('closure-register-manual');
+  const assessManual= document.getElementById('closure-assess-manual');
+
+  const hfReg       = document.getElementById('hf-reg-manual');
+  const hfAssess    = document.getElementById('hf-assess-manual');
+
+  function syncHidden() {
+    if (hfReg && regManual)    hfReg.value    = regManual.checked ? '1' : '0';
+    if (hfAssess && assessManual) hfAssess.value = assessManual.checked ? '1' : '0';
+  }
+
+  function canCloseNow() {
+    if (!pane) return false;
+    const registersOk  = (pane.dataset.registersOk === 'true') || (regManual && regManual.checked);
+    const assessOk     = (pane.dataset.assessOk === 'true')     || (assessManual && assessManual.checked);
+    return registersOk && assessOk;
+  }
+
+  function refreshButton() {
+    if (!btn) return;
+    btn.style.display = canCloseNow() ? '' : 'none';
+  }
+
+  [regManual, assessManual].forEach(el => {
+    if (!el) return;
+    el.addEventListener('change', () => { syncHidden(); refreshButton(); });
+  });
+
+  if (pane && 'MutationObserver' in window) {
+    new MutationObserver(refreshButton).observe(pane, {
+      attributes: true,
+      attributeFilter: ['data-assess-ok','data-registers-ok']
+    });
+  }
+
+  syncHidden();
+  refreshButton();
+});
+</script>
+<!-- END new script -->
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const hash = window.location.hash;
+  ...
+});
+</script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
