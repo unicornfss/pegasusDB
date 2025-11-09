@@ -606,4 +606,91 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+<!-- Script to make exams tab auto refresh -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var examsTabBtn = document.getElementById('exams-tab');
+  var examsPane   = document.getElementById('exams-pane');
+  var indicator   = document.getElementById('exams-refresh-indicator');
+
+  if (!examsPane) return;
+  var timer = null;
+
+  function isPaneActive() {
+    return examsPane.classList.contains('active') && examsPane.classList.contains('show');
+  }
+  function isUserInteracting() {
+    if (examsPane.matches(':hover')) return true;
+    var ae = document.activeElement;
+    return !!(ae && examsPane.contains(ae));
+  }
+  function showIndicator(on) {
+    if (indicator) indicator.style.opacity = on ? '1' : '0';
+  }
+
+  async function refreshExams() {
+    if (!isPaneActive()) return;
+    if (isUserInteracting()) return;
+    console.log('[ExamsRefresh] refreshing…');
+    showIndicator(true);
+    try {
+      var url = window.location.href.split('#')[0];
+      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'fetch' }
+      });
+      if (!res.ok) return;
+      var html = await res.text();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var freshPane = tmp.querySelector('#exams-pane');
+      if (!freshPane) return;
+      var freshSections = freshPane.querySelectorAll('.accordion-collapse[id^="ex-c-"]');
+      freshSections.forEach(function (freshSection) {
+        var id = freshSection.id;
+        var currentSection = examsPane.querySelector('#' + CSS.escape(id));
+        if (!currentSection) return;
+        var freshTbody = freshSection.querySelector('table tbody');
+        var currTbody  = currentSection.querySelector('table tbody');
+        if (freshTbody && currTbody && currTbody.innerHTML.trim() !== freshTbody.innerHTML.trim()) {
+          currTbody.innerHTML = freshTbody.innerHTML;
+        }
+      });
+      console.log('[ExamsRefresh] done');
+    } catch (e) {
+      console.log('[ExamsRefresh] error:', e);
+    } finally {
+      setTimeout(() => showIndicator(false), 300);
+    }
+  }
+
+  function start() {
+    if (!timer) timer = setInterval(refreshExams, 5000);
+  }
+  function stop() {
+    if (timer) { clearInterval(timer); timer = null; }
+  }
+  start();
+  if (examsTabBtn) examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
+    document.addEventListener('visibilitychange', function () {
+    if (document.hidden) stop(); else start();
+  });
+
+  // Restart refresh when mouse leaves the exams pane
+  examsPane.addEventListener('mouseleave', function () {
+    if (isPaneActive()) {
+      console.log('[ExamsRefresh] mouse left exams pane — resuming refresh');
+      start();
+    }
+  });
+
+  // Pause when mouse enters the exams pane
+  examsPane.addEventListener('mouseenter', function () {
+    console.log('[ExamsRefresh] mouse entered exams pane — pausing refresh');
+    stop();
+  });
+});
+</script>
+
+
 {% endblock %}

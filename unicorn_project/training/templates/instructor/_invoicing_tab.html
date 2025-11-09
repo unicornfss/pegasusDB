@@ -4,6 +4,7 @@
 {% load static %}
 <form method="post" id="invoice-form" class="row g-3">
   {% csrf_token %}
+<input type="hidden" name="confirm_receipts" id="confirm_receipts" value="0">
 {% with inv_lower=invoice.status|default:"draft"|lower %}
 {% now "Y-m-d" as today_iso %}
 {% now "d/m/Y" as today_human %}
@@ -177,11 +178,14 @@
           <i class="bi bi-send"></i> Send invoice to admin
         </button>
       {% endif %}
-      <a class="btn btn-outline-secondary" href="{% url 'instructor_invoice_preview' booking.pk %}">
+            <a class="btn btn-outline-secondary" href="{% url 'instructor_invoice_preview' booking.pk %}">
         <i class="bi bi-file-earmark-pdf"></i> Download preview (PDF)
       </a>
     </div>
-  </div>
+    
+
+  </div> <!-- this closes the col-12 col-lg-8 -->
+
 
   <div class="col-12 col-lg-4">
     <div class="card">
@@ -211,10 +215,59 @@
         </ul>
       </div>
     </div>
+<!-- Receipts card (now in the right column) -->
+  <div class="card mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <span>Receipts</span>
+      <small class="text-muted" id="rcpt-status"></small>
+    </div>
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <input type="file" id="rcpt-file" accept=".pdf,.jpg,.jpeg,.png,.heic,.heif">
+        <button type="button" class="btn btn-outline-primary btn-sm" id="rcpt-upload"
+                {% if inv_lower == "sent" %}disabled aria-disabled="true"{% endif %}>
+          <i class="bi bi-cloud-upload"></i> Upload receipt
+        </button>
+      </div>
+      <ul
+      class="small mt-3 mb-0"
+      id="rcpt-list"
+      data-list-url="{% url 'instructor_list_receipts' booking.pk %}"
+      data-del-url="{% url 'instructor_delete_receipt' booking.pk %}"
+    ></ul>
+
+    </div>
   </div>
+</div>
 
 {% endwith %}
 </form>
+<!-- Confirm Receipts Modal -->
+<div class="modal fade" id="confirmReceiptsModal" tabindex="-1" aria-labelledby="confirmReceiptsLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="confirmReceiptsLabel">Receipts confirmation</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        You’ve added additional charges. Please confirm:
+        <ul class="mt-2">
+          <li>You’ve uploaded all relevant receipts, <em>or</em></li>
+          <li>You’ll send them separately if required.</li>
+        </ul>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="btn-go-upload" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+          Upload receipts…
+        </button>
+        <button type="button" id="btn-confirm-receipts" class="btn btn-primary">
+          I confirm — continue
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -367,6 +420,245 @@
 })();
 </script>
 
+<script>
+(function(){
+  const btn   = document.getElementById('rcpt-upload');
+  const inp   = document.getElementById('rcpt-file');
+  const list  = document.getElementById('rcpt-list');
+  const stat  = document.getElementById('rcpt-status');
+  const form  = document.getElementById('invoice-form');
+  if (!btn || !inp || !form) return;
 
+  const csrfInput = form.querySelector('input[name=csrfmiddlewaretoken]');
+
+  function mark(msg, cls){
+    stat.classList.remove('text-danger','text-success','text-muted');
+    stat.classList.add(cls || 'text-muted');
+    stat.textContent = msg || '';
+  }
+
+  btn.addEventListener('click', async function(){
+    if(!inp.files || !inp.files[0]){ mark('Choose a file first','text-danger'); return; }
+
+    const fd = new FormData();
+    fd.append('file', inp.files[0]);
+    if (csrfInput) fd.append('csrfmiddlewaretoken', csrfInput.value); // body CSRF (belt & braces)
+
+    mark('Uploading…','text-muted');
+
+    try{
+      const url = "{% url 'instructor_upload_receipt' booking.pk %}";
+      const resp = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',                // send session & CSRF cookies
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body: fd
+      });
+
+      // If server returned HTML (e.g. login/403 page), show a helpful error
+      const ct = resp.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) {
+        const text = await resp.text();
+        throw new Error(`Server returned ${resp.status}. ${text.slice(0,120)}…`);
+      }
+
+      const data = await resp.json();
+      if(!resp.ok || !data.ok) throw new Error((data && data.error) || `HTTP ${resp.status}`);
+
+      const li = document.createElement('li');
+      li.dataset.fileId = data.id; // for delete
+      li.innerHTML = `✅ <a href="${data.webViewLink}" target="_blank" rel="noopener">${data.name}</a>
+        <button type="button" class="btn btn-sm btn-outline-danger ms-2 rcpt-del" title="Remove">
+          <i class="bi bi-trash"></i>
+        </button>`;
+      list.prepend(li);
+
+      inp.value = '';
+      mark('Uploaded','text-success');
+      setTimeout(()=>mark('', 'text-muted'), 3000);
+
+    }catch(e){
+      mark(e.message || 'Upload failed','text-danger');
+    }
+  });
+})();
+</script>
+
+
+<script>
+(function(){
+  const form = document.getElementById('invoice-form');
+  if (!form) return;
+
+  const sendBtn      = form.querySelector('button[name="action"][value="send_admin"]');
+  const confirmField = document.getElementById('confirm_receipts');
+  const extrasBody   = document.getElementById('extras-body');
+
+  // Modal bits (may be absent)
+  const modalEl  = document.getElementById('confirmReceiptsModal');
+  const hasModal = !!(modalEl && window.bootstrap && bootstrap.Modal);
+  const modal    = hasModal ? new bootstrap.Modal(modalEl) : null;
+  const goUploadBtn = document.getElementById('btn-go-upload');
+  const confirmBtn  = document.getElementById('btn-confirm-receipts');
+
+  function extraTotal(){
+    if (!extrasBody) return 0;
+    let sum = 0;
+    extrasBody.querySelectorAll('input[name="item_amount"]').forEach(inp => {
+      const n = parseFloat((inp.value || '').toString().replace(',', ''));
+      if (!isNaN(n)) sum += n;
+    });
+    return sum;
+  }
+
+  function doProgrammaticSubmit(){
+    // Ensure we send action=send_admin (because form.submit() won't include the clicked button)
+    const hidden = document.createElement('input');
+    hidden.type  = 'hidden';
+    hidden.name  = 'action';
+    hidden.value = 'send_admin';
+    form.appendChild(hidden);
+    form.submit();
+  }
+
+  if (goUploadBtn){
+    goUploadBtn.addEventListener('click', () => {
+      const rcptFile = document.getElementById('rcpt-file');
+      if (rcptFile){
+        rcptFile.scrollIntoView({behavior:'smooth', block:'center'});
+        setTimeout(() => rcptFile.click(), 300);
+      }
+    });
+  }
+
+  if (confirmBtn){
+    confirmBtn.addEventListener('click', () => {
+      if (confirmField) confirmField.value = '1';
+      if (hasModal) modal.hide();
+      doProgrammaticSubmit();
+    });
+  }
+
+  if (sendBtn){
+    sendBtn.addEventListener('click', function(ev){
+      // If no extras, let the normal submit happen (button's name/value included)
+      if (extraTotal() <= 0) return;
+
+      // If already confirmed once, let normal submit happen
+      if (confirmField && confirmField.value === '1') return;
+
+      // Intercept to confirm
+      ev.preventDefault();
+
+      if (hasModal) {
+        modal.show();
+      } else {
+        // Fallback if Bootstrap JS isn't loaded
+        const ok = window.confirm(
+          "You’ve added additional charges.\n\n" +
+          "Please confirm you’ve uploaded all receipts or will send them separately."
+        );
+        if (ok) {
+          if (confirmField) confirmField.value = '1';
+          doProgrammaticSubmit();
+        }
+        // If they cancel, do nothing.
+      }
+    });
+  }
+})();
+</script>
+
+
+<script>
+(function(){
+  const listEl = document.getElementById('rcpt-list');
+  const stat   = document.getElementById('rcpt-status');
+  const form   = document.getElementById('invoice-form');
+  if (!listEl || !form) return;
+
+  const csrfInput = form.querySelector('input[name=csrfmiddlewaretoken]');
+  const listURL = listEl.dataset.listUrl;
+  const delURL  = listEl.dataset.delUrl;
+
+  function mark(msg, cls){
+    stat.classList.remove('text-danger','text-success','text-muted');
+    stat.classList.add(cls || 'text-muted');
+    stat.textContent = msg || '';
+  }
+
+  function render(files){
+    listEl.innerHTML = '';
+    if (!files || !files.length){
+      const li = document.createElement('li');
+      li.textContent = 'No receipts yet.';
+      li.classList.add('text-muted');
+      listEl.appendChild(li);
+      return;
+    }
+    files.forEach(f => {
+      const li = document.createElement('li');
+      li.dataset.fileId = f.id;
+      li.innerHTML = `
+        <a href="${f.webViewLink}" target="_blank" rel="noopener">${f.name}</a>
+        <button type="button" class="btn btn-sm btn-outline-danger ms-2 rcpt-del" title="Remove">
+          <i class="bi bi-trash"></i>
+        </button>
+      `;
+      listEl.appendChild(li);
+    });
+  }
+
+  async function loadList(){
+    try{
+      const resp = await fetch(listURL, { credentials: 'same-origin', headers: { 'X-Requested-With':'XMLHttpRequest' }});
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error((data && data.error) || `HTTP ${resp.status}`);
+      render(data.files || []);
+    }catch(e){
+      mark(e.message || 'Load failed','text-danger');
+    }
+  }
+
+  async function deleteFile(fileId, li){
+    try{
+      const fd = new FormData();
+      if (csrfInput) fd.append('csrfmiddlewaretoken', csrfInput.value);
+      fd.append('file_id', fileId);
+
+      const resp = await fetch(delURL, {
+        method:'POST',
+        credentials:'same-origin',
+        headers:{ 'X-Requested-With':'XMLHttpRequest' },
+        body: fd
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) throw new Error((data && data.error) || `HTTP ${resp.status}`);
+      li.remove();
+      if (!listEl.querySelector('li')) render([]);
+      mark('Removed','text-success');
+      setTimeout(()=>mark('', 'text-muted'), 2000);
+    }catch(e){
+      mark(e.message || 'Remove failed','text-danger');
+    }
+  }
+
+  // Delegate delete clicks
+  listEl.addEventListener('click', function(ev){
+    const btn = ev.target.closest('.rcpt-del');
+    if (!btn) return;
+    const li = btn.closest('li');
+    const fileId = li && li.dataset.fileId;
+    if (!fileId) return;
+    if (!confirm('Remove this receipt?')) return;
+    deleteFile(fileId, li);
+  });
+
+  // load on page ready
+  loadList();
+})();
+</script>
 
 {% endif %}
+
+

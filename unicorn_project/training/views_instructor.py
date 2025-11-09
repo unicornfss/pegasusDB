@@ -1,10 +1,11 @@
 from pathlib import Path
-import io, contextlib, os, re
+import io, contextlib, os, re, mimetypes, logging
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from datetime import timedelta, datetime
 from django.contrib import messages
 from django.conf import settings
+from django.core.mail import EmailMessage
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
@@ -13,11 +14,16 @@ from django.forms import modelformset_factory
 from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponseNotAllowed, HttpResponse, Http404, HttpResponseServerError, HttpRequest, HttpResponseBadRequest
 from django.shortcuts import redirect, render, get_object_or_404
 from django.template.loader import render_to_string
-from django.urls import reverse
+from django.test import RequestFactory
+from django.urls import reverse, resolve
 from django.utils import timezone
 from django.utils.formats import date_format
 from django.utils.timezone import now, localtime
 from django.views.decorators.http import require_POST, require_http_methods
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+from googleapiclient.errors import HttpError
+from .google_oauth import get_drive_service
+from .drive_paths import ensure_path
 from itertools import zip_longest
 from .utils.emailing import send_admin_email
 from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
@@ -28,6 +34,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from statistics import mean
+from django.template.loader import render_to_string
 import subprocess, tempfile, os
 from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm
@@ -38,6 +45,106 @@ from .utils.invoice import (
     render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
     send_invoice_email,      # email helper with dev/admin routing
 )
+
+SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9 _\-\(\)\.&]")
+
+def safe_folder_name(s: str) -> str:
+    """Make a Google Drive-safe folder name."""
+    s = (s or "").strip()
+    if not s:
+        return "No-Ref"
+    s = SAFE_CHARS_RE.sub("_", s)
+    return s[:128]  # keep it reasonable
+
+MAX_ATTACH_TOTAL = 20 * 1024 * 1024   # 20 MB total across all receipts
+MAX_ATTACH_EACH  = 8  * 1024 * 1024   # 8 MB per receipt
+
+def list_course_receipts_drive(svc, root_id: str, course_ref: str) -> list[dict]:
+    """Return [{id,name,webViewLink,mimeType,size}] in Receipts/<course_ref>, or [] if folder missing."""
+    folder_name = safe_folder_name(course_ref or "")
+    parent_id = find_folder(svc, folder_name, root_id)
+    if not parent_id:
+        return []
+    res = svc.files().list(
+        q=f"'{parent_id}' in parents and trashed=false",
+        fields="files(id,name,webViewLink,mimeType,size)",
+        pageSize=100
+    ).execute()
+    return res.get("files", []) or []
+
+def download_small_file_bytes(svc, file_id: str, *, max_bytes: int) -> bytes | None:
+    """Download file; abort if exceeds max_bytes."""
+    req = svc.files().get_media(fileId=file_id)
+    buf = io.BytesIO()
+    dl = MediaIoBaseDownload(buf, req)
+    done = False
+    while not done:
+        _, done = dl.next_chunk()
+        if buf.tell() > max_bytes:
+            return None
+    return buf.getvalue()
+
+def gather_receipt_attachments_and_links(booking) -> tuple[list[tuple[str, bytes, str]], list[str]]:
+    """Returns (attachments, link_lines). Attachments obey size caps."""
+    svc = get_drive_service(settings.GOOGLE_OAUTH_CLIENT_SECRET, settings.GOOGLE_OAUTH_TOKEN)
+    files = list_course_receipts_drive(
+        svc,
+        settings.GOOGLE_DRIVE_ROOT_RECEIPTS,
+        getattr(booking, "course_reference", "") or ""
+    )
+
+    links = [f"{f.get('name','(file)')} → {f.get('webViewLink','')}" for f in files]
+
+    attachments, total = [], 0
+    for f in files:
+        name = f.get("name") or "receipt"
+        mime = f.get("mimeType") or (mimetypes.guess_type(name)[0] or "application/octet-stream")
+        size_str = f.get("size")
+        try:
+            size = int(size_str) if size_str is not None else 0
+        except:
+            size = 0
+
+        # quick skip if clearly too big
+        if size and (size > MAX_ATTACH_EACH or total + size > MAX_ATTACH_TOTAL):
+            continue
+
+        content = download_small_file_bytes(
+            svc, f["id"], max_bytes=min(MAX_ATTACH_EACH, MAX_ATTACH_TOTAL - total)
+        )
+        if content is None:
+            continue
+
+        attachments.append((name, content, mime))
+        total += len(content)
+        if total >= MAX_ATTACH_TOTAL:
+            break
+
+    return attachments, links
+
+def render_invoice_pdf_via_preview(request, booking) -> tuple[bytes, str]:
+    """
+    Call the existing invoice preview route to get the exact same PDF bytes,
+    without importing the view directly (no circular import; no WeasyPrint here).
+    """
+    path = reverse('instructor_invoice_preview', kwargs={'pk': booking.pk})
+    match = resolve(path)
+
+    rf = RequestFactory()
+
+    # Set scheme via 'secure=' and host via HTTP_HOST; don't touch request.scheme
+    is_https = request.is_secure()
+    fake = rf.get(path, secure=is_https)
+    fake.user = request.user
+    fake.META['HTTP_HOST'] = request.META.get('HTTP_HOST', 'localhost:8000')
+    fake.META['wsgi.url_scheme'] = 'https' if is_https else 'http'
+
+    # Call the resolved view callable (works for FBV or CBV via as_view())
+    response = match.func(fake, *match.args, **match.kwargs)
+
+    pdf_bytes = response.content
+    filename = f"invoice-{booking.course_reference or booking.pk}.pdf"
+    return pdf_bytes, filename
 
 def _assessments_complete(booking):
     """
@@ -795,7 +902,7 @@ def instructor_booking_detail(request, pk):
                 "account_number": inv.account_number or getattr(booking.instructor, "bank_account_number", "") or "",
             }
 
-            file_bytes, filename = render_invoice_file(ctx_pdf, prefer_pdf=True)
+            file_bytes, filename = render_invoice_pdf_via_preview(request, booking)
             subj = f"[Unicorn] Instructor invoice — {booking.course_type.name} ({booking.course_reference or booking.pk})"
             body = (
                 f"Invoice for {booking.course_type.name} — {booking.business.name}\n"
@@ -804,13 +911,70 @@ def instructor_booking_detail(request, pk):
             )
 
             try:
-                send_invoice_email(file_bytes, filename, subj, body, to_admin=True,
-                                   cc_instructor=(booking.instructor.email or None))
+                # 1) Gather receipt attachments + links from Drive
+                attachments, link_lines = gather_receipt_attachments_and_links(booking)
+                body_extra = "\n\nReceipts:\n" + (
+                    "\n".join(f" - {line}" for line in link_lines) if link_lines else " - (none found)"
+                )
+
+                # 2) Build the email (invoice PDF + receipt attachments)
+                # Route: dev -> DEV_CATCH_ALL_EMAIL ; prod -> ADMIN_INBOX_EMAIL
+                admin_real = getattr(settings, "ADMIN_INBOX_EMAIL", "")
+                instr_real = getattr(booking.instructor, "email", "") or ""
+                catch_all  = getattr(settings, "DEV_CATCH_ALL_EMAIL", "")
+
+                if settings.DEBUG:
+                    to_recipients = [catch_all] if catch_all else [getattr(settings, "DEFAULT_FROM_EMAIL", "admin@example.com")]
+                else:
+                    to_recipients = [admin_real] if admin_real else [getattr(settings, "DEFAULT_FROM_EMAIL", "admin@example.com")]
+
+                # CC instructor only in prod (avoid emailing real users in dev)
+                cc_recipients = []
+                if not settings.DEBUG and instr_real:
+                    cc_recipients = [instr_real]
+
+                # Add a debug suffix to subject in dev showing who *would* have received it
+                if settings.DEBUG:
+                    would_have = ", ".join([addr for addr in [admin_real, instr_real] if addr])
+                    effective_subject = f"[DEV] {subj} (Would send to: {would_have})"
+                else:
+                    effective_subject = subj
+
+                email = EmailMessage(
+                    subject=effective_subject,
+                    body=f"{body}{body_extra}",
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                    to=to_recipients,
+                    cc=cc_recipients,
+                )
+
+                email = EmailMessage(
+                    subject=effective_subject,
+                    body=f"{body}{body_extra}",
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                    to=to_recipients,
+                    cc=cc_recipients,
+                )
+
+                # attach the invoice you just generated
+                inv_mime = mimetypes.guess_type(filename)[0] or "application/pdf"
+                email.attach(filename=filename, content=file_bytes, mimetype=inv_mime)
+
+                # attach receipts within size caps
+                for fname, content, mime in attachments:
+                    email.attach(filename=fname, content=content, mimetype=mime)
+
+                # 3) Send
+                email.send(fail_silently=False)
+
+                # 4) Lock invoice
                 inv.status = "sent"
                 inv.save(update_fields=["status"])
-                messages.success(request, "Invoice emailed to admin.")
+                messages.success(request, "Invoice emailed to admin (with receipts attached/linked).")
+
             except Exception as e:
                 messages.error(request, f"Failed to send invoice: {e}")
+
 
             return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing")
     # -----------------------------------------------------------------------------------------------------
@@ -2951,6 +3115,136 @@ def instructor_attempt_authorize_retake(request, attempt_id: int):
         if hasattr(attempt, "booking_id") and attempt.booking_id
         else reverse("instructor_bookings")
     )
+
+@login_required
+@require_POST
+def instructor_upload_receipt(request, pk):
+    """
+    AJAX: upload one receipt file to Google Drive into:
+      Receipts/<COURSE_REF>/
+    Returns JSON on success/failure. Never redirects/returns HTML.
+    """
+    try:
+        # 1) Guard: instructor must own this booking
+        booking = get_object_or_404(Booking.objects.select_related("instructor"), pk=pk)
+        instr = getattr(request.user, "instructor", None)
+        if not instr or booking.instructor_id != getattr(instr, "id", None):
+            return HttpResponseForbidden("You do not have access to this booking.")
+
+        # 2) File present?
+        f = request.FILES.get("file")
+        if not f:
+            return JsonResponse({"ok": False, "error": "No file uploaded"}, status=400)
+
+        # 3) Build Drive service
+        try:
+            svc = get_drive_service(settings.GOOGLE_OAUTH_CLIENT_SECRET, settings.GOOGLE_OAUTH_TOKEN)
+        except Exception as e:
+            logging.exception("OAuth/Drive init failed")
+            return JsonResponse({"ok": False, "error": f"Drive auth failed: {e}"}, status=500)
+
+        # 4) Ensure folder path: Receipts/<COURSE_REF>
+        course_ref = getattr(booking, "course_reference", "") or ""
+        folder_name = safe_folder_name(course_ref)  # e.g. FAAW-3HGHX9 or "No-Ref"
+
+        root = settings.GOOGLE_DRIVE_ROOT_RECEIPTS
+        try:
+            # Single-level folder directly under root, named after course ref
+            parent = ensure_path(svc, [folder_name], root)
+        except HttpError as he:
+            logging.exception("ensure_path HttpError")
+            return JsonResponse({"ok": False, "error": f"Drive folder error: {he}"}, status=500)
+
+        # 5) Upload
+        mime = mimetypes.guess_type(f.name)[0] or "application/octet-stream"
+        meta = {
+            "name": f.name,
+            "parents": [parent],
+            "appProperties": {
+                "purpose": "receipt",
+                "booking_id": str(booking.id),
+                "instructor_id": str(instr.id),
+                "course_ref": folder_name,
+            },
+        }
+        media = MediaIoBaseUpload(io.BytesIO(f.read()), mimetype=mime, resumable=True)
+
+        created = svc.files().create(
+            body=meta, media_body=media, fields="id,name,mimeType,webViewLink"
+        ).execute()
+
+        return JsonResponse({"ok": True, **created})
+
+    except HttpError as he:
+        logging.exception("Google API HttpError")
+        return JsonResponse({"ok": False, "error": f"Google API error: {he}"}, status=500)
+    except Exception as e:
+        logging.exception("Unexpected error in instructor_upload_receipt")
+        return JsonResponse({"ok": False, "error": f"Server error: {e}"}, status=500)
+    
+from .drive_paths import ensure_path, find_folder  # make sure find_folder is imported
+
+@login_required
+def instructor_list_receipts(request, pk):
+    """
+    JSON: list existing receipts for a booking.
+    Looks under Receipts/<COURSE_REF>/ (no creation if missing).
+    """
+    try:
+      booking = get_object_or_404(Booking.objects.select_related("instructor"), pk=pk)
+      instr = getattr(request.user, "instructor", None)
+      if not instr or booking.instructor_id != getattr(instr, "id", None):
+          return HttpResponseForbidden("Forbidden")
+
+      svc = get_drive_service(settings.GOOGLE_OAUTH_CLIENT_SECRET, settings.GOOGLE_OAUTH_TOKEN)
+
+      course_ref = getattr(booking, "course_reference", "") or ""
+      folder_name = safe_folder_name(course_ref)  # from earlier helper
+      root = settings.GOOGLE_DRIVE_ROOT_RECEIPTS
+
+      # find the course folder; if missing, return empty list (don't create here)
+      parent_id = find_folder(svc, folder_name, root)
+      if not parent_id:
+          return JsonResponse({"ok": True, "files": []})
+
+      res = svc.files().list(
+          q=f"'{parent_id}' in parents and trashed=false",
+          fields="files(id,name,webViewLink,mimeType)",
+          pageSize=100,
+      ).execute()
+      files = res.get("files", [])
+      return JsonResponse({"ok": True, "files": files})
+    except Exception as e:
+      logging.exception("list receipts failed")
+      return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def instructor_delete_receipt(request, pk):
+    """
+    JSON: delete one receipt (by Drive fileId) for a booking you own.
+    """
+    try:
+      booking = get_object_or_404(Booking.objects.select_related("instructor"), pk=pk)
+      instr = getattr(request.user, "instructor", None)
+      if not instr or booking.instructor_id != getattr(instr, "id", None):
+          return HttpResponseForbidden("Forbidden")
+
+      file_id = request.POST.get("file_id")
+      if not file_id:
+          return JsonResponse({"ok": False, "error": "Missing file_id"}, status=400)
+
+      svc = get_drive_service(settings.GOOGLE_OAUTH_CLIENT_SECRET, settings.GOOGLE_OAUTH_TOKEN)
+      svc.files().delete(fileId=file_id).execute()
+      return JsonResponse({"ok": True})
+    except HttpError as he:
+      logging.exception("delete HttpError")
+      return JsonResponse({"ok": False, "error": f"Google API error: {he}"}, status=500)
+    except Exception as e:
+      logging.exception("delete failed")
+      return JsonResponse({"ok": False, "error": str(e)}, status=500)
+
 
 @login_required
 def whoami(request):

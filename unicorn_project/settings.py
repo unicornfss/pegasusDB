@@ -144,6 +144,12 @@ if not WKHTMLTOPDF_CMD and os.name == "nt":
             WKHTMLTOPDF_CMD = c
             break
 
+# --- Google Drive / OAuth ------------------------------------
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "")
+GOOGLE_OAUTH_TOKEN = os.getenv("GOOGLE_OAUTH_TOKEN", "")
+GOOGLE_DRIVE_ROOT_RECEIPTS = os.getenv("GOOGLE_DRIVE_ROOT_RECEIPTS", "")
+
+
 # --- Diagnostics ---------------------------------------------
 SETTINGS_EMAIL_SUMMARY = {
     "provider": EMAIL_PROVIDER,
@@ -157,3 +163,4 @@ ANYMAIL = {
     "RESEND_API_KEY": os.getenv("RESEND_API_KEY"),
     "SEND_DEFAULTS": {"from_email": DEFAULT_FROM_EMAIL},
 }
+
