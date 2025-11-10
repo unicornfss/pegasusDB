@@ -1,0 +1,14 @@
+{
+  "rules": [
+    { "name": "Remembrance",  "type": "range", "start": "11-04", "end": "11-18", "file": "logo_poppy.png" },
+    { "name": "StGeorgesDay", "type": "single", "date": "04-23", "file": "logo_stgeorge.png" },
+    { "name": "VEDay",        "type": "single", "date": "05-08", "file": "logo_ve.png" },
+    { "name": "DDay",         "type": "single", "date": "06-06", "file": "logo_dday.png" },
+    { "name": "ArmedForces",  "type": "weekday_in_month", "month": 6, "weekday": 5, "occurrence": "last", "file": "logo_armedforces.png" },
+    { "name": "NHSWeek",      "type": "range_absolute", "start_abs": "07-05", "end_abs": "07-12", "file": "logo_nhs.png" },
+    { "name": "Christmas",    "type": "range", "start": "12-12", "end": "12-31", "file": "logo_christmas.png" },
+    { "name": "NewYear",      "type": "range_yearwrap", "start": "12-31", "end": "01-02", "file": "logo_newyear.png" },
+    { "name": "EasterWeek",   "type": "easter_range", "days_before": 4, "days_after": 4, "file": "logo_easter.png" }
+  ],
+  "default": "logo.png"
+}

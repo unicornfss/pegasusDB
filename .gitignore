@@ -34,4 +34,7 @@ Thumbs.db
 .env.local
 
 # JSON
-*.json
+*.JSON
+# allow the logo schedule (keep all other .json files ignored)
+!config/logo_schedule.json
+
