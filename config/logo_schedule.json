@@ -4,7 +4,16 @@
     { "name": "StGeorgesDay", "type": "single", "date": "04-23", "file": "logo_stgeorge.png" },
     { "name": "VEDay",        "type": "single", "date": "05-08", "file": "logo_ve.png" },
     { "name": "DDay",         "type": "single", "date": "06-06", "file": "logo_dday.png" },
-    { "name": "ArmedForces",  "type": "weekday_in_month", "month": 6, "weekday": 5, "occurrence": "last", "file": "logo_armedforces.png" },
+    {
+      "name": "ArmedForces",
+      "type": "weekday_in_month",
+      "month": 6,
+      "weekday": 5,
+      "occurrence": "last",
+      "start_offset_days": -6,
+      "end_offset_days": 1,
+      "file": "logo_armed_forces_day.png"
+    },
     { "name": "NHSWeek",      "type": "range_absolute", "start_abs": "07-05", "end_abs": "07-12", "file": "logo_nhs.png" },
     { "name": "Christmas",    "type": "range", "start": "12-12", "end": "12-31", "file": "logo_christmas.png" },
     { "name": "NewYear",      "type": "range_yearwrap", "start": "12-31", "end": "01-02", "file": "logo_newyear.png" },
