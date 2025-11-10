@@ -2979,27 +2979,31 @@ def instructor_attempt_incorrect(request, attempt_id: int):
     if not _can_view_attempt(request.user, attempt):
         return HttpResponseForbidden("Not allowed.")
 
-    # --- POST: save viva decision ---
+    # --- POST: save viva decision (unconditional save when posted) ---
     if request.method == "POST" and request.POST.get("save_viva") == "1":
-        if bool(getattr(attempt, "viva_eligible", False)) or request.GET.get("edit_viva") == "1":
-            outcome = (request.POST.get("viva_outcome") or "").strip().lower()
-            notes   = (request.POST.get("viva_notes") or "").strip()
-            if outcome in ("pass", "fail"):
-                if hasattr(attempt, "passed"):
-                    attempt.passed = (outcome == "pass")
-                if hasattr(attempt, "viva_eligible"):
-                    attempt.viva_eligible = False
-                if not getattr(attempt, "finished_at", None):
-                    attempt.finished_at = now()
-                if hasattr(attempt, "viva_notes"):
-                    attempt.viva_notes = notes
-                if hasattr(attempt, "viva_decided_at"):
-                    attempt.viva_decided_at = now()
-                if hasattr(attempt, "viva_decided_by"):
-                    attempt.viva_decided_by = getattr(request.user, "instructor", None) or request.user
-                attempt.save()
+        outcome = (request.POST.get("viva_outcome") or "").strip().lower()
+        notes   = (request.POST.get("viva_notes") or "").strip()
+
+        if outcome in ("pass", "fail"):
+            # Persist everything explicitly
+            attempt.passed = (outcome == "pass")
+            attempt.viva_result = outcome
+            attempt.viva_notes = notes
+            attempt.viva_eligible = False
+            if not getattr(attempt, "finished_at", None):
+                attempt.finished_at = now()
+            attempt.viva_decided_at = now()
+            attempt.viva_decided_by = getattr(request.user, "instructor", None) or request.user
+
+            attempt.save()
+            messages.success(request, f"Viva saved: {outcome.title()} recorded at {attempt.viva_decided_at:%d %b %Y, %H:%M}.")
+        else:
+            messages.error(request, "Viva not saved: invalid outcome posted.")
+
         return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
                         f"{'?' + request.GET.urlencode() if request.GET else ''}")
+
+
 
     # --- POST: authorise a re-test (60-minute window) ---
     if request.method == "POST" and "authorise" in request.POST:
@@ -3035,23 +3039,30 @@ def instructor_attempt_incorrect(request, attempt_id: int):
     viva_decided_by = getattr(attempt, "viva_decided_by", None)
     viva_notes = getattr(attempt, "viva_notes", "")
 
-    # Allow re-open form for editing via ?edit_viva=1
-    edit_mode = request.GET.get("edit_viva") == "1"
+    # Only allow edit mode if a viva decision already exists
+    edit_mode = (request.GET.get("edit_viva") == "1") and bool(viva_decided_at)
+
+    # Show the viva form only when they are eligible and no decision yet, or if explicitly editing
     show_viva_form = (viva_eligible and not viva_decided_at) or edit_mode
 
-    # Pre-select radio if a decision already exists
-    viva_selected = ""
-    if not viva_eligible:
-        viva_selected = "pass" if bool(getattr(attempt, "passed", False)) else "fail"
+    # Preselect radio only when the viva form is being show
+    viva_selected = None
+    if show_viva_form:
+        existing = (getattr(attempt, "viva_result", "") or "").lower()
+        if existing in ("pass", "fail"):
+            viva_selected = existing
 
+    # If a viva decision truly exists, build a summary; otherwise, do not show a viva card at all
     viva_decided_summary = None
-    if not show_viva_form and (not viva_eligible):
+    if getattr(attempt, "viva_result", None) or viva_decided_at:
         viva_decided_summary = {
-            "outcome": viva_selected or ("pass" if bool(getattr(attempt, "passed", False)) else "fail"),
+            "outcome": (getattr(attempt, "viva_result", None) or
+                        ("pass" if bool(getattr(attempt, "passed", False)) else "fail")),
             "when": viva_decided_at,
             "by": getattr(viva_decided_by, "name", None) or getattr(viva_decided_by, "username", None),
             "notes": viva_notes,
         }
+
 
     can_authorise_retest = not bool(getattr(attempt, "passed", False))
 

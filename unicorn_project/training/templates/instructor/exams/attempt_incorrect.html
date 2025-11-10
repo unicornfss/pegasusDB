@@ -22,6 +22,25 @@
     {% endif %}
   </div>
 
+  {# DEBUG / DIAGNOSTIC BLOCK FOR VIVA #}
+<div class="alert alert-info">
+  {% if viva_decided_at %}
+    <strong>Viva status:</strong> A viva decision was recorded on {{ viva_decided_at|date:"j M Y, H:i" }}.
+  {% else %}
+    <strong>Viva status:</strong> No viva decision has been recorded for this attempt.
+  {% endif %}
+</div>
+
+{# MESSAGES (diagnostic) #}
+{% if messages %}
+  <div class="w-100 mb-3">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+
   {# Header summary #}
   <div class="alert alert-light border d-flex flex-wrap align-items-center gap-3">
     <div><strong>Delegate:</strong> {{ display_name|default:"—" }}</div>
