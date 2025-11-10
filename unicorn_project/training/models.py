@@ -737,3 +737,30 @@ class RegisterEmailLog(models.Model):
 
     def __str__(self):
         return f"{self.created_at:%Y-%m-%d %H:%M} -> {self.recipients}"
+
+class LogoOverride(models.Model):
+    file_name = models.CharField(
+        max_length=200,
+        help_text="File in static/training/img/, e.g. logo_crown.png",
+    )
+    active = models.BooleanField(default=False)
+    reason = models.CharField(max_length=200, blank=True)
+    starts_at = models.DateTimeField(blank=True, null=True)
+    ends_at = models.DateTimeField(blank=True, null=True)
+    priority = models.PositiveSmallIntegerField(default=10, help_text="Lower = higher priority")
+
+    class Meta:
+        ordering = ["priority", "-id"]
+
+    def is_active_now(self):
+        now = timezone.now()
+        if not self.active:
+            return False
+        if self.starts_at and now < self.starts_at:
+            return False
+        if self.ends_at and now > self.ends_at:
+            return False
+        return True
+
+    def __str__(self):
+        return f"{self.file_name} ({'ON' if self.active else 'off'})"

@@ -23,7 +23,7 @@
       <i class="bi bi-list"></i>
     </button>
     <div class="d-flex align-items-center gap-2">
-      <img src="{% static 'training/img/logo.png' %}" height="28" alt="">
+      <img src="{% static 'training/img/' %}{{ current_logo }}" alt="Unicorn logo" height="125" class="brand-logo d-block mx-auto">
       <strong>Unicorn</strong>
     </div>
   </header>
@@ -39,7 +39,7 @@
       {# Offcanvas header (mobile only) #}
       <div class="offcanvas-header d-lg-none bg-unicorn text-white">
         <div class="d-flex align-items-center gap-2">
-          <img src="{% static 'training/img/logo.png' %}" height="36" alt="">
+          <img src="{% static 'training/img/' %}{{ current_logo }}" height="36" alt="">
           <strong id="sidebarLabel">Unicorn</strong>
         </div>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
@@ -50,8 +50,8 @@
 
         {# Centered brand #}
         <div class="brand text-center mb-2">
-          <img src="{% static 'training/img/logo.png' %}" height="125" alt="Unicorn logo"
-               class="brand-logo d-block mx-auto">
+          <img src="{% static 'training/img/' %}{{ current_logo }}" height="125" alt="Unicorn logo"
+            class="brand-logo d-block mx-auto ">  
           <strong class="d-block mt-1">Unicorn</strong>
         </div>
 
@@ -225,6 +225,7 @@
     onload="document.dispatchEvent(new Event('gmaps:ready'))">
   </script>
   {% endif %}
+
 
 </body>
 </html>

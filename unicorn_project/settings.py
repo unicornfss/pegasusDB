@@ -79,6 +79,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "unicorn_project.training.context_processors.globals",
                 "unicorn_project.training.context_processors.role_context",
+                "unicorn_project.training.context_processors.logo_context",
             ],
         },
     },

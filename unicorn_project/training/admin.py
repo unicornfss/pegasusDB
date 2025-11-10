@@ -16,7 +16,8 @@ from .models import (
     AccidentReport, Business, TrainingLocation, CourseType,
     Instructor, Booking, BookingDay, Attendance, CourseCompetency,
     Invoice, InvoiceItem,
-    Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer
+    Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
+    LogoOverride
 )
 
 # ---------- Forms ----------
@@ -474,3 +475,9 @@ class AccidentReportAdmin(admin.ModelAdmin):
     list_display = ("date", "time", "location", "injured_name", "first_aider_name", "reporter_name")
     search_fields = ("injured_name", "first_aider_name", "reporter_name", "location")
     list_filter = ("date",)
+
+@admin.register(LogoOverride)
+class LogoOverrideAdmin(admin.ModelAdmin):
+    list_display = ("file_name", "active", "starts_at", "ends_at", "priority", "reason")
+    list_filter = ("active",)
+    search_fields = ("file_name", "reason")

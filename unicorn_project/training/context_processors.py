@@ -1,5 +1,6 @@
 # unicorn_project/training/context_processors.py
 from django.conf import settings
+from .services.logos import get_current_logo
 
 def role_context(request):
     """
@@ -34,4 +35,9 @@ def globals(request):
     """
     return {
         "GOOGLE_MAPS_API_KEY": getattr(settings, "GOOGLE_MAPS_API_KEY", ""),
+    }
+
+def logo_context(request):
+    return {
+        "current_logo": get_current_logo()
     }
