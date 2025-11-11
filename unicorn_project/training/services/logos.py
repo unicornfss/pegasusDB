@@ -109,8 +109,8 @@ def _pick_from_schedule(today: dt.date, spec: dict) -> str:
         # Easter-relative range
         elif t == "easter_range":
             e = easter_sunday(today.year)
-            start = e - dt.timedelta(days=rule.get("days_before", 3))
-            end = e + dt.timedelta(days=rule.get("days_after", 3))
+            start = e - dt.timedelta(days=rule.get("days_before", 6))
+            end = e + dt.timedelta(days=rule.get("days_after", 6))
             if start <= today <= end:
                 return rule["file"]
 
