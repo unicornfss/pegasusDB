@@ -361,6 +361,15 @@ class CompetencyAssessment(models.Model):
     course_competency = models.ForeignKey("CourseCompetency", on_delete=models.PROTECT, related_name="assessments")
     level = models.CharField(max_length=2, choices=AssessmentLevel.choices, default=AssessmentLevel.NOT_ASSESSED)
     notes = models.CharField(max_length=255, blank=True)
+    is_locked = models.BooleanField(
+        default=False,
+        help_text="If true, instructors cannot unset this tick."
+    )
+    source_note = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Optional note (e.g. 'carried from DNF on 2025-03-12')."
+    )
     assessed_by = models.ForeignKey("Instructor", on_delete=models.PROTECT)
     assessed_at = models.DateTimeField(default=timezone.now)
 

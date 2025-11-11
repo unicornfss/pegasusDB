@@ -38,7 +38,6 @@ from django.template.loader import render_to_string
 import subprocess, tempfile, os
 from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm
-
 from .utils.invoice import (
     get_invoice_template_path,
     render_invoice_pdf,      # returns (bytes, filename); falls back to DOCX if PDF conversion not available
@@ -1146,16 +1145,38 @@ def instructor_assessment_autosave(request, pk):
     if not instr:
         return JsonResponse({"ok": False, "error": "No instructor profile found"}, status=400)
 
+    # 🔒 NEW: lock whole column when outcome is DNF/Fail
+    # This mirrors your prod behaviour: once DNF/Fail is chosen for the delegate,
+    # all checkboxes in that column are locked in their current state until set back to Pending.
+    if (reg.outcome or "").lower() in ("dnf", "fail"):
+        return JsonResponse(
+            {"ok": False, "error": "Assessments are locked for this delegate (Outcome set to DNF/Fail)."},
+            status=400
+        )
+
     # --- create / update competency assessment
     ca, created = CompetencyAssessment.objects.get_or_create(
         register=reg,
         course_competency=comp,
         defaults={"assessed_by": instr, "level": "c" if checked else "na"},
     )
+
     if not created:
+        # 🚫 prevent unchecking a carried-forward competency (from DNF carry-forward)
+        if ca.is_locked and not checked:
+            return JsonResponse(
+                {"ok": False, "error": "This competency is locked (carried forward)."},
+                status=400
+            )
+
+        # normal update when not locked (or when checking it)
         ca.level = "c" if checked else "na"
         ca.assessed_by = instr
         ca.save(update_fields=["level", "assessed_by"])
+
+    else:
+        # record was just created; defaults already set
+        pass
 
     return JsonResponse({"ok": True})
 
@@ -1303,12 +1324,81 @@ def instructor_delegate_edit(request, pk: int):
     })
 
 
+# -----------------------------
+# 1️⃣ HELPER FUNCTION
+# -----------------------------
+def _carry_competencies_from_prior_dnf(new_reg):
+    """
+    If the same delegate (name + dob) had a DNF for the same course type
+    in the last 2 years, copy any competencies already achieved as locked ticks.
+    """
+    from .models import DelegateRegister, CompetencyAssessment
+
+    if not (new_reg and new_reg.booking_day_id):
+        return 0
+
+    bd = new_reg.booking_day
+    course_type = bd.booking.course_type
+    dob = new_reg.date_of_birth
+    name = (new_reg.name or "").strip()
+
+    if not (name and dob and course_type):
+        return 0
+
+    two_years_ago = timezone.localdate() - timedelta(days=730)
+
+    prior_regs = (
+        DelegateRegister.objects
+        .filter(
+            name__iexact=name,
+            date_of_birth=dob,
+            outcome='dnf',
+            booking_day__booking__course_type=course_type,
+            booking_day__date__gte=two_years_ago,
+            booking_day__date__lt=bd.date,
+        )
+        .order_by('-booking_day__date', '-id')
+    )
+
+    prior = prior_regs.first()
+    if not prior:
+        return 0
+
+    prev_assessments = (
+        CompetencyAssessment.objects
+        .filter(register=prior, level__in=['c', 'e'])
+        .select_related('course_competency')
+    )
+
+    created_count = 0
+    for pa in prev_assessments:
+        ca, created = CompetencyAssessment.objects.get_or_create(
+            register=new_reg,
+            course_competency=pa.course_competency,
+            defaults={
+                "level": pa.level,
+                "assessed_by": new_reg.instructor,
+                "is_locked": True,
+                "source_note": f"carried from DNF on {prior.booking_day.date:%Y-%m-%d}",
+            },
+        )
+        if not created:
+            if ca.level in ('na', 'p'):
+                ca.level = pa.level
+            ca.is_locked = True
+            ca.source_note = f"carried from DNF on {prior.booking_day.date:%Y-%m-%d}"
+            ca.save(update_fields=['level', 'is_locked', 'source_note'])
+        created_count += 1
+
+    return created_count
+
+
+# -----------------------------
+# 2️⃣ EXISTING VIEW WITH ONE EXTRA LINE
+# -----------------------------
 @login_required
 @transaction.atomic
 def instructor_delegate_new(request, day_pk: int):
-    """
-    Create a new delegate row for a day.
-    """
     instr = getattr(request.user, "instructor", None)
     day = get_object_or_404(
         BookingDay.objects.select_related("booking__instructor", "booking__course_type"),
@@ -1350,37 +1440,26 @@ def instructor_register_edit(request, pk: int):
         return redirect("instructor_bookings")
 
     if request.method == "POST":
-        form = DelegateRegisterInstructorForm(
-            request.POST,
-            instance=reg,
-            current_instructor=instr,
-        )
+        form = DelegateRegisterInstructorForm(request.POST, instance=reg, current_instructor=instr)
         if form.is_valid():
             obj = form.save(commit=False)
-            obj.instructor = instr   # harden
+            obj.instructor = instr
             obj.save()
             messages.success(request, "Delegate updated.")
             return redirect("instructor_day_registers", pk=reg.booking_day_id)
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = DelegateRegisterInstructorForm(
-            instance=reg,
-            current_instructor=instr,
-        )
+        form = DelegateRegisterInstructorForm(instance=reg, current_instructor=instr)
 
     day = reg.booking_day
-    return render(
-        request,
-        "instructor/register_edit.html",
-        {
-            "title": f"Edit delegate — {reg.name}",
-            "form": form,
-            "reg": reg,
-            "day": day,
-            "back_url": redirect("instructor_day_registers", pk=day.pk).url,
-        },
-    )
+    return render(request, "instructor/register_edit.html", {
+        "title": f"Edit delegate — {reg.name}",
+        "form": form,
+        "reg": reg,
+        "day": day,
+        "back_url": redirect("instructor_day_registers", pk=day.pk).url,
+    })
 
 @login_required
 def instructor_delegate_delete(request, pk: int):

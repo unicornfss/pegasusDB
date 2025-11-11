@@ -44,11 +44,15 @@
                          value="{% if a and a.level %}{{ a.level }}{% else %}na{% endif %}"
                          class="level-input" />
                   <input type="checkbox"
-                         class="lv-chk assess-toggle"
-                         data-register="{{ d.register_id|default:d.id }}"
-                         data-competency="{{ comp.id }}"
-                         {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
-                         aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
+                        class="lv-chk assess-toggle"
+                        data-register="{{ d.register_id|default:d.id }}"
+                        data-competency="{{ comp.id }}"
+                        {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
+                        {% if a and a.is_locked %}disabled title="Carried forward from DNF (locked)"{% endif %}
+                        aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
+                  {% if a and a.is_locked %}
+                    <span class="lock-indicator" aria-hidden="true">🔒</span>
+                  {% endif %}
                 </td>
                 {% endwith %}
               {% endwith %}
@@ -211,6 +215,9 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 .outcome-cell { position: relative; }
 .outcome-badge { display: inline-block; }
 .d-none { display: none !important; }
+
+.lock-indicator { opacity: 0.7; font-size: 0.9em; margin-left: .2rem; }
+
 </style>
 
 <script>
@@ -384,6 +391,13 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 
     if (outInp) outInp.value = outcome;
 
+    const chks = table.querySelectorAll(`td.cell[data-col="${colIndex}"] .lv-chk`);
+    if (outcome === 'dnf' || outcome === 'fail') {
+      chks.forEach(chk => { chk.disabled = true; });
+    } else {
+      chks.forEach(chk => { chk.disabled = false; });
+    }
+
     if (outcome === 'pending') { 
       refreshExportState();
       updateClosurePaneAssessStatus();
@@ -523,8 +537,13 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
     const manual = outSel ? outSel.value : 'pending';
 
     const outcome = allChecked ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
+
+    // ✅ NEW: always mirror the computed outcome into the hidden input immediately
+    if (outInp) outInp.value = outcome;
+
     return { outcome, outInp };
   }
+
 
   function persistOutcomeIfChanged(colIndex, outInp, outcome){
     const prev = outInp ? outInp.value : 'pending';

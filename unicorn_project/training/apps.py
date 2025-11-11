@@ -1,3 +1,4 @@
+# unicorn_project/training/apps.py
 from django.apps import AppConfig
 import os
 
@@ -6,7 +7,17 @@ class TrainingConfig(AppConfig):
     name = "unicorn_project.training"
 
     def ready(self):
-        # Optional kill-switch via env or settings
+        """
+        Always wire up Django signals. Optionally start the booking scheduler.
+        """
+        # ✅ Always connect signal handlers (even if scheduler is disabled)
+        try:
+            from . import signals  # noqa: F401  # import registers receivers
+        except Exception as e:
+            # Avoid crashing the app if there's a typo during development
+            print(f"Failed to import training.signals: {e}")
+
+        # 🔧 Start APScheduler only if enabled
         from django.conf import settings
         if os.environ.get("BOOKING_SCHEDULER_ENABLED", "true").lower() != "true":
             return
