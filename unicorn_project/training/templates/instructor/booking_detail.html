@@ -69,6 +69,22 @@
           <div>{{ booking.instructor.name }}</div>
         </div>
 
+      <!-- Hidden instructor fee reveal -->
+      <div class="mb-3">
+        <div class="fee-reveal-wrap">
+          <button id="reveal-fee-btn"
+                  type="button"
+                  class="btn btn-outline-dark btn-sm"
+                  data-fee-url="{% url 'booking-fee' booking.pk %}">
+            Tap to reveal your fee
+          </button>
+
+          <div id="fee-popover" class="fee-popover mt-2" role="status" aria-live="polite">
+            <span id="fee-text"></span>
+          </div>
+        </div>
+      </div>
+
         <div class="mb-3">
           <div class="text-muted small">Location contact</div>
           {% if booking.training_location %}
@@ -688,6 +704,74 @@ document.addEventListener('DOMContentLoaded', function () {
   examsPane.addEventListener('mouseenter', function () {
     console.log('[ExamsRefresh] mouse entered exams pane — pausing refresh');
     stop();
+  });
+});
+</script>
+
+<style>
+.fee-reveal-wrap { position: relative; display: inline-block; }
+
+.fee-popover {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 200px;
+  background: #212529;
+  color: #fff;
+  border-radius: .5rem;
+  padding: .5rem .75rem;
+  opacity: 0;
+  transform: translateY(-5px);
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+  z-index: 999;
+}
+
+.fee-popover.show {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('reveal-fee-btn');
+  const pop = document.getElementById('fee-popover');
+  const txt = document.getElementById('fee-text');
+  if (!btn || !pop || !txt) return;
+
+  let hideTimer = null;
+
+  function showPopover(message) {
+    txt.textContent = message;
+    pop.classList.add('show');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(hidePopover, 4000);
+  }
+
+  function hidePopover() {
+    pop.classList.remove('show');
+  }
+
+  document.addEventListener('click', e => {
+    if (!pop.contains(e.target) && !btn.contains(e.target)) hidePopover();
+  });
+
+  btn.addEventListener('click', async () => {
+    const url = btn.dataset.feeUrl;
+    try {
+      const res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) {
+        showPopover(res.status === 403 ? 'Access denied.' : 'Error loading fee');
+        return;
+      }
+      const data = await res.json();
+      showPopover('Your fee: ' + data.amount);
+    } catch (err) {
+      console.error(err);
+      showPopover('Error loading fee');
+    }
   });
 });
 </script>

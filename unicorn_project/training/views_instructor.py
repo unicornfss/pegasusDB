@@ -447,7 +447,23 @@ def post_login(request):
         return redirect("app_admin_dashboard")
     return redirect("instructor_bookings")
 
+@login_required
+def booking_fee(request, pk):
+    booking = get_object_or_404(Booking, pk=pk)
 
+    # Replace this with your real permission logic:
+    is_instructor_for_booking = (
+        hasattr(booking, "instructor") and booking.instructor and
+        hasattr(booking.instructor, "user") and booking.instructor.user_id == request.user.id
+    )
+    is_admin_or_staff = request.user.is_staff or request.user.is_superuser
+
+    if not (is_instructor_for_booking or is_admin_or_staff):
+        return HttpResponseForbidden("Not allowed")
+
+    # Format the amount how you prefer (e.g., with currency symbol)
+    amount = booking.instructor_fee  # Decimal field
+    return JsonResponse({"amount": f"£{amount:,.2f}"})
 
 def _invoicing_tab_context(booking):
     """Build context keys that _invoicing_tab.html expects."""
