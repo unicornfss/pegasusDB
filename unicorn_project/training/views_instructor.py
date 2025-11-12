@@ -36,7 +36,7 @@ from reportlab.lib import colors
 from statistics import mean
 from django.template.loader import render_to_string
 import subprocess, tempfile, os
-from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer
+from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm
 from .utils.invoice import (
     get_invoice_template_path,
@@ -775,7 +775,7 @@ def instructor_booking_detail(request, pk):
             days_qs_tmp = (
                 BookingDay.objects.filter(booking=booking)
                 .order_by("date")
-                .annotate(n=Count("delegateregister"))
+                .annotate(n=Count("registers"))
             )
             regs_ok = bool(days_qs_tmp) and all(((d.n or 0) > 0) for d in days_qs_tmp)
             outs = DelegateRegister.objects.filter(
@@ -999,7 +999,7 @@ def instructor_booking_detail(request, pk):
         BookingDay.objects
         .filter(booking=booking)
         .order_by("date")
-        .annotate(n=Count("delegateregister"))
+        .annotate(n=Count("registers"))
     )
     day_rows = [{
         "id": d.id,
@@ -2264,6 +2264,78 @@ def _feedback_queryset_for_booking(booking):
         .select_related("instructor")
         .order_by("date", "created_at")
     )
+@login_required
+def instructor_course_summary_pdf(request, pk):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    # Robust lookup (UUID and ref fallback)
+    base_qs = Booking.objects.select_related("course_type", "business", "instructor", "training_location")
+    booking = base_qs.filter(pk=pk).first()
+    if booking is None:
+        from uuid import UUID
+        try:
+            booking = base_qs.get(pk=UUID(str(pk)))
+        except Exception:
+            booking = base_qs.filter(course_reference__iexact=str(pk)).first()
+    if booking is None:
+        raise Http404("Booking not found")
+
+    instr = getattr(request.user, "instructor", None)
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+        return HttpResponseForbidden("You do not have access to this booking.")
+
+    # Deduplicate across days: DNF > Fail > Pass
+    qs = (DelegateRegister.objects
+          .filter(booking_day__booking=booking)
+          .only("name", "outcome")
+          .order_by("name"))
+    priority = {"pass": 1, "fail": 2, "dnf": 3, "did not finish": 3, "did_not_finish": 3}
+    best = {}
+    for r in qs:
+        name = (r.name or "").strip()
+        if not name:
+            continue
+        outcome = str(r.outcome).strip().lower()
+        if best.get(name) is None or priority.get(outcome, 0) > priority.get(best[name], 0):
+            best[name] = outcome
+    passed = sorted([n for n, o in best.items() if o == "pass"])
+    failed = sorted([n for n, o in best.items() if o == "fail"])
+    dnf    = sorted([n for n, o in best.items() if priority.get(o, 0) == 3])
+
+    day_qs = booking.days.order_by("date").values_list("date", flat=True)
+    end_date = day_qs.last() if day_qs else booking.course_date
+
+    context = {"booking": booking, "end_date": end_date, "passed": passed, "failed": failed, "dnf": dnf}
+    html = render_to_string("training/course_summary.html", context)
+
+    # DEV: show HTML; PROD: render PDF (WeasyPrint works there)
+    if settings.DEBUG:
+        return HttpResponse(html, content_type="text/html")
+
+    from weasyprint import HTML
+    ref = booking.course_reference or str(booking.pk)
+    pdf_bytes = HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf()
+    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+    resp["Content-Disposition"] = f'inline; filename="course-summary-{ref}.pdf"'
+    return resp
+
+@login_required
+def instructor_course_summary_by_ref_pdf(request, ref):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
+        course_reference__iexact=ref,
+    )
+
+    instr = getattr(request.user, "instructor", None)
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+        return HttpResponseForbidden("You do not have access to this booking.")
+
+    # IMPORTANT: do not render here. Call the UUID view so the DEBUG→HTML logic is used.
+    return instructor_course_summary_pdf(request, booking.pk)
 
 @login_required
 def invoice_preview(request, pk):

@@ -41,6 +41,9 @@ urlpatterns = [
     path("app/instructor/booking/<uuid:pk>/receipts/", instv.instructor_list_receipts, name="instructor_list_receipts",),
     path("app/instructor/booking/<uuid:pk>/delete-receipt/", instv.instructor_delete_receipt, name="instructor_delete_receipt",),
     path("instructor/booking/<uuid:pk>/fee/", views_instructor.booking_fee, name="booking-fee"),
+    path("instructor/booking/<uuid:pk>/course-summary.pdf", views_instructor.instructor_course_summary_pdf, name="instructor_course_summary_pdf"),
+    path("instructor/booking/ref/<slug:ref>/course-summary.pdf", views_instructor.instructor_course_summary_by_ref_pdf, name="instructor_course_summary_by_ref_pdf"),
+
     
     # Instructor: delete a delegate row
     path("app/instructor/register/<int:pk>/delete/", instv.instructor_delegate_delete, name="instructor_delegate_delete"),

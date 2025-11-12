@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Course summary – {{ booking.course_reference }}</title>
+    <style>
+      body { font-family: Arial, sans-serif; font-size: 12pt; margin: 24px; }
+      h1 { font-size: 16pt; margin: 0 0 8px; }
+      .meta { margin: 0 0 16px; color: #444; }
+      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      th, td { vertical-align: top; text-align: left; padding: 8px; border: 1px solid #ddd; }
+      th { background: #f6f6f6; font-weight: bold; }
+      ul { margin: 0; padding-left: 16px; }
+      .empty { color: #777; font-style: italic; }
+    </style>
+  </head>
+  <body>
+    <h1>Course summary</h1>
+    <p class="meta">
+      <strong>{{ booking.course_type.name }}</strong> — {{ booking.business.name }}<br/>
+      {{ booking.course_date|date:"d/m/Y" }}{% if end_date and end_date != booking.course_date %} – {{ end_date|date:"d/m/Y" }}{% endif %}<br/>
+      Reference: {{ booking.course_reference }}
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Passed</th>
+          <th>Failed</th>
+          <th>Did not finish</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            {% if passed %}
+              <ul>{% for n in passed %}<li>{{ n }}</li>{% endfor %}</ul>
+            {% else %}
+              <div class="empty">None</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if failed %}
+              <ul>{% for n in failed %}<li>{{ n }}</li>{% endfor %}</ul>
+            {% else %}
+              <div class="empty">None</div>
+            {% endif %}
+          </td>
+          <td>
+            {% if dnf %}
+              <ul>{% for n in dnf %}<li>{{ n }}</li>{% endfor %}</ul>
+            {% else %}
+              <div class="empty">None</div>
+            {% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </body>
+</html>

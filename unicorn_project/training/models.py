@@ -296,7 +296,7 @@ class DelegateRegister(models.Model):
         blank=False,    
     )
     notes = models.TextField(blank=True)
-    booking_day = models.ForeignKey("BookingDay", on_delete=models.CASCADE, null=True, blank=True)
+    booking_day = models.ForeignKey("BookingDay", on_delete=models.PROTECT, related_name="registers")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def save(self, *args, **kwargs):

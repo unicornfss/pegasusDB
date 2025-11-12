@@ -105,6 +105,23 @@ def _collect_assessment_pdf(request, booking: Booking) -> Optional[Tuple[str, by
     except Exception:
         return None
 
+def _collect_course_summary_pdf(request, booking: Booking) -> Optional[Tuple[str, bytes]]:
+    """
+    Optional: Course summary PDF (Passed/Failed/DNF).
+    Tries to call views_instructor.instructor_course_summary_pdf; skip silently if unavailable.
+    """
+    try:
+        from ..views_instructor import instructor_course_summary_pdf  # local import avoids cycles
+
+        resp = instructor_course_summary_pdf(request, booking.id)
+        data, fname, _ctype = _response_bytes(resp)
+        if not fname.lower().endswith(".pdf"):
+            # Sensible default filename if the view didn't set one
+            ref = booking.course_reference or str(booking.pk)
+            fname = f"course-summary-{ref}.pdf"
+        return (fname, data)
+    except Exception:
+        return None
 
 def email_all_course_docs_to_admin(request, booking: Booking) -> int:
     """
@@ -142,12 +159,20 @@ def email_all_course_docs_to_admin(request, booking: Booking) -> int:
         msg.attach(fname, data, "application/pdf")
         count += 1
 
-    # Assessment matrix (optional)
-    assess = _collect_assessment_pdf(request, booking)
-    if assess:
-        fname, data = assess
-        msg.attach(fname, data, "application/pdf")
-        count += 1
+        # Assessment matrix (optional)
+        assess = _collect_assessment_pdf(request, booking)
+        if assess:
+            fname, data = assess
+            msg.attach(fname, data, "application/pdf")
+            count += 1
 
-    msg.send(fail_silently=False)
-    return count
+        # Course summary (optional)
+        summary = _collect_course_summary_pdf(request, booking)
+        if summary:
+            fname, data = summary
+            msg.attach(fname, data, "application/pdf")
+            count += 1
+
+        msg.send(fail_silently=False)
+        return count
+
