@@ -429,17 +429,34 @@
         <!-- Hidden fields capture current checkbox states for persistence -->
         <input type="hidden" id="hf-reg-manual" name="reg_manual" value="{{ registers_manual|yesno:'1,0' }}">
         <input type="hidden" id="hf-assess-manual" name="assess_manual" value="{{ assessments_manual|yesno:'1,0' }}">
-        <button type="submit" id="close-course-btn" class="btn btn-danger"
-                {% if not can_close_course %}style="display:none"{% endif %}>
-          <i class="bi bi-check2-circle"></i> Close course and prepare invoice
-        </button>
 
+        <div class="d-flex flex-wrap gap-2">
+          <button type="submit" id="close-course-btn" class="btn btn-danger"
+                  {% if not can_close_course %}style="display:none"{% endif %}>
+            <i class="bi bi-check2-circle"></i> Close course and prepare invoice
+          </button>
+
+          <!-- Preview while course can still be closed -->
+          <a href="{% url 'instructor_course_summary_by_ref_pdf' booking.course_reference %}"
+            class="btn btn-outline-danger"
+            target="_blank" rel="noopener">
+            <i class="bi bi-filetype-pdf"></i> Preview Course Summary PDF
+          </a>
+        </div>
       </form>
     {% else %}
-      <div class="mt-3 alert alert-info">
-        Course already closed — proceed to the <strong>Invoicing</strong> tab.
+      <div class="mt-3 alert alert-info d-flex justify-content-between align-items-center flex-wrap">
+        <span>Course already closed — proceed to the <strong>Invoicing</strong> tab.</span>
+        <!-- View once course is closed -->
+        <a href="{% url 'instructor_course_summary_by_ref_pdf' booking.course_reference %}"
+          class="btn btn-outline-danger btn-sm mt-2 mt-sm-0"
+          target="_blank" rel="noopener">
+          <i class="bi bi-filetype-pdf"></i> View Course Summary PDF
+        </a>
       </div>
     {% endif %}
+
+
 
   </div>
 
