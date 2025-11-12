@@ -107,21 +107,32 @@ def _collect_assessment_pdf(request, booking: Booking) -> Optional[Tuple[str, by
 
 def _collect_course_summary_pdf(request, booking: Booking) -> Optional[Tuple[str, bytes]]:
     """
-    Optional: Course summary PDF (Passed/Failed/DNF).
-    Tries to call views_instructor.instructor_course_summary_pdf; skip silently if unavailable.
+    Build the Course Summary PDF via the existing view and return (filename, bytes),
+    or None if it fails.
     """
     try:
-        from ..views_instructor import instructor_course_summary_pdf  # local import avoids cycles
+        from ..views_instructor import instructor_course_summary_pdf  # local import to avoid cycles
 
-        resp = instructor_course_summary_pdf(request, booking.id)
+        resp = instructor_course_summary_pdf(request, booking.pk)
         data, fname, _ctype = _response_bytes(resp)
         if not fname.lower().endswith(".pdf"):
-            # Sensible default filename if the view didn't set one
             ref = booking.course_reference or str(booking.pk)
             fname = f"course-summary-{ref}.pdf"
         return (fname, data)
     except Exception:
         return None
+
+def _safe_attach_pdf(msg: EmailMessage, fname: str, data: bytes, ctype: str) -> bool:
+    """
+    Attach only non-empty PDF bytes. Return True if attached, False otherwise.
+    """
+    if not data:
+        return False
+    if (ctype or "").lower() != "application/pdf" and not fname.lower().endswith(".pdf"):
+        return False
+    msg.attach(fname, data, "application/pdf")
+    return True
+
 
 def email_all_course_docs_to_admin(request, booking: Booking) -> int:
     """
@@ -149,30 +160,31 @@ def email_all_course_docs_to_admin(request, booking: Booking) -> int:
 
     # Registers (per day)
     for fname, data in _collect_register_pdfs(request, booking):
-        msg.attach(fname, data, "application/pdf")
-        count += 1
+        # Treat registers as PDFs by definition
+        if _safe_attach_pdf(msg, fname, data, "application/pdf"):
+            count += 1
 
     # Feedback (all)
     fb = _collect_feedback_pdf(request, booking)
     if fb:
         fname, data = fb
-        msg.attach(fname, data, "application/pdf")
-        count += 1
-
-        # Assessment matrix (optional)
-        assess = _collect_assessment_pdf(request, booking)
-        if assess:
-            fname, data = assess
-            msg.attach(fname, data, "application/pdf")
+        if _safe_attach_pdf(msg, fname, data, "application/pdf"):
             count += 1
 
-        # Course summary (optional)
-        summary = _collect_course_summary_pdf(request, booking)
-        if summary:
-            fname, data = summary
-            msg.attach(fname, data, "application/pdf")
+    # Assessment matrix (optional)
+    assess = _collect_assessment_pdf(request, booking)
+    if assess:
+        fname, data = assess
+        if _safe_attach_pdf(msg, fname, data, "application/pdf"):
             count += 1
 
-        msg.send(fail_silently=False)
-        return count
+    # Course summary (optional)
+    summary = _collect_course_summary_pdf(request, booking)
+    if summary:
+        fname, data = summary
+        if _safe_attach_pdf(msg, fname, data, "application/pdf"):
+            count += 1
 
+    # Always send — even if count==0, you still want the body to arrive
+    msg.send(fail_silently=False)
+    return count
