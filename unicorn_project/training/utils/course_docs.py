@@ -14,6 +14,17 @@ from django.http import HttpResponse
 
 from ..models import Booking, BookingDay
 
+def _safe_attach_pdf(msg: EmailMessage, fname: str, data: bytes, ctype: str = "application/pdf") -> bool:
+    """
+    Attach only non-empty PDF bytes. Return True if attached, False otherwise.
+    """
+    if not data:
+        return False
+    # accept when explicit PDF mimetype, or filename ends with .pdf
+    if (ctype or "").lower() != "application/pdf" and not fname.lower().endswith(".pdf"):
+        return False
+    msg.attach(fname, data, "application/pdf")
+    return True
 
 def _response_bytes(resp: HttpResponse) -> Tuple[bytes, str, str]:
     """
