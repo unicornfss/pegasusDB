@@ -107,31 +107,74 @@ def _collect_assessment_pdf(request, booking: Booking) -> Optional[Tuple[str, by
 
 def _collect_course_summary_pdf(request, booking: Booking) -> Optional[Tuple[str, bytes]]:
     """
-    Build the Course Summary PDF via the existing view and return (filename, bytes),
-    or None if it fails.
+    Build the Course Summary PDF directly (no HTTP view call) and return
+    (filename, bytes) or None if something fails.
     """
     try:
-        from ..views_instructor import instructor_course_summary_pdf  # local import to avoid cycles
+        from django.template.loader import render_to_string
+        from weasyprint import HTML
 
-        resp = instructor_course_summary_pdf(request, booking.pk)
-        data, fname, _ctype = _response_bytes(resp)
-        if not fname.lower().endswith(".pdf"):
-            ref = booking.course_reference or str(booking.pk)
-            fname = f"course-summary-{ref}.pdf"
-        return (fname, data)
+        # --- Build pass/fail/dnf (dedupe across days) ---
+        from ..models import DelegateRegister  # local import avoids cycles
+
+        regs_qs = (
+            DelegateRegister.objects
+            .filter(booking_day__booking=booking)
+            .only("name", "outcome")
+        )
+
+        priority = {"pass": 3, "fail": 2, "dnf": 1, "did not finish": 1, "did_not_finish": 1}
+        best: dict[str, str] = {}
+        for r in regs_qs:
+            name = (r.name or "").strip()
+            outcome = str(r.outcome or "").strip().lower()
+            if not name:
+                continue
+            if best.get(name) is None or priority.get(outcome, 0) > priority.get(best[name], 0):
+                best[name] = outcome
+
+        passed = sorted([n for n, o in best.items() if o == "pass"])
+        failed = sorted([n for n, o in best.items() if o == "fail"])
+        dnf    = sorted([n for n, o in best.items() if priority.get(o, 0) == 1])
+
+        # End date for header
+        end_date = (
+            booking.days.order_by("date").values_list("date", flat=True).last()
+            or booking.course_date
+        )
+
+        ctx = {
+            "booking": booking,
+            "end_date": end_date,
+            "passed": passed,
+            "failed": failed,
+            "dnf": dnf,
+        }
+
+        # Render HTML
+        html = render_to_string("training/course_summary.html", ctx)
+
+        # Base URL for assets (images/css) if needed
+        if request is not None:
+            base_url = request.build_absolute_uri("/")
+        else:
+            base_url = getattr(settings, "SITE_URL", None) or "https://{}".format(
+                (settings.ALLOWED_HOSTS or ["localhost"])[0]
+            ).rstrip("/") + "/"
+
+        # Generate PDF bytes
+        pdf_bytes = HTML(string=html, base_url=base_url).write_pdf()
+        if not pdf_bytes:
+            return None
+
+        ref = booking.course_reference or str(booking.pk)
+        fname = f"course-summary-{ref}.pdf"
+        return (fname, pdf_bytes)
+
     except Exception:
+        # Be silent here; caller will just skip attaching
         return None
 
-def _safe_attach_pdf(msg: EmailMessage, fname: str, data: bytes, ctype: str) -> bool:
-    """
-    Attach only non-empty PDF bytes. Return True if attached, False otherwise.
-    """
-    if not data:
-        return False
-    if (ctype or "").lower() != "application/pdf" and not fname.lower().endswith(".pdf"):
-        return False
-    msg.attach(fname, data, "application/pdf")
-    return True
 
 
 def email_all_course_docs_to_admin(request, booking: Booking) -> int:
