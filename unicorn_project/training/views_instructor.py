@@ -27,6 +27,7 @@ from .drive_paths import ensure_path
 from itertools import zip_longest
 from .utils.emailing import send_admin_email
 from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
+from .utils.locks import guard_unlocked
 from .utils.course_docs import email_all_course_docs_to_admin
 from io import BytesIO
 from reportlab.lib.pagesizes import A4, landscape
@@ -421,6 +422,18 @@ def _course_dates(booking):
 def _health_badge_tuple(code: str):
     return HEALTH_BADGE.get(code or "", ("–", "bg-secondary", "Not provided"))
 
+def _closed_guard(request, booking):
+    """
+    If the booking is already completed, block further edits and bounce
+    back to the booking detail page (Invoicing tab stays usable).
+    """
+    if getattr(booking, "status", "") == "completed":
+        messages.error(request, "Course is closed — only Invoicing is editable.")
+        return redirect(
+            f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
+        )
+    return None
+
 @login_required
 def instructor_dashboard(request):
     # Just forward to the main list
@@ -755,6 +768,11 @@ def instructor_booking_detail(request, pk):
     if request.method == "POST":
         action = (request.POST.get("action") or "").strip().lower()
 
+        # SAFETY: if action is blank but the closure form posted,
+        # treat it as "close_course" so the button still works.
+        if not action and ("reg_manual" in request.POST or "assess_manual" in request.POST):
+            action = "close_course"
+
         # Save course notes
         if action == "save_notes":
             from .forms import BookingNotesForm
@@ -764,10 +782,12 @@ def instructor_booking_detail(request, pk):
                 messages.success(request, "Notes saved.")
             else:
                 messages.error(request, "Could not save notes. Please check the form.")
-            return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}")
+            return redirect(
+                f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}"
+            )
 
         # Close course and move to invoicing (also email course docs to admin)
-        if action == "close_course":
+        elif action == "close_course":
             reg_manual    = request.POST.get("reg_manual") in ("1", "true", "on", "yes")
             assess_manual = request.POST.get("assess_manual") in ("1", "true", "on", "yes")
 
@@ -786,9 +806,12 @@ def instructor_booking_detail(request, pk):
             if not (regs_ok or reg_manual) or not (assess_ok or assess_manual):
                 messages.error(
                     request,
-                    "Cannot close the course yet — complete registers/assessments or tick 'Manual submission to follow'."
+                    "Cannot close the course yet — complete registers/assessments or "
+                    "tick 'Manual submission to follow'."
                 )
-                return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=closure")
+                return redirect(
+                    f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=closure"
+                )
 
             # Persist flags if model has them
             if hasattr(booking, "closure_register_manual"):
@@ -799,21 +822,34 @@ def instructor_booking_detail(request, pk):
             booking.status = "completed"
             booking.save(update_fields=[
                 "status",
-                *(["closure_register_manual"] if hasattr(booking, "closure_register_manual") else []),
-                *(["closure_assess_manual"] if hasattr(booking, "closure_assess_manual") else []),
+                *(["closure_register_manual"]
+                  if hasattr(booking, "closure_register_manual") else []),
+                *(["closure_assess_manual"]
+                  if hasattr(booking, "closure_assess_manual") else []),
             ])
 
             # Send course docs pack to admin
             try:
                 sent = email_all_course_docs_to_admin(request, booking)
                 if sent:
-                    messages.success(request, f"Course closed. Sent {sent} document(s) to admin.")
+                    messages.success(
+                        request,
+                        f"Course closed. Sent {sent} document(s) to admin."
+                    )
                 else:
-                    messages.warning(request, "Course closed, but no documents were attached.")
+                    messages.warning(
+                        request,
+                        "Course closed, but no documents were attached."
+                    )
             except Exception as e:
-                messages.error(request, f"Course closed, but failed to email documents: {e}")
+                messages.error(
+                    request,
+                    f"Course closed, but failed to email documents: {e}"
+                )
 
-            return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing")
+            return redirect(
+                f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
+            )
 
         # Helper to extract extra line items from POST (name='item_desc' / 'item_amount')
         def _extract_line_items_from_post(post):
@@ -1161,6 +1197,13 @@ def instructor_assessment_autosave(request, pk):
     if not instr:
         return JsonResponse({"ok": False, "error": "No instructor profile found"}, status=400)
 
+    # Block changes if the course is closed
+    if getattr(reg.booking_day.booking, "status", "") == "completed":
+        return JsonResponse(
+            {"ok": False, "error": "Course is closed — only Invoicing is editable."},
+            status=400,
+        )
+
     # 🔒 NEW: lock whole column when outcome is DNF/Fail
     # This mirrors your prod behaviour: once DNF/Fail is chosen for the delegate,
     # all checkboxes in that column are locked in their current state until set back to Pending.
@@ -1227,6 +1270,13 @@ def instructor_assessment_outcome_autosave(request, pk):
     )
     if not instr or booking.instructor_id != getattr(instr, "id", None):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+    
+        # Block outcome changes if the course is closed
+    if getattr(booking, "status", "") == "completed":
+        return JsonResponse(
+            {"ok": False, "error": "Course is closed — only Invoicing is editable."},
+            status=400,
+        )
 
     reg_id  = request.POST.get("register_id")
     outcome = (request.POST.get("outcome") or "").lower().strip()
@@ -1312,6 +1362,10 @@ def instructor_delegate_edit(request, pk: int):
     if not instr or reg.booking_day.booking.instructor_id != instr.id:
         messages.error(request, "You do not have access to edit this delegate.")
         return redirect("instructor_bookings")
+    
+    guard = _closed_guard(request, reg.booking_day.booking)
+    if guard:
+        return guard
 
     if request.method == "POST" and "delete" in request.POST:
         reg.delete()
@@ -1423,6 +1477,10 @@ def instructor_delegate_new(request, day_pk: int):
     if not instr or day.booking.instructor_id != instr.id:
         messages.error(request, "You do not have access to this register.")
         return redirect("instructor_bookings")
+    
+    guard = _closed_guard(request, day.booking)
+    if guard:
+        return guard
 
     if request.method == "POST":
         form = DelegateRegisterInstructorForm(request.POST, current_instructor=instr)
@@ -1454,6 +1512,10 @@ def instructor_register_edit(request, pk: int):
     if not instr or reg.instructor_id != instr.id:
         messages.error(request, "You do not have access to edit this delegate.")
         return redirect("instructor_bookings")
+    
+    guard = _closed_guard(request, reg.booking_day.booking)
+    if guard:
+        return guard
 
     if request.method == "POST":
         form = DelegateRegisterInstructorForm(request.POST, instance=reg, current_instructor=instr)
@@ -1488,6 +1550,10 @@ def instructor_delegate_delete(request, pk: int):
     if not instr or reg.booking_day.booking.instructor_id != instr.id:
         messages.error(request, "You do not have permission to delete this delegate.")
         return redirect("instructor_bookings")
+    
+    guard = _closed_guard(request, reg.booking_day.booking)
+    if guard:
+        return guard
 
     if request.method != "POST":
         return HttpResponseNotAllowed(["POST"])
@@ -2264,60 +2330,93 @@ def _feedback_queryset_for_booking(booking):
         .select_related("instructor")
         .order_by("date", "created_at")
     )
+
 @login_required
 def instructor_course_summary_pdf(request, pk):
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
 
-    # Robust lookup (UUID and ref fallback)
-    base_qs = Booking.objects.select_related("course_type", "business", "instructor", "training_location")
-    booking = base_qs.filter(pk=pk).first()
-    if booking is None:
-        from uuid import UUID
-        try:
-            booking = base_qs.get(pk=UUID(str(pk)))
-        except Exception:
-            booking = base_qs.filter(course_reference__iexact=str(pk)).first()
-    if booking is None:
-        raise Http404("Booking not found")
+    booking = get_object_or_404(Booking, pk=pk)
 
-    instr = getattr(request.user, "instructor", None)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
-        return HttpResponseForbidden("You do not have access to this booking.")
+    # All registers for any day of this booking
+    regs = (
+        DelegateRegister.objects
+        .filter(booking_day__booking=booking)
+        .only("name", "outcome")
+        .order_by("name")
+    )
 
-    # Deduplicate across days: DNF > Fail > Pass
-    qs = (DelegateRegister.objects
-          .filter(booking_day__booking=booking)
-          .only("name", "outcome")
-          .order_by("name"))
-    priority = {"pass": 1, "fail": 2, "dnf": 3, "did not finish": 3, "did_not_finish": 3}
-    best = {}
-    for r in qs:
-        name = (r.name or "").strip()
-        if not name:
-            continue
-        outcome = str(r.outcome).strip().lower()
-        if best.get(name) is None or priority.get(outcome, 0) > priority.get(best[name], 0):
-            best[name] = outcome
-    passed = sorted([n for n, o in best.items() if o == "pass"])
-    failed = sorted([n for n, o in best.items() if o == "fail"])
-    dnf    = sorted([n for n, o in best.items() if priority.get(o, 0) == 3])
+    by_outcome = defaultdict(list)
+    for r in regs:
+        by_outcome[r.outcome].append(r.name)
 
+    # Figure course end date from Booking.days if present
     day_qs = booking.days.order_by("date").values_list("date", flat=True)
     end_date = day_qs.last() if day_qs else booking.course_date
 
-    context = {"booking": booking, "end_date": end_date, "passed": passed, "failed": failed, "dnf": dnf}
-    html = render_to_string("training/course_summary.html", context)
-
-    # DEV: show HTML; PROD: render PDF (WeasyPrint works there)
+    # ---------- DEV: lightweight ReportLab PDF, no WeasyPrint ----------
     if settings.DEBUG:
-        return HttpResponse(html, content_type="text/html")
+        buf = BytesIO()
+        c = canvas.Canvas(buf, pagesize=A4)
 
-    from weasyprint import HTML
-    ref = booking.course_reference or str(booking.pk)
-    pdf_bytes = HTML(string=html, base_url=request.build_absolute_uri("/")).write_pdf()
-    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
-    resp["Content-Disposition"] = f'inline; filename="course-summary-{ref}.pdf"'
+        y = 800
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(72, y, "Course summary")
+        y -= 24
+
+        c.setFont("Helvetica", 11)
+        c.drawString(72, y, f"Course: {booking.course_type.name}")
+        y -= 16
+        c.drawString(72, y, f"Reference: {booking.course_reference or '-'}")
+        y -= 16
+        c.drawString(72, y, f"Location: {getattr(booking.training_location, 'name', '-')}")
+        y -= 16
+        c.drawString(72, y, f"Instructor: {getattr(booking.instructor, 'name', '-')}")
+        y -= 16
+        c.drawString(72, y, f"End date: {end_date:%d/%m/%Y}")
+        y -= 24
+
+        def _write_block(title, names):
+            nonlocal y
+            if not names:
+                return
+            c.setFont("Helvetica-Bold", 11)
+            c.drawString(72, y, title)
+            y -= 16
+            c.setFont("Helvetica", 10)
+            for n in sorted(names):
+                c.drawString(90, y, f"- {n}")
+                y -= 14
+                if y < 72:
+                    c.showPage()
+                    y = 800
+
+        _write_block("Passed",   by_outcome.get(CourseOutcome.PASS, []))
+        _write_block("Failed",   by_outcome.get(CourseOutcome.FAIL, []))
+        _write_block("Did not finish", by_outcome.get(CourseOutcome.DNF, []))
+
+        c.showPage()
+        c.save()
+        buf.seek(0)
+
+        filename = f"course-summary-{booking.course_reference or booking.pk}.pdf"
+        return FileResponse(buf, as_attachment=True, filename=filename)
+
+    # ---------- PROD: full HTML → WeasyPrint pipeline ----------
+    context = {
+        "booking": booking,
+        "end_date": end_date,
+        "passed": by_outcome.get(CourseOutcome.PASS, []),
+        "failed": by_outcome.get(CourseOutcome.FAIL, []),
+        "dnf":    by_outcome.get(CourseOutcome.DNF,  []),
+        "filename": f"course-summary-{booking.course_reference}.pdf",
+    }
+
+    pdf_bytes, filename, mimetype = render_invoice_pdf_from_html(
+        "training/course_summary.html", context
+    )
+    resp = HttpResponse(pdf_bytes, content_type=mimetype)
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
     return resp
 
 @login_required
