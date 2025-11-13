@@ -13,6 +13,7 @@ from django.core.mail import EmailMessage
 from django.http import HttpResponse
 
 from ..models import Booking, BookingDay
+from .certificates import build_certificates_pdf_for_booking
 
 def _safe_attach_pdf(msg: EmailMessage, fname: str, data: bytes, ctype: str = "application/pdf") -> bool:
     """
@@ -232,10 +233,17 @@ def email_all_course_docs_to_admin(request, booking: Booking) -> int:
         if _safe_attach_pdf(msg, fname, data, "application/pdf"):
             count += 1
 
-    # Course summary (optional)
+     # Course summary (optional)
     summary = _collect_course_summary_pdf(request, booking)
     if summary:
         fname, data = summary
+        if _safe_attach_pdf(msg, fname, data, "application/pdf"):
+            count += 1
+
+    # Certificates (all delegates, one combined PDF)
+    cert = build_certificates_pdf_for_booking(booking)
+    if cert:
+        fname, data = cert
         if _safe_attach_pdf(msg, fname, data, "application/pdf"):
             count += 1
 

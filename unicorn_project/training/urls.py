@@ -16,6 +16,7 @@ from .views_public import (
     delegate_exam_finish,     # results
 )
 
+from . import views_certificates
 
 urlpatterns = [
     # ---------- Core / Home ----------
@@ -175,4 +176,6 @@ urlpatterns = [
     instv.whoami,
     name="instructor_whoami",
 ),
+
+    path("bookings/<uuid:booking_id>/certificates/preview/", views_certificates.booking_certificates_preview, name="booking_certificates_preview")  ,
 ]
