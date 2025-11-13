@@ -30,37 +30,38 @@
 
   <!-- Course details -->
   <div class="card mb-3">
-    <div class="card-header">Course details</div>
-    <div class="card-body">
-      <div class="row g-3">
-        <div class="col-md-6">
+  <div class="card-header">Course details</div>
+  <div class="card-body">
+    <div class="row g-4">
+      <!-- Column 1: core course info -->
+      <div class="col-md-4">
+        <h6 class="text-muted text-uppercase small mb-2">Course info</h6>
+        <div class="mb-3">
           <label class="form-label">Name</label>
           {{ form.name }}
           {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-        <div class="col-md-3">
+        <div class="mb-3">
           <label class="form-label">Code</label>
           {{ form.code }}
           {% for e in form.code.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-        <div class="col-md-3">
+        <div class="mb-3">
           <label class="form-label">Duration (days)</label>
           {{ form.duration_days }}
           {% for e in form.duration_days.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-
-        <div class="col-md-3">
-          <label class="form-label">Default course fee</label>
-          {{ form.default_course_fee }}
-          {% for e in form.default_course_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        <div class="mb-0">
+          <label class="form-label">Certificate duration (years)</label>
+          {{ form.certificate_duration }}
+          {% for e in form.certificate_duration.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
-        <div class="col-md-3">
-          <label class="form-label">Default instructor fee</label>
-          {{ form.default_instructor_fee }}
-          {% for e in form.default_instructor_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-        </div>
+      </div>
 
-        <div class="col-md-3">
+      <!-- Column 2: exams -->
+      <div class="col-md-4">
+        <h6 class="text-muted text-uppercase small mb-2">Exams</h6>
+        <div class="mb-3">
           <label class="form-label d-block">Has exam?</label>
           <div class="form-check">
             {{ form.has_exam }}
@@ -68,8 +69,7 @@
           {% for e in form.has_exam.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
         </div>
 
-        <!-- Show only when has_exam is ticked -->
-        <div class="col-md-3" id="number-of-exams-wrapper"
+        <div class="mb-0" id="number-of-exams-wrapper"
              {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
           <label class="form-label">Number of exams</label>
           {{ form.number_of_exams }}
@@ -77,167 +77,187 @@
           <div class="form-text">Required when “Has exam?” is ticked.</div>
         </div>
       </div>
+
+      <!-- Column 3: fees -->
+      <div class="col-md-4">
+        <h6 class="text-muted text-uppercase small mb-2">Fees</h6>
+        <div class="mb-3">
+          <label class="form-label">Default course fee</label>
+          {{ form.default_course_fee }}
+          {% for e in form.default_course_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+        <div class="mb-0">
+          <label class="form-label">Default instructor fee</label>
+          {{ form.default_instructor_fee }}
+          {% for e in form.default_instructor_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+      </div>
     </div>
   </div>
+</div>
 
-  <!-- Collapsible sections -->
-  <div class="accordion mb-3" id="course-accordion">
 
-    <!-- Competencies -->
-    <div class="accordion-item">
-      <h2 class="accordion-header" id="heading-comps">
-        <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                data-bs-target="#collapse-comps" aria-expanded="true" aria-controls="collapse-comps">
-          Competencies
-        </button>
-      </h2>
-      <div id="collapse-comps" class="accordion-collapse collapse show" aria-labelledby="heading-comps"
-           data-bs-parent="#course-accordion">
-        <div class="accordion-body">
-          {{ formset.management_form }}
+  <!-- Collapsible sections in columns -->
+  <div class="row">
+    <!-- Competencies accordion -->
+    <div class="col-md-6">
+      <div class="accordion mb-3" id="competencies-accordion">
+        <div class="accordion-item">
+          <h2 class="accordion-header" id="heading-comps">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapse-comps" aria-expanded="true" aria-controls="collapse-comps">
+              Competencies
+            </button>
+          </h2>
+          <div id="collapse-comps" class="accordion-collapse collapse show" aria-labelledby="heading-comps">
+            <div class="accordion-body">
+              {{ formset.management_form }}
 
-          <div class="table-responsive">
-            <table class="table table-sm align-middle">
-              <thead>
-                <tr>
-                  <th style="width:8rem">Order</th>
-                  <th>Competency</th>
-                  <th style="width:12rem" class="text-end">Actions</th>
+              <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th style="width:8rem">Order</th>
+                      <th>Competency</th>
+                      <th style="width:12rem" class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="comp-body">
+                    {% for f in formset.forms %}
+                      <tr class="comp-row">
+                        <td>
+                          {% if f.sort_order %}{{ f.sort_order }}{% endif %}
+                          <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
+                            <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
+                            <button type="button" class="btn btn-outline-secondary js-move" data-dir="1"  title="Move down">▼</button>
+                          </div>
+                        </td>
+                        <td>
+                          {% if f.name %}
+                            {{ f.name }}
+                          {% else %}
+                            {% for field in f.visible_fields %}{{ field }}{% endfor %}
+                          {% endif %}
+                          {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                        </td>
+                        <td class="text-end">
+                          {% if formset.can_delete and f.DELETE %}
+                            <label class="btn btn-outline-danger btn-sm mb-0">{{ f.DELETE }} Delete</label>
+                          {% endif %}
+                          {{ f.id }}
+                        </td>
+                      </tr>
+                    {% empty %}
+                      <tr class="text-muted"><td colspan="3">No competencies yet.</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+
+              <button type="button" class="btn btn-outline-primary btn-sm" id="add-row">
+                <i class="bi bi-plus-lg"></i> Add competency
+              </button>
+
+              <!-- Empty row template -->
+              <template id="empty-form-template">
+                <tr class="comp-row">
+                  <td>
+                    {% if formset.empty_form.sort_order %}{{ formset.empty_form.sort_order.as_widget }}{% endif %}
+                    <div class="btn-group btn-group-sm mt-1">
+                      <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1">▲</button>
+                      <button type="button" class="btn btn-outline-secondary js-move" data-dir="1">▼</button>
+                    </div>
+                  </td>
+                  <td>
+                    {% if formset.empty_form.name %}
+                      {{ formset.empty_form.name.as_widget }}
+                    {% else %}
+                      {% for field in formset.empty_form.visible_fields %}{{ field.as_widget }}{% endfor %}
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    {% if formset.can_delete and formset.empty_form.DELETE %}
+                      <label class="btn btn-outline-danger btn-sm mb-0">{{ formset.empty_form.DELETE.as_widget }} Delete</label>
+                    {% endif %}
+                    {{ formset.empty_form.id.as_widget }}
+                  </td>
                 </tr>
-              </thead>
-              <tbody id="comp-body">
-                {% for f in formset.forms %}
-                  <tr class="comp-row">
-                    <td>
-                      {% if f.sort_order %}{{ f.sort_order }}{% endif %}
-                      <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
-                        <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
-                        <button type="button" class="btn btn-outline-secondary js-move" data-dir="1"  title="Move down">▼</button>
-                      </div>
-                    </td>
-                    <td>
-                      {% if f.name %}
-                        {{ f.name }}
-                      {% else %}
-                        {% for field in f.visible_fields %}{{ field }}{% endfor %}
-                      {% endif %}
-                      {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-                    </td>
-                    <td class="text-end">
-                      {% if formset.can_delete and f.DELETE %}
-                        <label class="btn btn-outline-danger btn-sm mb-0">{{ f.DELETE }} Delete</label>
-                      {% endif %}
-                      {{ f.id }}
-                    </td>
-                  </tr>
-                {% empty %}
-                  <tr class="text-muted"><td colspan="3">No competencies yet.</td></tr>
-                {% endfor %}
-              </tbody>
-            </table>
+              </template>
+            </div>
           </div>
-
-          <button type="button" class="btn btn-outline-primary btn-sm" id="add-row">
-            <i class="bi bi-plus-lg"></i> Add competency
-          </button>
-
-          <!-- Empty row template -->
-          <template id="empty-form-template">
-            <tr class="comp-row">
-              <td>
-                {% if formset.empty_form.sort_order %}{{ formset.empty_form.sort_order.as_widget }}{% endif %}
-                <div class="btn-group btn-group-sm mt-1">
-                  <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1">▲</button>
-                  <button type="button" class="btn btn-outline-secondary js-move" data-dir="1">▼</button>
-                </div>
-              </td>
-              <td>
-                {% if formset.empty_form.name %}
-                  {{ formset.empty_form.name.as_widget }}
-                {% else %}
-                  {% for field in formset.empty_form.visible_fields %}{{ field.as_widget }}{% endfor %}
-                {% endif %}
-              </td>
-              <td class="text-end">
-                {% if formset.can_delete and formset.empty_form.DELETE %}
-                  <label class="btn btn-outline-danger btn-sm mb-0">{{ formset.empty_form.DELETE.as_widget }} Delete</label>
-                {% endif %}
-                {{ formset.empty_form.id.as_widget }}
-              </td>
-            </tr>
-          </template>
         </div>
       </div>
     </div>
 
-    <!-- Exams -->
-    <div class="accordion-item" id="exams-accordion-item"
-         {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
-      <h2 class="accordion-header" id="heading-exams">
-        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                data-bs-target="#collapse-exams" aria-expanded="false" aria-controls="collapse-exams">
-          Exams
-        </button>
-      </h2>
-      <div id="collapse-exams" class="accordion-collapse collapse" aria-labelledby="heading-exams"
-           data-bs-parent="#course-accordion">
-        <div class="accordion-body">
+    <!-- Exams accordion -->
+    <div class="col-md-6">
+      <div class="accordion mb-3" id="exams-accordion">
+        <div class="accordion-item" id="exams-accordion-item"
+             {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
+          <h2 class="accordion-header" id="heading-exams">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapse-exams" aria-expanded="false" aria-controls="collapse-exams">
+              Exams
+            </button>
+          </h2>
+          <div id="collapse-exams" class="accordion-collapse collapse show" aria-labelledby="heading-exams">
+            <div class="accordion-body">
 
-          {% if form.has_exam.value %}
-            {% if form.number_of_exams.value %}
-              <p class="mb-3">This course will have <strong>{{ form.number_of_exams.value }}</strong> exam(s).</p>
-            {% else %}
-              <p class="text-muted mb-3">Enter the number of exams above and click Save to create them.</p>
-            {% endif %}
-
-            {% if object %}
-              {% with exams=object.exams.all %}
-                {% if exams %}
-                  <div class="table-responsive">
-                    <table class="table table-sm align-middle">
-                    <table class="table table-sm table-hover">
-                      <thead>
-                        <tr>
-                          <th style="width:8rem">Seq</th>
-                          <th style="width:10rem">Code</th>
-                          <th>Title</th>
-                          <th style="width:10rem">Questions</th>
-                          <th style="width:10rem" class="text-end">Actions</th>  <!-- keep this -->
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {% for ex in exams %}
-                          <tr class="clickable-row" data-href="{% url 'admin_exam_edit' ex.id %}" tabindex="0">
-                            <td>{{ ex.sequence }}</td>
-                            <td>{{ ex.exam_code }}</td>
-                            <td>{{ ex.title }}</td>
-                            <td>{{ ex.questions.count }}</td>
-                            <td class="text-end">
-                              <a href="{% url 'admin_exam_edit' ex.id %}" class="btn btn-sm btn-outline-primary" data-no-row-nav="1">
-                                Edit
-                              </a>
-                            </td>
-                          </tr>
-                        {% empty %}
-                          <tr><td colspan="5" class="text-muted">No exams yet.</td></tr>
-                        {% endfor %}
-                      </tbody>
-                    </table>
-                  </div>
+              {% if form.has_exam.value %}
+                {% if form.number_of_exams.value %}
+                  <p class="mb-3">This course will have <strong>{{ form.number_of_exams.value }}</strong> exam(s).</p>
                 {% else %}
-                  <div class="text-muted">No exams yet. Set “Number of exams” and Save.</div>
+                  <p class="text-muted mb-3">Enter the number of exams above and click Save to create them.</p>
                 {% endif %}
-              {% endwith %}
-            {% endif %}
 
-          {% else %}
-            <p class="text-muted mb-0">Enable “Has exam?” above to configure exams.</p>
-          {% endif %}
+                {% if object %}
+                  {% with exams=object.exams.all %}
+                    {% if exams %}
+                      <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                          <thead>
+                            <tr>
+                              <th style="width:8rem">Seq</th>
+                              <th style="width:10rem">Code</th>
+                              <th>Title</th>
+                              <th style="width:10rem">Questions</th>
+                              <th style="width:10rem" class="text-end">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {% for ex in exams %}
+                              <tr class="clickable-row" data-href="{% url 'admin_exam_edit' ex.id %}" tabindex="0">
+                                <td>{{ ex.sequence }}</td>
+                                <td>{{ ex.exam_code }}</td>
+                                <td>{{ ex.title }}</td>
+                                <td>{{ ex.questions.count }}</td>
+                                <td class="text-end">
+                                  <a href="{% url 'admin_exam_edit' ex.id %}" class="btn btn-sm btn-outline-primary" data-no-row-nav="1">
+                                    Edit
+                                  </a>
+                                </td>
+                              </tr>
+                            {% empty %}
+                              <tr><td colspan="5" class="text-muted">No exams yet.</td></tr>
+                            {% endfor %}
+                          </tbody>
+                        </table>
+                      </div>
+                    {% else %}
+                      <div class="text-muted">No exams yet. Set “Number of exams” and Save.</div>
+                    {% endif %}
+                  {% endwith %}
+                {% endif %}
 
+              {% else %}
+                <p class="text-muted mb-0">Enable “Has exam?” above to configure exams.</p>
+              {% endif %}
+
+            </div>
+          </div>
         </div>
       </div>
     </div>
-
   </div>
 
   <div class="d-flex justify-content-end gap-2">
@@ -302,31 +322,30 @@
     });
   });
 })();
-</script>
-<script>
-  (function () {
-    const rows = document.querySelectorAll('tr.clickable-row[data-href]');
-    rows.forEach(tr => {
-      // Mouse click
-      tr.addEventListener('click', e => {
-        // Don’t hijack clicks on interactive elements inside the row
-        if (e.target.closest('a, button, input, select, label')) return;
-        const url = tr.dataset.href;
-        if (!url) return;
-        if (e.ctrlKey || e.metaKey) { window.open(url, '_blank'); }
-        else { window.location.href = url; }
-      });
 
-      // Keyboard (Enter/Space)
-      tr.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          const url = tr.dataset.href;
-          if (url) window.location.href = url;
-        }
-      });
+(function () {
+  const rows = document.querySelectorAll('tr.clickable-row[data-href]');
+  rows.forEach(tr => {
+    // Mouse click
+    tr.addEventListener('click', e => {
+      // Don’t hijack clicks on interactive elements inside the row
+      if (e.target.closest('a, button, input, select, label')) return;
+      const url = tr.dataset.href;
+      if (!url) return;
+      if (e.ctrlKey || e.metaKey) { window.open(url, '_blank'); }
+      else { window.location.href = url; }
     });
-  })();
+
+    // Keyboard (Enter/Space)
+    tr.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const url = tr.dataset.href;
+        if (url) window.location.href = url;
+      }
+    });
+  });
+})();
 </script>
 
 {% endblock %}

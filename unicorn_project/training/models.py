@@ -58,9 +58,16 @@ class CourseType(models.Model):
     name = models.CharField(max_length=200)
     code = models.CharField(max_length=20, unique=True)
     duration_days = models.DecimalField(
-        max_digits=3, decimal_places=2,
-        validators=[MinValueValidator(Decimal("0.01")), MaxValueValidator(Decimal("10.0"))],
+        max_digits=3, decimal_places=1,
+        validators=[MinValueValidator(Decimal("0.1")), MaxValueValidator(Decimal("99.0"))],
         default=Decimal("1.0"),
+        help_text="Enter the number of days the course runs over (e.g. 3.0 = 3 days).",
+    )
+    certificate_duration = models.DecimalField(
+        max_digits=3, decimal_places=1, 
+        validators=[MinValueValidator(Decimal("0.1")), MaxValueValidator(Decimal("5.0"))],  
+        default=Decimal("3.0"),
+        help_text="Certificate validity in years (e.g. 3.0 = 3 years).",
     )
 
     # defaults that prefill a Booking (but remain editable there)
