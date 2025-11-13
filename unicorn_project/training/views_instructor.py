@@ -45,6 +45,7 @@ from .utils.invoice import (
     render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
     send_invoice_email,      # email helper with dev/admin routing
 )
+from .utils.certificates import build_certificates_pdf_for_booking
 
 SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9 _\-\(\)\.&]")
 
@@ -3532,3 +3533,20 @@ def whoami(request):
         "is_staff": u.is_staff,
         "has_instructor": has_instructor,
     })
+
+def instructor_booking_certificates_pdf(request, pk):
+    """
+    Return the certificates PDF for this booking so instructors/admin
+    can view/download it from the UI.
+    """
+    booking = get_object_or_404(Booking, pk=pk)
+    result = build_certificates_pdf_for_booking(booking)
+    if not result:
+        return HttpResponse("No certificates available for this booking.", content_type="text/plain")
+
+    filename, pdf_bytes = result
+
+    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+    # inline = open in browser tab; change to attachment if you want forced download
+    resp["Content-Disposition"] = f'inline; filename="{filename}"'
+    return resp
