@@ -26,10 +26,53 @@
 .sidebar .text-muted { color: rgba(255,255,255,.85) !important; }
 
 /* ----- Nav tree ----- */
+
 .sidebar .nav-tree {
   display: flex;
   flex-direction: column;
   gap: .5rem;
+}
+
+
+/* Clean text-style section headers */
+
+.sidebar .menu-group-header {
+  margin-top: 1rem;
+  margin-bottom: 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #ffdddd;      /* light red (similar to your old look) */
+  opacity: 0.85;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar .menu-group-header:hover {
+  opacity: 1;
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+
+.sidebar .menu-group-chevron {
+  font-size: 0.65rem;
+  transition: transform 0.15s ease-in-out;
+}
+
+.sidebar .menu-group-content {
+  padding-left: 0; /* keep alignment with existing items */
+}
+
+/* Collapsed state */
+.sidebar .menu-group.collapsed .menu-group-content {
+  display: none;
+}
+
+.sidebar .menu-group.collapsed .menu-group-chevron {
+  transform: rotate(-90deg);
 }
 
 /* Links (and logout button when styled as .leaf) */
@@ -194,3 +237,9 @@
 
 /* If the sticky doesn’t “stick”, set the wrapper's overflow to visible */
 .layout { overflow: visible; }
+
+/* Force page content to start at the top of the right-hand pane */
+main.flex-grow-1 > *:first-child {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
