@@ -3534,19 +3534,41 @@ def whoami(request):
         "has_instructor": has_instructor,
     })
 
+@login_required
 def instructor_booking_certificates_pdf(request, pk):
     """
     Return the certificates PDF for this booking so instructors/admin
     can view/download it from the UI.
+
+    Permissions:
+      - The instructor assigned to this booking, OR
+      - Staff / superuser.
     """
-    booking = get_object_or_404(Booking, pk=pk)
+    booking = get_object_or_404(
+        Booking.objects.select_related("instructor"),
+        pk=pk,
+    )
+
+    # Permission guard
+    instr = getattr(request.user, "instructor", None)
+    if not (
+        request.user.is_staff
+        or request.user.is_superuser
+        or (instr and booking.instructor_id == getattr(instr, "id", None))
+    ):
+        return HttpResponseForbidden("You do not have access to this booking.")
+
+    # Build certificates PDF (ReportLab via utils.certificates)
     result = build_certificates_pdf_for_booking(booking)
     if not result:
-        return HttpResponse("No certificates available for this booking.", content_type="text/plain")
+        return HttpResponse(
+            "No certificates available for this booking.",
+            content_type="text/plain",
+        )
 
     filename, pdf_bytes = result
 
+    # inline = open in browser tab; change to attachment to force download
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
-    # inline = open in browser tab; change to attachment if you want forced download
     resp["Content-Disposition"] = f'inline; filename="{filename}"'
     return resp
