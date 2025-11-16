@@ -132,7 +132,10 @@ def _format_date(d: Optional[date]) -> str:
 # PDF builder (ReportLab + PNG background)
 # -------------------------------------------------------------------
 
-def build_certificates_pdf_for_booking(booking: Booking) -> Optional[Tuple[str, bytes]]:
+def build_certificates_pdf_for_booking(
+    booking: Booking,
+    registers: Optional[List[DelegateRegister]] = None,
+) -> Optional[Tuple[str, bytes]]:
     """
     Build a single PDF containing one certificate page per delegate on this booking,
     using the designed PNG background and ReportLab for text overlay.
@@ -148,7 +151,11 @@ def build_certificates_pdf_for_booking(booking: Booking) -> Optional[Tuple[str, 
     """
     _register_certificate_fonts()
 
-    delegates = _unique_delegates_for_booking(booking)
+    if registers is not None:
+        # allow callers (e.g. admin) to pass a pre-filtered subset
+        delegates = list(registers)
+    else:
+        delegates = _unique_delegates_for_booking(booking)
     print(f"[certificates] Found {len(delegates)} unique delegates for booking {booking.pk}")
     if not delegates:
         return None
@@ -203,7 +210,13 @@ def build_certificates_pdf_for_booking(booking: Booking) -> Optional[Tuple[str, 
     # Coordinates are fractions of page width/height so they scale with A4.
     # You can tweak these if the positioning needs nudging for your updated PNG.
     for reg in delegates:
-        delegate_name = reg.name or ""
+        # Prefer the overridden certificate name if present, otherwise use the
+        # original delegate name from the register.
+        delegate_name = (
+            getattr(reg, "certificate_name", None)  # new override field
+            or reg.name
+            or ""
+        )
 
         # Full-page background
         c.drawImage(

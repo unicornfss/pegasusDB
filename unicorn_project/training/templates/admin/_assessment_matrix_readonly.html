@@ -1,0 +1,215 @@
+{% load dict_extras %}
+
+{% if assessment_delegates and assessment_competencies %}
+  <div class="matrix-wrap">
+    <table class="matrix-table" aria-describedby="assessment-help">
+      <colgroup>
+        <col class="col-comp">
+        {% for _ in assessment_delegates %}<col class="col-delegate">{% endfor %}
+      </colgroup>
+
+      <thead>
+        <tr>
+          <th class="sticky corner">Competency</th>
+          {% for d in assessment_delegates %}
+            <th class="sticky top rotate {% if forloop.counter0|divisibleby:2 %}col-a{% else %}col-b{% endif %}">
+              {% with parts=d.name|split_name %}
+                <div class="name-rotator">
+                  <span class="first">{{ parts.0 }}</span>
+                  <span class="last">{{ parts.1 }}</span>
+                </div>
+              {% endwith %}
+            </th>
+          {% endfor %}
+        </tr>
+      </thead>
+
+      <tbody>
+        {% for comp in assessment_competencies %}
+          <tr class="{% cycle 'row-odd' 'row-even' %}">
+            <th class="sticky left comp-cell">
+              <div class="comp-code">{{ forloop.counter }}</div>
+              <div class="comp-name">{{ comp.name }}</div>
+            </th>
+
+            {% for d in assessment_delegates %}
+              {% with key=d.id|pair:comp.id %}
+                {% with a=assessment_existing|get:key %}
+                  <td class="cell {% if forloop.counter0|divisibleby:2 %}col-a{% else %}col-b{% endif %}">
+                    <input type="checkbox"
+                           class="lv-chk"
+                           disabled
+                           {% if a %}
+                             {% if a.level == 'c' or a.level == 'e' %}
+                               checked
+                             {% endif %}
+                           {% endif %}
+                           aria-label="Assessment for {{ d.name }} / {{ comp.name }}" />
+                    {% if a and a.is_locked %}
+                      <span class="lock-indicator" aria-hidden="true">🔒</span>
+                    {% endif %}
+                  </td>
+                {% endwith %}
+              {% endwith %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+
+        <!-- Outcome row -->
+        <tr class="outcome-row">
+          <th class="sticky left comp-cell outcome-label">
+            <div class="comp-code">—</div>
+            <div class="comp-name"><strong>Outcome</strong></div>
+          </th>
+
+          {% for d in assessment_delegates %}
+            <td class="outcome-cell {% if forloop.counter0|divisibleby:2 %}col-a{% else %}col-b{% endif %}">
+              {% if d.outcome == "fail" %}
+                <span class="badge bg-danger">Fail</span>
+              {% elif d.outcome == "dnf" %}
+                <span class="badge bg-warning text-dark">DNF</span>
+              {% elif d.outcome == "pending" or not d.outcome %}
+                <span class="badge bg-secondary">Pending</span>
+              {% else %}
+                <span class="badge bg-success">Pass</span>
+              {% endif %}
+            </td>
+          {% endfor %}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p id="assessment-help" class="text-muted small mt-2 mb-0">
+    Ticks show where the instructor has marked a delegate competent for a competency.
+    Outcomes are read-only summaries of the instructor’s assessment.
+  </p>
+
+  <style>
+    /* === container === */
+    .matrix-wrap {
+      display: inline-block;
+      max-width: 100%;
+      max-height: 60vh;
+      overflow: auto;
+      border: 1px solid var(--bs-border-color, #dee2e6);
+      border-radius: .5rem;
+      background: #fff;
+    }
+
+    /* === table === */
+    .matrix-table {
+      --delegate-col-width: 110px;
+      --zebra-even:  #d1deec;
+      --zebra-odd:   #e8f0fa;
+      --zebra-hover: #cbdaf0;
+
+      border-collapse: separate;
+      width: auto;
+      table-layout: fixed;
+      font-size: .9rem;
+      border-spacing: 0;
+    }
+
+    /* col widths */
+    .matrix-table .col-comp     { width: 240px; }
+    .matrix-table .col-delegate { width: var(--delegate-col-width); }
+
+    /* base cells */
+    .matrix-table th,
+    .matrix-table td {
+      border-bottom: 1px solid #dfe3e7;
+      border-right: 1px solid #edf0f3;
+      padding: .42rem;
+      text-align: center;
+      vertical-align: middle;
+      background: #fff;
+    }
+
+    /* zebra striping per row */
+    .matrix-table tbody tr.row-odd  td { background: var(--zebra-odd); }
+    .matrix-table tbody tr.row-even td { background: var(--zebra-even); }
+    .matrix-table tbody tr:hover      td { background: var(--zebra-hover); }
+
+    /* tint delegate columns (soft green / yellow) */
+    .matrix-table td.col-a,
+    .matrix-table th.col-a {
+      background-color: rgba(209, 239, 219, 0.75);
+    }
+    .matrix-table td.col-b,
+    .matrix-table th.col-b {
+      background-color: rgba(255, 244, 204, 0.75);
+    }
+
+    /* keep zebra feel under the tints */
+    .matrix-table tr.row-odd  td.col-a { background-color: rgba(199, 232, 210, 0.85); }
+    .matrix-table tr.row-even td.col-a { background-color: rgba(189, 225, 201, 0.85); }
+    .matrix-table tr.row-odd  td.col-b { background-color: rgba(255, 239, 189, 0.85); }
+    .matrix-table tr.row-even td.col-b { background-color: rgba(255, 234, 175, 0.85); }
+
+    .matrix-table tr.row-odd:hover  td.col-a,
+    .matrix-table tr.row-even:hover td.col-a,
+    .matrix-table tr.row-odd:hover  td.col-b,
+    .matrix-table tr.row-even:hover td.col-b {
+      background-color: rgba(186, 214, 230, 0.9);
+    }
+
+    /* Outcome row style */
+    .matrix-table tr.outcome-row th.outcome-label {
+      position: sticky;
+      left: 0;
+      z-index: 4;
+      background: #fff;
+      box-shadow: 1px 0 0 rgba(0,0,0,.05);
+    }
+    .matrix-table tr.outcome-row .outcome-cell {
+      background: #f8f9fb;
+      border-top: 2px solid #e3e7ec;
+    }
+
+    /* Sticky */
+    .sticky { position: sticky; z-index: 2; background: transparent; }
+    .sticky.top    { top: 0; z-index: 5; background: #fff; }
+    .sticky.left   { left: 0; text-align: left; z-index: 4; background: inherit; }
+    .sticky.corner { top: 0; left: 0; z-index: 6; background: #fff; }
+
+    /* first column content */
+    .comp-code { font-weight: 600; color: #6c757d; font-size: .85rem; }
+    .comp-name { font-size: .9rem; line-height: 1.15; }
+
+    /* header names (vertical) */
+    .rotate { height: 92px; padding: 0 .15rem; }
+    .name-rotator {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .1rem;
+      transform: rotate(-90deg);
+      transform-origin: center;
+      white-space: nowrap;
+    }
+    .name-rotator .first { font-weight: 600; }
+    .name-rotator .last  { color: #6c757d; font-size: .9em; }
+
+    /* checkboxes */
+    .cell .lv-chk {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* subtle sticky shadows */
+    thead tr th.sticky { box-shadow: 0 1px 0 rgba(0,0,0,.05); }
+    tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
+
+    .lock-indicator {
+      opacity: 0.7;
+      font-size: 0.9em;
+      margin-left: .2rem;
+    }
+  </style>
+
+{% else %}
+  <div class="text-muted">
+    No delegates or competencies found for this booking.
+  </div>
+{% endif %}

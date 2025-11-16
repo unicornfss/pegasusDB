@@ -97,6 +97,10 @@ urlpatterns = [
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
     path("app/admin/bookings/new/", app_admin.booking_form, name="admin_booking_new"),
     path("app/admin/bookings/<uuid:pk>/", app_admin.booking_form, name="admin_booking_edit"),
+    path("app/admin/bookings/<uuid:pk>/certificates/", app_admin.admin_booking_certificates_selected, name="admin_booking_certificates_selected"),
+    path("app/admin/registers/<int:reg_pk>/certificate-name/", app_admin.admin_certificate_name_edit, name="admin_certificate_name_edit"),
+
+
     path("app/admin/bookings/<uuid:pk>/delete/", app_admin.booking_delete, name="admin_booking_delete"),
     path("app/admin/bookings/<uuid:pk>/cancel/", app_admin.booking_cancel, name="admin_booking_cancel"),
     path("app/admin/bookings/<uuid:pk>/reinstate/", app_admin.booking_reinstate, name="admin_booking_reinstate"),

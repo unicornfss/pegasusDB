@@ -1,4 +1,6 @@
 {% extends "base.html" %}
+{% load dict_extras %}
+
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
@@ -154,9 +156,41 @@
       </div>
     </div>
 
+    <!-- Course days + notes row -->
+  </div><!-- end main details row -->
+
+  <div class="row g-3 mt-3">
+
+    <!-- Course days -->
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
+        <div class="card-header">Course days</div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width:110px">Day #</th>
+                  <th style="width:220px">Date</th>
+                  <th style="width:160px">Start</th>
+                  <th style="width:160px">End</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="booking-days"></tbody>
+            </table>
+          </div>
+
+          <!-- Hidden JSON payload for inline days -->
+          <input type="hidden" name="booking_days" id="booking-days-json">
+          <input type="hidden" name="days_json"     id="booking-days-json-mirror">
+        </div>
+      </div>
+    </div>
+
     <!-- Notes -->
-    <div class="col-12">
-      <div class="card">
+    <div class="col-12 col-xl-6">
+      <div class="card h-100">
         <div class="card-header">Course notes</div>
         <div class="card-body">
           <label class="form-label">Comments</label>
@@ -165,74 +199,441 @@
         </div>
       </div>
     </div>
+
   </div>
-
-  <hr class="my-3">
-  <h5 class="mb-2">Course days</h5>
-
-  <div class="table-responsive">
-    <table class="table table-sm align-middle">
-      <thead>
-        <tr>
-          <th style="width:110px">Day #</th>
-          <th style="width:220px">Date</th>
-          <th style="width:160px">Start</th>
-          <th style="width:160px">End</th>
-          <th>Notes</th>
-        </tr>
-      </thead>
-      <tbody id="booking-days"></tbody>
-    </table>
-  </div>
-
-  <!-- Hidden JSON payload for inline days -->
-  <input type="hidden" name="booking_days" id="booking-days-json">
-  <input type="hidden" name="days_json"     id="booking-days-json-mirror">
 
   {% if booking %}
-    <hr class="my-3">
-    <h5 class="mb-2">Registers for each day</h5>
-    <div class="table-responsive">
-      <table class="table table-sm align-middle">
-        <thead>
-          <tr>
-            <th style="width:220px">Date</th>
-            <th style="width:160px" class="text-center">Delegates</th>
-            <th style="width:160px"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {% if day_rows %}
-            {% for d in day_rows %}
-              <tr>
-                <td>{{ d.date }}</td>
-                <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
-                <td class="text-end">
-                  <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_booking_day_registers' d.id %}">
-                    <i class="bi bi-people"></i> View / edit
-                  </a>
-                </td>
-              </tr>
-            {% endfor %}
-          {% else %}
-            {% for d in booking.days.all|dictsort:"date" %}
-              <tr>
-                <td>{{ d.date }}</td>
-                <td class="text-center"><span class="badge bg-secondary">—</span></td>
-                <td class="text-end">
-                  <a class="btn btn-outline-primary btn-sm" href="{% url 'admin_booking_day_registers' d.id %}">
-                    <i class="bi bi-people"></i> View / edit
-                  </a>
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td colspan="3" class="text-muted">No days yet.</td></tr>
-            {% endfor %}
-          {% endif %}
-        </tbody>
-      </table>
+    <hr class="my-4">
+
+    <!-- Tabbed views -->
+    <ul class="nav nav-tabs" id="bookingTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'registers' %}active{% endif %}"
+            id="tab-registers"
+            data-bs-toggle="tab" data-bs-target="#tab-pane-registers"
+            type="button" role="tab" aria-controls="tab-pane-registers"
+            aria-selected="{% if active_tab == 'registers' %}true{% else %}false{% endif %}">
+      Registers
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'assessments' %}active{% endif %}"
+            id="tab-assessments"
+            data-bs-toggle="tab" data-bs-target="#tab-pane-assessments"
+            type="button" role="tab" aria-controls="tab-pane-assessments"
+            aria-selected="{% if active_tab == 'assessments' %}true{% else %}false{% endif %}">
+      Assessments
+    </button>
+  </li>
+    {% if has_exam %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link {% if active_tab == 'exams' %}active{% endif %}"
+              id="tab-exams" data-bs-toggle="tab"
+              data-bs-target="#tab-pane-exams" type="button" role="tab"
+              aria-controls="tab-pane-exams"
+              aria-selected="{% if active_tab == 'exams' %}true{% else %}false{% endif %}">
+        Exams
+      </button>
+    </li>
+    {% endif %}
+
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'feedback' %}active{% endif %}"
+            id="tab-feedback"
+            data-bs-toggle="tab" data-bs-target="#tab-pane-feedback"
+            type="button" role="tab" aria-controls="tab-pane-feedback"
+            aria-selected="{% if active_tab == 'feedback' %}true{% else %}false{% endif %}">
+      Feedback
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'certificates' %}active{% endif %}"
+            id="tab-certificates"
+            data-bs-toggle="tab" data-bs-target="#tab-pane-certificates"
+            type="button" role="tab" aria-controls="tab-pane-certificates"
+            aria-selected="{% if active_tab == 'certificates' %}true{% else %}false{% endif %}">
+      Certificates
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link {% if active_tab == 'invoice' %}active{% endif %}"
+            id="tab-invoice"
+            data-bs-toggle="tab" data-bs-target="#tab-pane-invoice"
+            type="button" role="tab" aria-controls="tab-pane-invoice"
+            aria-selected="{% if active_tab == 'invoice' %}true{% else %}false{% endif %}">
+      Invoice
+    </button>
+  </li>
+</ul>
+
+
+    <div class="tab-content border border-top-0 p-3 rounded-bottom" id="bookingTabsContent">
+      <!-- REGISTERS TAB -->
+      <div class="tab-pane fade {% if active_tab == 'registers' %}show active{% endif %}"
+          id="tab-pane-registers"
+          role="tabpanel" aria-labelledby="tab-registers">
+
+
+    <div class="row g-3">
+      <!-- LEFT: list of days -->
+      <div class="col-md-4">
+        <h5 class="mb-3">Registers for each day</h5>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+  <tr>
+    <th>Date</th>
+    <th class="text-center">Delegates</th>
+    <th class="text-end">Actions</th>
+  </tr>
+</thead>
+
+            <tbody>
+              {% for d in booking.days.all|dictsort:"date" %}
+                {% with count=d.registers.count %}
+                <tr>
+                  <td>{{ d.date|date:"j M Y" }}</td>
+                  <td class="text-center">
+                    <span class="badge {% if count > 0 %}bg-primary{% else %}bg-secondary{% endif %}">
+                      {{ count }}
+                    </span>
+                  </td>
+                  <td class="text-end">
+  <div class="btn-group btn-group-sm" role="group">
+    <a href="{% url 'admin_booking_day_registers' d.id %}?inline=1"
+       class="btn btn-outline-primary js-register-view"
+       data-day-label="{{ d.date|date:'j M Y' }}">
+      View
+    </a>
+    <a href="{% url 'instructor_day_registers_pdf' d.id %}"
+       class="btn btn-outline-secondary"
+       target="_blank" rel="noopener">
+      PDF
+    </a>
+  </div>
+</td>
+
+                </tr>
+                {% endwith %}
+              {% empty %}
+                <tr>
+                  <td colspan="3" class="text-muted">No days yet.</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- RIGHT: detail panel -->
+      <div class="col-md-8">
+        <div class="card h-100">
+          <div class="card-header">
+            Delegates
+            <span id="register-detail-heading-extra" class="fw-normal"></span>
+          </div>
+          <div class="card-body" id="register-detail-body">
+            <p class="text-muted mb-0">
+              Select a day on the left to view its delegates.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
+  </div>
+
+
+  <!-- ASSESSMENTS TAB (read only) -->
+  <div class="tab-pane fade {% if active_tab == 'assessments' %}show active{% endif %}"
+      id="tab-pane-assessments"
+      role="tabpanel" aria-labelledby="tab-assessments">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="mb-0">Assessment matrix</h5>
+      {% if booking %}
+        <a href="{% url 'instructor_assessment_pdf' booking.id %}"
+          class="btn btn-danger btn-sm"
+          target="_blank" rel="noopener">
+            <i class="bi bi-file-earmark-pdf me-1"></i>
+            Export PDF
+        </a>
+
+      {% endif %}
+    </div>
+
+    {% include "admin/_assessment_matrix_readonly.html" %}
+  </div>
+
+  {% if has_exam %}
+  <!-- EXAMS TAB (read only) -->
+  <div class="tab-pane fade {% if active_tab == 'exams' %}show active{% endif %}"
+      id="tab-pane-exams"
+      role="tabpanel" aria-labelledby="tab-exams">
+
+    {% if course_exams %}
+      <div class="alert alert-info py-2 small" style="font-size:0.85rem;">
+        <strong>Note:</strong> This shows all submitted exam attempts for this course
+        (read only).
+      </div>
+
+      <div class="accordion" id="adminExamAccordion">
+        {% for ex in course_exams %}
+          {% with seq=ex.sequence code=ex.exam_code %}
+          <div class="accordion-item mb-2">
+            <h2 class="accordion-header" id="admin-ex-h-{{ seq }}">
+              <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button"
+                      data-bs-toggle="collapse"
+                      data-bs-target="#admin-ex-c-{{ seq }}"
+                      aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                      aria-controls="admin-ex-c-{{ seq }}">
+                Exam {{ seq }} — {{ ex.title }}
+                <span class="ms-2 small text-muted">({{ code }})</span>
+              </button>
+            </h2>
+
+            <div id="admin-ex-c-{{ seq }}"
+                class="accordion-collapse collapse {% if forloop.first %}show{% endif %}"
+                aria-labelledby="admin-ex-h-{{ seq }}"
+                data-bs-parent="#adminExamAccordion">
+              <div class="accordion-body p-0">
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle m-0">
+                    <thead>
+                      <tr>
+                        <th>Delegate</th>
+                        <th style="width: 120px;">DOB</th>
+                        <th style="width: 90px;">Attempt</th>
+                        <th style="width: 110px;" class="text-center">Score</th>
+                        <th style="width: 90px;"  class="text-center">%</th>
+                        <th style="width: 120px;">Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% with atts=attempts_by_exam|get_item:seq %}
+                        {% if atts %}
+                          {% for att in atts %}
+                            <tr>
+                              <td>{{ att.delegate_name|default:"Delegate" }}</td>
+                              <td>
+                                {% if att.date_of_birth %}
+                                  {{ att.date_of_birth|date:"j M Y" }}
+                                {% else %}
+                                  <span class="text-muted">—</span>
+                                {% endif %}
+                              </td>
+                              <td>{{ att.attempt_number|default:"1" }}</td>
+
+                              <!-- Score (only when finished) -->
+                              <td class="text-center">
+                                {% if att.finished_at %}
+                                  {% if att.total_questions %}
+                                    {{ att.score_correct }}/{{ att.total_questions }}
+                                  {% else %}
+                                    {{ att.score_correct }}
+                                  {% endif %}
+                                {% else %}
+                                  <span class="text-muted">—</span>
+                                {% endif %}
+                              </td>
+
+                              <!-- Percentage (only when finished) -->
+                              <td class="text-center">
+                                {% if att.finished_at and att.total_questions %}
+                                  {% widthratio att.score_correct att.total_questions 100 %}%
+                                {% else %}
+                                  <span class="text-muted">—</span>
+                                {% endif %}
+                              </td>
+
+                              <!-- Result (badge, read-only) -->
+                              <td>
+                                {% if att.finished_at %}
+                                  {% if att.passed %}
+                                    <span class="badge bg-success">Pass</span>
+                                  {% elif att.viva_eligible %}
+                                    <span class="badge bg-warning text-dark">Viva</span>
+                                  {% else %}
+                                    <span class="badge bg-danger">Fail</span>
+                                  {% endif %}
+                                {% else %}
+                                  <span class="badge bg-info text-dark">In progress</span>
+                                {% endif %}
+                              </td>
+                            </tr>
+                          {% endfor %}
+                        {% else %}
+                          <tr>
+                            <td colspan="6" class="text-muted">
+                              No exam attempts recorded for this exam yet.
+                            </td>
+                          </tr>
+                        {% endif %}
+                      {% endwith %}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endwith %}
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="alert alert-info my-2">
+        No exams defined for this course type.
+      </div>
+    {% endif %}
+  </div>
   {% endif %}
+
+
+  <!-- FEEDBACK TAB (read only, same as instructor) -->
+  <div class="tab-pane fade {% if active_tab == 'feedback' %}show active{% endif %}"
+      id="tab-pane-feedback"
+      role="tabpanel" aria-labelledby="tab-feedback">
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h5 class="mb-0">Feedback</h5>
+      
+    </div>
+
+  {# Reuse the instructor's feedback layout, now that we pass booking/responses/summary #}
+  {% include "instructor/booking_feedback.html" %}
+</div>
+
+
+    <!-- CERTIFICATES TAB -->
+    <div class="tab-pane fade {% if active_tab == 'certificates' %}show active{% endif %}"
+       id="tab-pane-certificates"
+       role="tabpanel" aria-labelledby="tab-certificates">
+
+    {% if booking %}
+      {% if cert_delegates %}
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0">Certificates</h5>
+          <div class="d-flex gap-2">
+            {# existing “all certificates” (instructor) endpoint #}
+            <a href="{% url 'instructor_booking_certificates' booking.id %}"
+               class="btn btn-outline-secondary btn-sm"
+               target="_blank" rel="noopener">
+              All certificates (PDF)
+            </a>
+            <button type="button"
+                    id="btn-cert-export"
+                    class="btn btn-primary btn-sm">
+              Export selected (PDF)
+            </button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="width:40px;"></th>
+                <th>Delegate name (original)</th>
+                <th style="width: 130px;">DOB</th>
+                <th style="width: 230px;">Certificate name</th>
+                <th style="width: 130px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for reg in cert_delegates %}
+                <tr>
+                  <td>
+                    <input type="checkbox"
+                           class="form-check-input cert-checkbox"
+                           value="{{ reg.id }}">
+                  </td>
+                  <td>{{ reg.name }}</td>
+                  <td>
+                    {% if reg.date_of_birth %}
+                      {{ reg.date_of_birth|date:"j M Y" }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if reg.certificate_name %}
+                      {{ reg.certificate_name }}
+                      <span class="badge bg-info text-dark ms-1">override</span>
+                    {% else %}
+                      <span class="text-muted">Uses delegate name</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end">
+                    <a href="{% url 'admin_certificate_name_edit' reg.id %}"
+                       class="btn btn-outline-secondary btn-sm">
+                      Edit name
+                    </a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">
+          No delegates have passed this course yet, so no certificates are available.
+        </p>
+      {% endif %}
+    {% else %}
+      <p class="text-muted mb-0">Save the booking before managing certificates.</p>
+    {% endif %}
+  </div>
+
+  <!-- INVOICE TAB (editable later) -->
+  <div class="tab-pane fade {% if active_tab == 'invoice' %}show active{% endif %}"
+       id="tab-pane-invoice"
+       role="tabpanel" aria-labelledby="tab-invoice">
+    <p class="text-muted mb-0">Invoice tab (editable) – content to be defined.</p>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const detailBody = document.getElementById('register-detail-body');
+  const headingExtra = document.getElementById('register-detail-heading-extra');
+
+  document.querySelectorAll('.js-register-view').forEach(function (btn) {
+    btn.addEventListener('click', function (event) {
+      event.preventDefault();
+
+      const url = this.getAttribute('href');
+      const dayLabel = this.getAttribute('data-day-label') || '';
+
+      if (!detailBody) return;
+
+      // Loading state
+      detailBody.innerHTML = '<p class="text-muted mb-0">Loading…</p>';
+      if (headingExtra) {
+        headingExtra.textContent = dayLabel ? ' – ' + dayLabel : '';
+      }
+
+      fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      })
+        .then(function (response) {
+          if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+          }
+          return response.text();
+        })
+        .then(function (html) {
+          detailBody.innerHTML = html;
+        })
+        .catch(function (error) {
+          console.error(error);
+          detailBody.innerHTML =
+            '<p class="text-danger mb-0">Could not load delegates. Please try again.</p>';
+        });
+    });
+  });
+});
+</script>
+
+  {% endif %}
+
 
   <div class="mt-3 d-flex gap-2 flex-wrap">
     <button class="btn btn-primary" name="save_continue" value="1">
@@ -627,6 +1028,28 @@
       notes.dispatchEvent(new Event('input'));
     }
   });
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const btn = document.getElementById('btn-cert-export');
+  if (!btn) return;
+
+  btn.addEventListener('click', function () {
+    const baseUrl = "{% url 'admin_booking_certificates_selected' booking.id %}";
+    const params = [];
+
+    document.querySelectorAll('#tab-pane-certificates input.cert-checkbox:checked')
+      .forEach(function (cb) {
+        params.push('delegate_id=' + encodeURIComponent(cb.value));
+      });
+
+    const url = params.length ? (baseUrl + '?' + params.join('&')) : baseUrl;
+
+    // open in a new tab/window so the admin stays on the booking page
+    window.open(url, '_blank');
+  });
+});
 </script>
 
 {% endblock %}

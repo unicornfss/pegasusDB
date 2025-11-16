@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<h3 class="mb-3">{{ title }}</h3>
+
+<p>
+  <strong>Booking:</strong>
+  {{ booking.course_reference }} –
+  {{ booking.course_type.name }} ({{ booking.course_date|date:"j M Y" }})<br>
+  <strong>Original delegate name:</strong> {{ register.name }}<br>
+  <strong>Current certificate name:</strong> {{ current_display_name }}
+</p>
+
+<form method="post" class="mb-4">
+  {% csrf_token %}
+
+  <div class="mb-2">
+    <div class="form-check">
+      <input class="form-check-input"
+             type="checkbox"
+             id="revert_to_original"
+             name="revert_to_original"
+             value="1">
+      <label class="form-check-label" for="revert_to_original">
+        Revert to original delegate name:
+        <strong>{{ register.name }}</strong>
+      </label>
+    </div>
+    <small class="text-muted">
+      Tick this to undo any custom certificate name and use the original name as submitted.
+    </small>
+  </div>
+
+  <hr>
+
+  <div class="mb-3">
+    <label class="form-label">Custom certificate name</label>
+    <input type="text"
+           name="certificate_name"
+           class="form-control"
+           value="{{ current_display_name }}">
+    <small class="text-muted">
+      Leave this as-is to keep the current certificate name, change it to set a new one,
+      or tick "Revert to original" above to use the delegate's submitted name instead.
+    </small>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label">Reason for change</label>
+    <textarea name="reason"
+              class="form-control"
+              rows="3"
+              required></textarea>
+    <small class="text-muted">
+      This reason will be stored permanently with the change log.
+    </small>
+  </div>
+
+  <button type="submit" class="btn btn-primary">Save change</button>
+  <a href="{{ back_url }}" class="btn btn-secondary ms-2">Cancel</a>
+</form>
+
+
+<h4>Change history</h4>
+{% if changes %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Old name</th>
+          <th>New name</th>
+          <th>Reason</th>
+          <th>Changed by</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ch in changes %}
+          <tr>
+            <td>{{ ch.changed_at|date:"d M Y H:i" }}</td>
+            <td>{{ ch.old_name }}</td>
+            <td>{{ ch.new_name }}</td>
+            <td>{{ ch.reason|linebreaksbr }}</td>
+            <td>
+              {% if ch.changed_by %}
+                {{ ch.changed_by.get_full_name|default:ch.changed_by.username }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-muted">No previous name changes recorded.</p>
+{% endif %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const cb = document.getElementById('revert_to_original');
+  const input = document.querySelector('input[name="certificate_name"]');
+  if (!cb || !input) return;
+
+  function sync() {
+    input.disabled = cb.checked;
+  }
+  cb.addEventListener('change', sync);
+  sync();
+});
+</script>
+
+{% endblock %}

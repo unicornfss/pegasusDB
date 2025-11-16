@@ -1,6 +1,7 @@
 import json
 import math
 from datetime import timedelta, datetime, time, time as dtime
+from collections import defaultdict
 
 from django import forms
 from django.conf import settings
@@ -11,10 +12,10 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.db.models import Q, Count, Min, Max
+from django.db.models import Q, Count, Min, Max, Avg
 from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
-from django.http import HttpResponseForbidden
+from django.http import HttpResponseForbidden, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -27,13 +28,19 @@ from .services.booking_status import auto_update_booking_statuses
 from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
     StaffProfile, BookingDay, DelegateRegister, CourseCompetency,
-    Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer
+    Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer, CompetencyAssessment,
+    FeedbackResponse, CertificateNameChange
 )
 from .forms import (
     BusinessForm, CourseTypeForm, TrainingLocationForm,
     InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
     CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm,
 )
+
+from .views_instructor import _feedback_queryset_for_booking
+from .utils.certificates import build_certificates_pdf_for_booking, _unique_delegates_for_booking
+
+
 
 # =========================
 # Helpers / guards
@@ -670,7 +677,19 @@ def booking_form(request, pk=None):
                 days_payload = []
 
             if days_payload:
-                # Replace all BookingDay rows with what came from the inline table
+                # If delegates already exist, we must NOT delete booking days
+                # because DelegateRegister.booking_day is PROTECT.
+                if DelegateRegister.objects.filter(booking_day__booking=booking).exists():
+                    messages.error(
+                        request,
+                        "Cannot change course days because delegates are already registered. "
+                        "Remove delegates or their registers before altering course dates.",
+                    )
+                    if "save_return" in request.POST:
+                        return redirect("admin_booking_list")
+                    return redirect("admin_booking_edit", pk=booking.pk)
+
+                # Safe to replace all BookingDay rows with what came from the inline table
                 booking.days.all().delete()
 
                 total_days = float(getattr(booking.course_type, "duration_days", 1.0) or 1.0)
@@ -684,9 +703,11 @@ def booking_form(request, pk=None):
                     start_t = _parse_time_or_none(row.get("start_time")) or booking.start_time
                     end_t   = _parse_time_or_none(row.get("end_time"))
 
-                    # If browser didn't send end_time, compute it from duration
                     if not end_t and start_t:
-                        end_t = _add_hours_to_time(start_t, _hours_for_day_index(i, total_days, rows))
+                        end_t = _add_hours_to_time(
+                            start_t,
+                            _hours_for_day_index(i, total_days, rows),
+                        )
 
                     BookingDay.objects.create(
                         booking=booking,
@@ -694,6 +715,7 @@ def booking_form(request, pk=None):
                         start_time=start_t,
                         end_time=end_t,
                     )
+
             else:
                 # Fallback: create rows from duration when creating
                 if was_new and booking.course_type_id and booking.course_date:
@@ -722,7 +744,7 @@ def booking_form(request, pk=None):
 
         form = BookingForm(instance=obj)
 
-    # maps for client-side behaviour
+        # maps for client-side behaviour
     course_type_map = {
         str(ct.id): {
             "code": ct.code or "",
@@ -758,17 +780,209 @@ def booking_form(request, pk=None):
     else:
         booking_days_initial = []
 
+    # --- Feedback data for Feedback tab (read only) ---
+    fb_qs = FeedbackResponse.objects.none()
+    fb_count = 0
+    fb_avg = None
+
+    if obj and obj.pk:
+        # reuse the same logic as the instructor view
+        from .views_instructor import _feedback_queryset_for_booking
+        fb_qs = _feedback_queryset_for_booking(obj)
+        fb_count = fb_qs.count()
+        fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
+
+
+
+
+    # ---------- NEW: tab + register detail support ----------
+
+    # which tab is active (default = registers)
+    active_tab = request.GET.get("tab", "registers")
+
+    regs_day = None
+    regs = None
+    if obj and obj.pk:
+        regs_day_id = request.GET.get("regs_day")
+        if regs_day_id:
+            try:
+                regs_day = obj.days.get(pk=regs_day_id)
+                regs = (
+                    DelegateRegister.objects
+                    .filter(booking_day=regs_day)
+                    .select_related("instructor")
+                    .order_by("id")
+                )
+            except BookingDay.DoesNotExist:
+                pass
+
+    # ---------- Read-only assessment matrix for admin ----------
+
+    assessment_delegates = []
+    assessment_competencies = []
+    assessment_existing = {}
+
+    if obj and obj.pk and obj.course_type_id:
+        # 1) Delegates: dedupe by (normalized name, DOB) like instructor view
+        qs = (
+            DelegateRegister.objects
+            .filter(booking_day__booking=obj)
+            .order_by("name", "date_of_birth", "id")
+        )
+        seen = set()
+        delegates = []
+        for r in qs:
+            nm = (r.name or "").strip().lower()
+            dob = getattr(r, "date_of_birth", None)
+            key = (nm, dob) if dob else ("__nodedob__", r.id)
+            if key in seen:
+                continue
+            seen.add(key)
+            delegates.append(r)
+
+        assessment_delegates = delegates
+
+        # 2) Competencies for this course
+        competencies = list(
+            CourseCompetency.objects
+            .filter(course_type=obj.course_type)
+            .order_by("sort_order", "name", "id")
+        )
+        assessment_competencies = competencies
+
+        # 3) Existing assessments: (register_id, competency_id) -> CompetencyAssessment
+        if delegates and competencies:
+            assessments_qs = (
+                CompetencyAssessment.objects
+                .filter(
+                    register__booking_day__booking=obj,
+                    course_competency__in=competencies,
+                )
+                .select_related("register", "course_competency")
+            )
+
+            existing_map = {}
+            for a in assessments_qs:
+                key = (a.register_id, a.course_competency_id)
+                if key not in existing_map:
+                    existing_map[key] = a
+            assessment_existing = existing_map
+
+        # --- Exams / attempts for the Exams tab (read-only) ---
+        # --- Certificates tab delegates (read-only list for admin) ---
+        cert_delegates = []
+        if obj and obj.pk:
+            cert_delegates = _unique_delegates_for_booking(obj)
+
+        course_exams = []
+        attempts_by_exam = {}
+        has_exam = False
+
+        if obj and obj.course_type:
+            ...
+
+
+    if obj and obj.course_type:
+        # All exams for this course type
+        course_exams = list(
+            Exam.objects.filter(course_type=obj.course_type).order_by("sequence", "id")
+        )
+
+        has_exam = bool(course_exams) or getattr(obj.course_type, "has_exam", False)
+
+        if course_exams:
+            # All attempts that belong to this booking's dates + instructor
+            booking_dates = list(
+                BookingDay.objects.filter(booking=obj).values_list("date", flat=True)
+            )
+
+            if booking_dates:
+                tmp = defaultdict(list)
+                attempts_qs = (
+                    ExamAttempt.objects
+                    .select_related("exam")
+                    .filter(
+                        exam__course_type=obj.course_type,
+                        instructor=obj.instructor,
+                        exam_date__in=booking_dates,
+                    )
+                    .order_by("exam_date", "id")
+                )
+                for att in attempts_qs:
+                    seq = getattr(att.exam, "sequence", None) or getattr(att.exam, "id")
+                    tmp[seq].append(att)
+                attempts_by_exam = dict(tmp)
+
+    # If user somehow has ?tab=exams but this course has no exams,
+    # force the tab back to 'registers' so template doesn't get confused.
+    if active_tab == "exams" and not has_exam:
+        active_tab = "registers"
+
     return render(request, "admin/form_booking.html", {
-    "title": ("Edit Booking" if obj else "New Booking"),
-    "form": form,
-    "booking": obj,
-    "back_url": reverse("admin_booking_list"),
-    "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
-    "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
-    "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
-    "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
-    "unlock_url": (reverse("admin_booking_unlock", args=[obj.id]) if obj and getattr(obj, "status", "") == "completed" else None),
-})
+        "title": ("Edit Booking" if obj else "New Booking"),
+        "form": form,
+        "booking": obj,
+        "back_url": reverse("admin_booking_list"),
+        "course_type_map_json": json.dumps(course_type_map, cls=DjangoJSONEncoder),
+        "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
+        "booking_days_initial_json": json.dumps(booking_days_initial, cls=DjangoJSONEncoder),
+        "delete_url": reverse("admin_booking_delete", args=[obj.id]) if obj else None,
+        "unlock_url": (
+            reverse("admin_booking_unlock", args=[obj.id])
+            if obj and getattr(obj, "status", "") == "completed"
+            else None
+        ),
+        "active_tab": active_tab,
+        "regs_day": regs_day,
+        "regs": regs,
+        # feedback (used by instructor/booking_feedback.html)
+        "fb_qs": fb_qs,
+        "fb_count": fb_count,
+        "fb_avg": fb_avg,
+        # assessments (read-only matrix)
+        "assessment_delegates": assessment_delegates,
+        "assessment_competencies": assessment_competencies,
+        "assessment_existing": assessment_existing,
+        # exams (read-only list of attempts)
+        "course_exams": course_exams,
+        "attempts_by_exam": attempts_by_exam,
+        "has_exam": has_exam,
+        # certificates
+        "cert_delegates": cert_delegates,
+    })
+
+@admin_required
+def admin_booking_certificates_selected(request, pk):
+    """
+    Export certificates PDF for a subset of delegates on this booking.
+    Called via GET with one or more ?delegate_id=<id> params.
+    If none are provided, behaves like 'all certificates'.
+    """
+    booking = get_object_or_404(Booking, pk=pk)
+
+    ids = request.GET.getlist("delegate_id")
+    registers = None
+
+    if ids:
+        registers = list(
+            DelegateRegister.objects
+            .filter(booking_day__booking=booking, id__in=ids)
+            .order_by("name", "date_of_birth", "id")
+        )
+        if not registers:
+            messages.error(request, "No matching delegates selected for certificates.")
+            return redirect(f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=certificates")
+
+    result = build_certificates_pdf_for_booking(booking, registers=registers)
+    if not result:
+        messages.error(request, "No certificates could be generated for this booking.")
+        return redirect(f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=certificates")
+
+    filename, pdf_bytes = result
+    resp = HttpResponse(pdf_bytes, content_type="application/pdf")
+    resp["Content-Disposition"] = f'inline; filename=\"{filename}\"'
+    return resp
+
 
 @admin_required
 @require_http_methods(["GET", "POST"])
@@ -1087,6 +1301,76 @@ def admin_instructor_edit(request, pk):
         "instructor": inst,
     })
 
+@admin_required
+@require_http_methods(["GET", "POST"])
+def admin_certificate_name_edit(request, reg_pk: int):
+    """
+    Edit the certificate_name for a single DelegateRegister.
+    - Does NOT change DelegateRegister.name.
+    - Every change is logged with a reason.
+    """
+    register = get_object_or_404(
+        DelegateRegister.objects.select_related("booking_day__booking"),
+        pk=reg_pk,
+    )
+    booking = register.booking_day.booking
+
+    if request.method == "POST":
+        # Checkbox: revert to original delegate name?
+        revert = request.POST.get("revert_to_original") in ("1", "on", "true", "True")
+
+        # If reverting, ignore the custom field and use the original delegate name
+        if revert:
+            new_name = (register.name or "").strip()
+        else:
+            new_name = (request.POST.get("certificate_name") or "").strip()
+
+        reason = (request.POST.get("reason") or "").strip()
+
+        if not new_name:
+            messages.error(request, "Please enter the name to show on the certificate.")
+        elif not reason:
+            messages.error(request, "Please provide a reason for this change.")
+        else:
+            old_display = register.certificate_display_name()
+
+            if new_name == old_display:
+                messages.info(request, "The certificate name is unchanged.")
+            else:
+                # Log every change with timestamp (changed_at) and user
+                CertificateNameChange.objects.create(
+                    register=register,
+                    old_name=old_display,
+                    new_name=new_name,
+                    reason=reason,
+                    changed_by=request.user if request.user.is_authenticated else None,
+                )
+
+                # If reverting, clear the override so we fall back to the original name
+                if revert:
+                    register.certificate_name = ""
+                else:
+                    register.certificate_name = new_name
+
+                register.save(update_fields=["certificate_name"])
+
+                messages.success(request, "Certificate name updated.")
+                return redirect(
+                    f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=certificates"
+                )
+
+
+    # GET (or POST with errors) – show form + history
+    changes = list(register.certificate_name_changes.all())
+
+    return render(request, "admin/certificate_name_edit.html", {
+        "title": "Edit certificate name",
+        "register": register,
+        "booking": booking,
+        "current_display_name": register.certificate_display_name(),
+        "changes": changes,
+        "back_url": f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=certificates",
+    })
 
 @admin_required
 @require_http_methods(["GET", "POST"])
@@ -1187,40 +1471,44 @@ def booking_day_registers(request, pk):
     })
 
 @admin_required
-@transaction.atomic
 def booking_day_registers(request, pk: int):
     """
-    Admin: view & edit all delegate registers for a given BookingDay (pk is DB int/UUID).
-    Uses a ModelFormSet so you can edit multiple rows at once.
+    Admin: read-only view of all delegate registers for a given BookingDay.
+
+    If requested with ?inline=1 or via AJAX (X-Requested-With: XMLHttpRequest),
+    return just the delegates table so it can be injected into the Registers tab
+    without reloading the whole page.
     """
     day = get_object_or_404(
         BookingDay.objects.select_related(
-            "booking__course_type", "booking__business", "booking__instructor"
+            "booking__course_type",
+            "booking__business",
+            "booking__instructor",
         ),
         pk=pk,
     )
 
-    FormSet = modelformset_factory(
-        DelegateRegister,
-        form=DelegateRegisterAdminForm,
-        extra=0,          # no blank rows by default
-        can_delete=False  # deletions go through a confirm screen
+    registers = (
+        DelegateRegister.objects.filter(booking_day=day)
+        .select_related("instructor")
+        .order_by("id")
     )
 
-    qs = DelegateRegister.objects.filter(booking_day=day).order_by("id")
+    # Inline / AJAX request → return only the table fragment
+    if (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or request.GET.get("inline") == "1"
+    ):
+        return render(
+            request,
+            "admin/partials/booking_day_registers_table.html",
+            {
+                "day": day,
+                "registers": registers,
+            },
+        )
 
-    if request.method == "POST":
-        formset = FormSet(request.POST, queryset=qs)
-        if formset.is_valid():
-            formset.save()
-            messages.success(request, "Registers saved.")
-            return redirect("admin_booking_day_registers", pk=day.pk)
-        else:
-            messages.error(request, "Please correct the errors below.")
-    else:
-        formset = FormSet(queryset=qs)
-
-    # Portable date formatting (works on Windows/macOS/Linux)
+    # Full-page fallback (e.g. if you ever browse to the URL directly)
     heading_bits = []
     if day.booking and day.booking.course_type:
         heading_bits.append(day.booking.course_type.name)
@@ -1238,7 +1526,7 @@ def booking_day_registers(request, pk: int):
         {
             "title": f"Registers — {heading}",
             "day": day,
-            "formset": formset,
+            "registers": registers,
             "back_url": (
                 reverse("admin_booking_edit", args=[day.booking_id])
                 if day.booking_id
@@ -1246,8 +1534,6 @@ def booking_day_registers(request, pk: int):
             ),
         },
     )
-
-
 
 @admin_required
 @require_http_methods(["GET", "POST"])

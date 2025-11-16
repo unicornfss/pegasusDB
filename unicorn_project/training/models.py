@@ -305,6 +305,18 @@ class DelegateRegister(models.Model):
     notes = models.TextField(blank=True)
     booking_day = models.ForeignKey("BookingDay", on_delete=models.PROTECT, related_name="registers")
     created_at = models.DateTimeField(auto_now_add=True)
+    certificate_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="If set, this name will be used on certificates instead of the original delegate name.",
+    )
+
+    def certificate_display_name(self) -> str:
+        """
+        Name that should appear on certificates.
+        Falls back to the original register name if no override set.
+        """
+        return (self.certificate_name or self.name or "").strip()
 
     def save(self, *args, **kwargs):
         # Proper case the name
@@ -325,6 +337,35 @@ class DelegateRegister(models.Model):
             self.HealthStatus.WILL_DISCUSS: "",  # we'll style inline orange
             self.HealthStatus.NOT_FIT: "bg-danger",
         }.get(self.health_status, "bg-secondary")
+
+class CertificateNameChange(models.Model):
+    """
+    Permanent audit log of any certificate-name overrides.
+    Does NOT change the underlying DelegateRegister.name, only the
+    certificate_name field and keeps each change + reason.
+    """
+    register = models.ForeignKey(
+        "DelegateRegister",
+        on_delete=models.CASCADE,
+        related_name="certificate_name_changes",
+    )
+    old_name = models.CharField(max_length=255)
+    new_name = models.CharField(max_length=255)
+    reason   = models.TextField()
+    changed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certificate_name_changes",
+    )
+    changed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-changed_at"]
+
+    def __str__(self):
+        return f"{self.old_name} → {self.new_name} ({self.changed_at:%Y-%m-%d})"
 
 class CourseCompetency(models.Model):
     course_type = models.ForeignKey(

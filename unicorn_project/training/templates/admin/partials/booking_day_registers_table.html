@@ -1,0 +1,30 @@
+{% comment %}Inline delegates table for the Registers tab{% endcomment %}
+
+{% if registers %}
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead>
+        <tr>
+          <th style="width:22%">Name</th>
+          <th style="width:14%">Date of birth</th>
+          <th style="width:20%">Job title</th>
+          <th style="width:16%">Employee ID</th>
+          <th style="width:14%">Instructor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for reg in registers %}
+          <tr>
+            <td>{{ reg.name }}</td>
+            <td>{{ reg.date_of_birth|date:"d/m/Y" }}</td>
+            <td>{{ reg.job_title }}</td>
+            <td>{{ reg.employee_id }}</td>
+            <td>{{ reg.instructor.name }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="text-muted mb-0">No delegates yet for this day.</p>
+{% endif %}

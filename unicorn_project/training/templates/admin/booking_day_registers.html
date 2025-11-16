@@ -9,14 +9,11 @@
   </a>
 </h3>
 
-<form method="post" class="card p-3">
-  {% csrf_token %}
-
-  {% if formset.non_form_errors %}
-    <div class="alert alert-danger">
-      {% for e in formset.non_form_errors %}<div>{{ e }}</div>{% endfor %}
-    </div>
-  {% endif %}
+<div class="card p-3">
+  <p class="text-muted mb-3">
+    Registers are read only, if changes are necessary the course must be unlocked for editing and the change must be carried out by the Instructor.
+    <p>If there is a typo that needs correcting for a certificate, this can be done in the "certificates" tab.</p>
+  </p>
 
   <div class="table-responsive">
     <table class="table table-sm align-middle">
@@ -27,54 +24,24 @@
           <th style="width:20%">Job title</th>
           <th style="width:16%">Employee ID</th>
           <th style="width:14%">Instructor</th>
-          <th style="width:70px"></th>
         </tr>
       </thead>
       <tbody>
-        {% for form in formset %}
+        {% for reg in registers %}
           <tr>
-            <td>
-              {{ form.name }}
-              {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </td>
-            <td>
-              {{ form.date_of_birth }}
-              {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </td>
-            <td>
-              {{ form.job_title }}
-              {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </td>
-            <td>
-              {{ form.employee_id }}
-              {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </td>
-            <td>
-              {{ form.instructor }}
-              {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </td>
-            <td class="text-end">
-              <a class="btn btn-outline-danger btn-sm"
-                 href="{% url 'admin_register_delete' form.instance.id %}">
-                <i class="bi bi-trash"></i>
-              </a>
-            </td>
+            <td>{{ reg.name }}</td>
+            <td>{{ reg.date_of_birth|date:"d/m/Y" }}</td>
+            <td>{{ reg.job_title }}</td>
+            <td>{{ reg.employee_id }}</td>
+            <td>{{ reg.instructor.name }}</td>
           </tr>
-          {{ form.id }} {# management: keep the hidden id in the form #}
         {% empty %}
           <tr>
-            <td colspan="7" class="text-muted">No delegates yet for this day.</td>
+            <td colspan="5" class="text-muted">No delegates yet for this day.</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-
-  {{ formset.management_form }}
-
-  <div class="mt-3 d-flex gap-2">
-    <button class="btn btn-primary"><i class="bi bi-check2"></i> Save changes</button>
-    <a class="btn btn-secondary" href="{{ back_url }}"><i class="bi bi-x-circle"></i> Back without saving</a>
-  </div>
-</form>
+</div>
 {% endblock %}

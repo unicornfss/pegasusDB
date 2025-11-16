@@ -1998,9 +1998,12 @@ def instructor_assessment_pdf(request, pk):
         Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
         pk=pk
     )
-    if not instr or booking.instructor_id != instr.id:
+
+    # Allow: the assigned instructor OR any staff user (admin)
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
+
 
     # Delegates & competencies
     # Unique delegates (one per person across the booking)
@@ -2550,8 +2553,10 @@ def instructor_feedback_pdf_all(request, booking_id):
         Booking.objects.select_related("course_type", "business", "instructor"),
         pk=booking_id,
     )
-    if not instr or booking.instructor_id != instr.id:
+    # Allow: assigned instructor OR any staff user (admin)
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
         return HttpResponseForbidden("You do not have access to this booking.")
+
 
     # Date window = all booking days (fallback to booking.course_date)
     day_dates = list(
@@ -2764,8 +2769,10 @@ def instructor_feedback_pdf_summary(request, booking_id):
         Booking.objects.select_related("course_type", "business", "instructor"),
         pk=booking_id,
     )
-    if not instr or booking.instructor_id != instr.id:
+    # Allow: assigned instructor OR any staff user (admin)
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
         return HttpResponseForbidden("You do not have access to this booking.")
+
 
     # Date window
     day_dates = list(
