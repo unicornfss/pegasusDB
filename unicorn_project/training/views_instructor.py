@@ -2440,15 +2440,36 @@ def instructor_course_summary_by_ref_pdf(request, ref):
     # IMPORTANT: do not render here. Call the UUID view so the DEBUG→HTML logic is used.
     return instructor_course_summary_pdf(request, booking.pk)
 
+
+from django.core.exceptions import PermissionDenied
+from django.contrib.auth.decorators import login_required
 @login_required
 def invoice_preview(request, pk):
     booking = get_object_or_404(
-        Booking.objects.select_related("course_type","business","instructor","training_location"),
+        Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
         pk=pk,
     )
+
     instr = getattr(request.user, "instructor", None)
-    if not instr or instr.id != booking.instructor_id:
-        return HttpResponseForbidden("Not allowed.")
+
+    # Admins (superuser or in "admin" group) are allowed regardless of instructor
+    user_is_admin = (
+        getattr(request.user, "is_superuser", False)
+        or request.user.groups.filter(name__iexact="admin").exists()
+    )
+
+    if not user_is_admin:
+        # Non-admins must be the booking instructor
+        user_is_admin = (
+            request.user.is_staff
+            or request.user.is_superuser
+            or request.user.groups.filter(name__iexact="admin").exists()
+        )
+
+        if not user_is_admin:
+            if not instr or instr.id != booking.instructor_id:
+                raise PermissionDenied("Not allowed.")
+
 
     # ---- Build context for the HTML invoice template ----
     inv = getattr(booking, "invoice", None) or Invoice.objects.create(

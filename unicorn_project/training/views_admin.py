@@ -2,11 +2,12 @@ import json
 import math
 from datetime import timedelta, datetime, time, time as dtime
 from collections import defaultdict
+from decimal import Decimal
 
 from django import forms
 from django.conf import settings
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import user_passes_test, login_required
 from django.contrib.auth.models import User, Group
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -29,7 +30,7 @@ from .models import (
     Business, CourseType, Instructor, Booking, TrainingLocation,
     StaffProfile, BookingDay, DelegateRegister, CourseCompetency,
     Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer, CompetencyAssessment,
-    FeedbackResponse, CertificateNameChange
+    FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem
 )
 from .forms import (
     BusinessForm, CourseTypeForm, TrainingLocationForm,
@@ -37,8 +38,9 @@ from .forms import (
     CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm,
 )
 
-from .views_instructor import _feedback_queryset_for_booking
+from .views_instructor import _feedback_queryset_for_booking, list_course_receipts_drive, render_invoice_pdf_via_preview
 from .utils.certificates import build_certificates_pdf_for_booking, _unique_delegates_for_booking
+from .google_oauth import get_drive_service
 
 
 
@@ -649,7 +651,66 @@ def booking_list(request):
     return render(request, "admin/bookings_list.html", ctx)
 
 
+def _admin_invoice_context(booking):
+    inv = getattr(booking, "invoice", None)
 
+    if inv is None:
+        return {
+            "admin_invoice": None,
+            "admin_invoice_base_fee": None,
+            "admin_invoice_items": [],
+            "admin_invoice_total": None,
+            "admin_invoice_status": "draft",
+            "admin_invoice_receipts": [],
+        }
+
+    status = (inv.status or "draft").lower()
+
+    base_fee = Decimal(str(booking.instructor_fee or 0))
+
+    items_qs = inv.items.all().order_by("id")
+    extra_total = sum((it.amount or Decimal("0")) for it in items_qs)
+    total = base_fee + extra_total
+
+    # extras only – no base row here
+    items = [
+        {
+            "description": it.description or "",
+            "amount": f"{(it.amount or Decimal('0')):.2f}",
+        }
+        for it in items_qs
+    ]
+
+    receipts = []
+    try:
+        if getattr(settings, "GOOGLE_DRIVE_ROOT_RECEIPTS", None):
+            svc = get_drive_service(
+                settings.GOOGLE_OAUTH_CLIENT_SECRET,
+                settings.GOOGLE_OAUTH_TOKEN,
+            )
+            files = list_course_receipts_drive(
+                svc,
+                settings.GOOGLE_DRIVE_ROOT_RECEIPTS,
+                getattr(booking, "course_reference", "") or "",
+            )
+            receipts = [
+                {
+                    "name": f.get("name") or "receipt",
+                    "url": f.get("webViewLink") or "",
+                }
+                for f in files
+            ]
+    except Exception:
+        receipts = []
+
+    return {
+        "admin_invoice": inv,
+        "admin_invoice_base_fee": f"{base_fee:.2f}",
+        "admin_invoice_items": items,
+        "admin_invoice_total": f"{total:.2f}",
+        "admin_invoice_status": status,
+        "admin_invoice_receipts": receipts,
+    }
 
 @admin_required
 @transaction.atomic
@@ -666,6 +727,27 @@ def booking_form(request, pk=None):
         if form.is_valid():
             was_new = obj is None
             booking = form.save()
+
+            inv_status = (request.POST.get("invoice_status_admin") or "").strip().lower()
+            admin_comment = (request.POST.get("invoice_admin_comment") or "").strip()
+
+            inv = getattr(booking, "invoice", None)
+            if inv:
+                fields_to_update = []
+
+                # status – only allow these admin options
+                if inv_status in {"paid", "awaiting_review", "rejected"}:
+                    if (inv.status or "").lower() != inv_status:
+                        inv.status = inv_status
+                        fields_to_update.append("status")
+
+                # admin comment
+                if admin_comment != (inv.admin_comment or ""):
+                    inv.admin_comment = admin_comment
+                    fields_to_update.append("admin_comment")
+
+                if fields_to_update:
+                    inv.save(update_fields=fields_to_update)
 
             # Accept either key; template writes to both
             raw_days = request.POST.get("booking_days") or request.POST.get("days_json") or "[]"
@@ -918,7 +1000,8 @@ def booking_form(request, pk=None):
     if active_tab == "exams" and not has_exam:
         active_tab = "registers"
 
-    return render(request, "admin/form_booking.html", {
+    # ----------------- BUILD CONTEXT -----------------
+    ctx = {
         "title": ("Edit Booking" if obj else "New Booking"),
         "form": form,
         "booking": obj,
@@ -949,7 +1032,31 @@ def booking_form(request, pk=None):
         "has_exam": has_exam,
         # certificates
         "cert_delegates": cert_delegates,
-    })
+    }
+
+    # ---- NEW: attach admin invoice context if there is a booking ----
+    if obj and obj.pk:
+        ctx.update(_admin_invoice_context(obj))
+
+    return render(request, "admin/form_booking.html", ctx)
+
+@login_required
+@user_passes_test(lambda u: u.is_staff)
+def admin_invoice_pdf(request, pk):
+    """
+    Thin wrapper: send admin users to the existing instructor invoice
+    preview so we reuse the exact same PDF builder.
+    """
+    # Optional: you can still check an invoice exists and bounce back nicely
+    booking = get_object_or_404(Booking, pk=pk)
+    if not getattr(booking, "invoice", None):
+        messages.error(request, "No invoice exists for this booking.")
+        return redirect("admin_booking_edit", pk=booking.pk)
+
+    # Reuse the instructor PDF view (this already generates the nice invoice)
+    return redirect("instructor_invoice_preview", pk=pk)
+
+
 
 @admin_required
 def admin_booking_certificates_selected(request, pk):

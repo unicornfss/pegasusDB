@@ -3,6 +3,7 @@ from django.urls import path
 from django.contrib.auth import views as auth_views
 
 from . import views
+from . import views_admin
 from . import views_admin as app_admin
 from . import views_instructor as instv
 from . import views_instructor
@@ -97,6 +98,7 @@ urlpatterns = [
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
     path("app/admin/bookings/new/", app_admin.booking_form, name="admin_booking_new"),
     path("app/admin/bookings/<uuid:pk>/", app_admin.booking_form, name="admin_booking_edit"),
+    path("admin/bookings/<uuid:pk>/invoice-pdf/", views_admin.admin_invoice_pdf, name="admin_invoice_pdf"),
     path("app/admin/bookings/<uuid:pk>/certificates/", app_admin.admin_booking_certificates_selected, name="admin_booking_certificates_selected"),
     path("app/admin/registers/<int:reg_pk>/certificate-name/", app_admin.admin_certificate_name_edit, name="admin_certificate_name_edit"),
 
@@ -105,6 +107,8 @@ urlpatterns = [
     path("app/admin/bookings/<uuid:pk>/cancel/", app_admin.booking_cancel, name="admin_booking_cancel"),
     path("app/admin/bookings/<uuid:pk>/reinstate/", app_admin.booking_reinstate, name="admin_booking_reinstate"),
     path("app/admin/bookings/<uuid:pk>/unlock/", app_admin.booking_unlock, name="admin_booking_unlock"),
+    path('admin/invoice/<uuid:pk>/pdf/', views_admin.admin_invoice_pdf, name='admin_invoice_pdf'),
+
 
     # Users (admin) – ints
     path("app/admin/users/", app_admin.admin_user_list, name="admin_user_list"),

@@ -509,6 +509,9 @@ class Invoice(models.Model):
     sort_code = models.CharField(max_length=20, blank=True)
     account_number = models.CharField(max_length=30, blank=True)
 
+    admin_comment = models.TextField(blank=True, null=True)
+    staff_comment = models.TextField(blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -582,13 +582,201 @@
     {% endif %}
   </div>
 
-  <!-- INVOICE TAB (editable later) -->
-  <div class="tab-pane fade {% if active_tab == 'invoice' %}show active{% endif %}"
-       id="tab-pane-invoice"
-       role="tabpanel" aria-labelledby="tab-invoice">
-    <p class="text-muted mb-0">Invoice tab (editable) – content to be defined.</p>
-  </div>
-</div>
+      <!-- INVOICE TAB (admin read-only view + status control) -->
+    <div class="tab-pane fade {% if active_tab == 'invoice' %}show active{% endif %}"
+         id="tab-pane-invoice"
+         role="tabpanel" aria-labelledby="tab-invoice">
+
+      {% if not booking %}
+        <p class="text-muted mb-0">Save the booking before viewing the invoice.</p>
+      {% else %}
+        {% with inv=admin_invoice status=admin_invoice_status|default:"" %}
+          {# Treat draft + awaiting_review as "not visible" to admin #}
+          {% if not inv or status == "" or status == "draft" or status == "awaiting_review" %}
+            <div class="alert alert-info mb-3">
+              Invoice has not yet been submitted.
+            </div>
+          {% else %}
+            <!-- Submitted invoice summary (read-only) -->
+            <div class="card mb-3">
+              <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Submitted invoice</span>
+                <div class="d-flex align-items-center gap-2">
+                  <span class="badge bg-secondary">
+                    {% if status == "awaiting_review" %}
+                      Send back to instructor
+                    {% else %}
+                      {{ status|capfirst }}
+                    {% endif %}
+                  </span>
+                  {# Download invoice PDF #}
+                  <a class="btn btn-outline-secondary"
+                    href="{% url 'instructor_invoice_preview' booking.pk %}"
+                    target="_blank" rel="noopener">
+                      <i class="bi bi-file-earmark-pdf"></i> Download Invoice (PDF)
+                  </a>
+
+                </div>
+              </div>
+              <div class="card-body">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <div class="text-muted small">Instructor</div>
+                    <div>{{ inv.instructor.name }}</div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="text-muted small">Invoice date</div>
+                    <div>
+                      {% if inv.invoice_date %}
+                        {{ inv.invoice_date|date:"d/m/Y" }}
+                      {% else %}
+                        —
+                      {% endif %}
+                    </div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="text-muted small">Instructor reference</div>
+                    <div>{{ inv.instructor_ref|default:"—" }}</div>
+                  </div>
+                </div>
+
+                <hr>
+
+                <div class="text-muted small mb-1">Line items</div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle mb-2">
+                    <thead>
+                      <tr>
+                        <th style="width:60%">Description</th>
+                        <th style="width:25%" class="text-end">Amount (£)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <!-- Base fee row -->
+                      <tr class="table-light">
+                        <td><span class="fw-semibold">Instructor fee</span></td>
+                        <td class="text-end">
+                          £{{ admin_invoice_base_fee|default_if_none:0|floatformat:2 }}
+                        </td>
+                      </tr>
+
+                      <!-- Extra items -->
+                      {% for it in admin_invoice_items %}
+                        <tr>
+                          <td>{{ it.description }}</td>
+                          <td class="text-end">
+                            £{{ it.amount|default_if_none:0|floatformat:2 }}
+                          </td>
+                        </tr>
+                      {% empty %}
+                        <tr>
+                          <td colspan="2" class="text-muted text-center">
+                            No additional items.
+                          </td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th class="text-end">Total</th>
+                        <th class="text-end">
+                          £{{ admin_invoice_total|default_if_none:0|floatformat:2 }}
+                        </th>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <hr>
+
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <div class="text-muted small">Account name</div>
+                    <div>{{ inv.account_name|default:"—" }}</div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="text-muted small">Sort code</div>
+                    <div>{{ inv.sort_code|default:"—" }}</div>
+                  </div>
+                  <div class="col-md-3">
+                    <div class="text-muted small">Account number</div>
+                    <div>{{ inv.account_number|default:"—" }}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Receipts (read-only links, downloadable) -->
+            <div class="card mb-3">
+              <div class="card-header">Receipts</div>
+              <div class="card-body">
+                {% if admin_invoice_receipts %}
+                  <ul class="small mb-0">
+                    {% for f in admin_invoice_receipts %}
+                      <li>
+                        <a href="{{ f.url }}" target="_blank" rel="noopener" download>
+                          {{ f.name }}
+                        </a>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-muted mb-0">No receipts have been uploaded for this invoice.</p>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+
+                  {% if inv and status != "awaiting_review" %}
+          <!-- Admin-controlled status dropdown -->
+          <div class="mt-3">
+            <label class="form-label" for="id_invoice_status_admin">
+              Admin invoice status
+            </label>
+            <select name="invoice_status_admin"
+                    id="id_invoice_status_admin"
+                    class="form-select"
+                    style="max-width:260px;">
+              <option value="">— Leave unchanged —</option>
+              <option value="awaiting_review"
+                      {% if status == "awaiting_review" %}selected{% endif %}>
+                Send back to instructor
+              </option>
+              <option value="paid"
+                      {% if status == "paid" %}selected{% endif %}>
+                Paid
+              </option>
+              <option value="rejected"
+                      {% if status == "rejected" %}selected{% endif %}>
+                Rejected
+              </option>
+            </select>
+            <div class="form-text">
+              Change the status here, then use “Save…” at the bottom of the page.
+            </div>
+          </div>
+
+          <!-- Admin comment (internal) -->
+          <div class="mt-3">
+            <label class="form-label" for="id_invoice_admin_comment">
+              Admin comment (internal)
+            </label>
+            <textarea name="invoice_admin_comment"
+                      id="id_invoice_admin_comment"
+                      class="form-control"
+                      rows="3"
+                      placeholder="Notes about this invoice; not emailed to the instructor.">{{ inv.admin_comment|default_if_none:"" }}</textarea>
+          </div>
+        {% endif %}
+
+        {% endwith %}
+      {% endif %}
+    </div>
+
+
+  
+</div>  
+<!-- end tab-content -->
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
