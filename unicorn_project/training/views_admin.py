@@ -759,59 +759,75 @@ def booking_form(request, pk=None):
                 days_payload = []
 
             if days_payload:
-                # If delegates already exist, we must NOT delete booking days
-                # because DelegateRegister.booking_day is PROTECT.
-                if DelegateRegister.objects.filter(booking_day__booking=booking).exists():
-                    messages.error(
-                        request,
-                        "Cannot change course days because delegates are already registered. "
-                        "Remove delegates or their registers before altering course dates.",
-                    )
-                    if "save_return" in request.POST:
-                        return redirect("admin_booking_list")
-                    return redirect("admin_booking_edit", pk=booking.pk)
+                # Normalise the posted days (ignore completely empty rows)
+                def _normalise_rows(rows):
+                    out = []
+                    for r in rows:
+                        day_date = (r.get("day_date") or "").strip()
+                        if not day_date:
+                            continue
+                        start_t = (r.get("start_time") or "").strip()
+                        end_t   = (r.get("end_time") or "").strip()
+                        out.append((day_date, start_t, end_t))
+                    return out
 
-                # Safe to replace all BookingDay rows with what came from the inline table
-                booking.days.all().delete()
+                posted_rows = _normalise_rows(days_payload)
+                has_delegates = DelegateRegister.objects.filter(
+                    booking_day__booking=booking
+                ).exists()
 
-                total_days = float(getattr(booking.course_type, "duration_days", 1.0) or 1.0)
-                rows = max(1, math.ceil(total_days))
-
-                for i, row in enumerate(days_payload, start=1):
-                    day_date_str = (row.get("day_date") or "").strip()
-                    if not day_date_str:
-                        continue
-
-                    start_t = _parse_time_or_none(row.get("start_time")) or booking.start_time
-                    end_t   = _parse_time_or_none(row.get("end_time"))
-
-                    if not end_t and start_t:
-                        end_t = _add_hours_to_time(
-                            start_t,
-                            _hours_for_day_index(i, total_days, rows),
+                if has_delegates:
+                    # Compare against existing BookingDay rows
+                    existing_rows = [
+                        (
+                            d.date.isoformat(),
+                            d.start_time.strftime("%H:%M") if d.start_time else "",
+                            d.end_time.strftime("%H:%M") if d.end_time else "",
                         )
+                        for d in booking.days.all().order_by("date", "start_time", "end_time")
+                    ]
 
-                    BookingDay.objects.create(
-                        booking=booking,
-                        date=datetime.fromisoformat(day_date_str).date(),
-                        start_time=start_t,
-                        end_time=end_t,
-                    )
+                    if posted_rows != existing_rows:
+                        # They really are trying to change the dates/times – block it
+                        messages.error(
+                            request,
+                            "Cannot change course days because delegates are already registered. "
+                            "Remove delegates or their registers before altering course dates.",
+                        )
+                        if "save_return" in request.POST:
+                            return redirect("admin_booking_list")
+                        return redirect("admin_booking_edit", pk=booking.pk)
+                    # If posted days are identical to existing ones, do nothing
+                    # (no change to BookingDay rows).
 
-            else:
-                # Fallback: create rows from duration when creating
-                if was_new and booking.course_type_id and booking.course_date:
+                else:
+                    # No delegates -> safe to replace all BookingDay rows
+                    booking.days.all().delete()
+
                     total_days = float(getattr(booking.course_type, "duration_days", 1.0) or 1.0)
                     rows = max(1, math.ceil(total_days))
-                    for i in range(1, rows + 1):
-                        s = booking.start_time
-                        e = _add_hours_to_time(s, _hours_for_day_index(i, total_days, rows)) if s else None
+
+                    for i, row in enumerate(days_payload, start=1):
+                        day_date_str = (row.get("day_date") or "").strip()
+                        if not day_date_str:
+                            continue
+
+                        start_t = _parse_time_or_none(row.get("start_time")) or booking.start_time
+                        end_t   = _parse_time_or_none(row.get("end_time"))
+
+                        if not end_t and start_t:
+                            end_t = _add_hours_to_time(
+                                start_t,
+                                _hours_for_day_index(i, total_days, rows),
+                            )
+
                         BookingDay.objects.create(
                             booking=booking,
-                            date=booking.course_date + timedelta(days=i - 1),
-                            start_time=s,
-                            end_time=e,
+                            date=datetime.fromisoformat(day_date_str).date(),
+                            start_time=start_t,
+                            end_time=end_t,
                         )
+
 
             messages.success(request, "Booking saved.")
             if "save_return" in request.POST:

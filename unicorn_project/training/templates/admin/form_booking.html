@@ -727,34 +727,36 @@
             </div>
           {% endif %}
 
-                  {% if inv and status != "awaiting_review" %}
-          <!-- Admin-controlled status dropdown -->
-          <div class="mt-3">
-            <label class="form-label" for="id_invoice_status_admin">
-              Admin invoice status
-            </label>
-            <select name="invoice_status_admin"
-                    id="id_invoice_status_admin"
-                    class="form-select"
-                    style="max-width:260px;">
-              <option value="">— Leave unchanged —</option>
-              <option value="awaiting_review"
-                      {% if status == "awaiting_review" %}selected{% endif %}>
-                Send back to instructor
-              </option>
-              <option value="paid"
-                      {% if status == "paid" %}selected{% endif %}>
-                Paid
-              </option>
-              <option value="rejected"
-                      {% if status == "rejected" %}selected{% endif %}>
-                Rejected
-              </option>
-            </select>
-            <div class="form-text">
-              Change the status here, then use “Save…” at the bottom of the page.
-            </div>
-          </div>
+          {% if inv and status == "sent" %}
+  <!-- Admin-controlled status dropdown -->
+  <div class="mt-3">
+    <label class="form-label" for="id_invoice_status_admin">
+      Admin invoice status
+    </label>
+    <select name="invoice_status_admin"
+            id="id_invoice_status_admin"
+            class="form-select"
+            style="max-width:260px;">
+      <option value="">— Leave unchanged —</option>
+      <option value="awaiting_review"
+              {% if status == "awaiting_review" %}selected{% endif %}>
+        Send back to instructor
+      </option>
+      <option value="paid"
+              {% if status == "paid" %}selected{% endif %}>
+        Paid
+      </option>
+      <option value="rejected"
+              {% if status == "rejected" %}selected{% endif %}>
+        Rejected
+      </option>
+    </select>
+    <div class="form-text">
+      Changing this will affect who can edit or view the invoice. Use one of the “Save…” buttons below to apply.
+    </div>
+  </div>
+{% endif %}
+
 
           <!-- Admin comment (internal) -->
           <div class="mt-3">
@@ -767,8 +769,6 @@
                       rows="3"
                       placeholder="Notes about this invoice; not emailed to the instructor.">{{ inv.admin_comment|default_if_none:"" }}</textarea>
           </div>
-        {% endif %}
-
         {% endwith %}
       {% endif %}
     </div>
@@ -1238,6 +1238,61 @@ document.addEventListener('DOMContentLoaded', function () {
     window.open(url, '_blank');
   });
 });
+</script>
+<script>
+(function () {
+  const form   = document.getElementById('booking-form');
+  const select = document.getElementById('id_invoice_status_admin');
+
+  // If there is no dropdown (status not 'sent'), or no form, do nothing
+  if (!form || !select) return;
+
+  // Remember the original value so we only warn when it actually changes
+  let originalValue = select.value || "";
+
+  form.addEventListener('submit', function (ev) {
+    const newVal = (select.value || "").trim();
+
+    // No selection, or no change -> no warning
+    if (!newVal || newVal === originalValue) {
+      return;
+    }
+
+    let msg = "";
+    if (newVal === "paid") {
+      msg =
+        "Mark this invoice as PAID?\n\n" +
+        "- The instructor will no longer be able to edit the invoice.\n" +
+        "- Admin users will not be able to change the invoice via this screen.\n" +
+        "- Only a superuser will be able to override this status.";
+    } else if (newVal === "awaiting_review") {
+      msg =
+        "Send this invoice back to the instructor?\n\n" +
+        "- The instructor will be able to edit the invoice and receipts again.\n" +
+        "- While it is in this state, admins will not be able to view or update the invoice.";
+    } else if (newVal === "rejected") {
+      msg =
+        "Mark this invoice as REJECTED?\n\n" +
+        "- The invoice will be locked for both the instructor and admin users.\n" +
+        "- Only a superuser will be able to override this status.";
+    }
+
+    if (!msg) {
+      return; // some unexpected value; don't interfere
+    }
+
+    // Show the confirmation dialog
+    if (!window.confirm(msg)) {
+      // Cancel submit and revert dropdown to previous value
+      ev.preventDefault();
+      select.value = originalValue;
+      return;
+    }
+
+    // User confirmed: remember the new value so we don't re-warn
+    originalValue = newVal;
+  });
+})();
 </script>
 
 {% endblock %}
