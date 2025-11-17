@@ -1,129 +1,215 @@
-{% extends "base.html" %}
-{% block title %}{{ title }}{% endblock %}
+  {% extends "base.html" %}
+  {% block title %}{{ title }}{% endblock %}
 
-{% block content %}
-<h3 class="mb-3 d-flex align-items-center gap-2">
-  {{ title }}
-  <a href="{{ create_url }}" class="btn btn-primary btn-sm ms-auto">
-    <i class="bi bi-plus-lg"></i> Add
-  </a>
-</h3>
+  {% block content %}
+  <h3 class="mb-3 d-flex align-items-center gap-2">
+    {{ title }}
+    <a href="{{ create_url }}" class="btn btn-primary btn-sm ms-auto">
+      <i class="bi bi-plus-lg"></i> Add
+    </a>
+  </h3>
 
-<form method="get" class="card p-3 mb-3">
-  <div class="row g-2 align-items-end">
-    <div class="col-md-3">
-      <label class="form-label">Search</label>
-      <input type="text" name="q" value="{{ filter_initial.q }}" class="form-control" placeholder="Ref, business, course…">
+  <form method="get" class="card p-3 mb-3">
+    <div class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Search</label>
+        <input type="text" name="q" value="{{ filter_initial.q }}" class="form-control" placeholder="Ref, business, course…">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Status</label>
+        <select name="status" class="form-select">
+          {% for val,label in status_choices %}
+            <option value="{{ val }}" {% if filter_initial.status == val %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Business</label>
+        <select name="business" class="form-select">
+          <option value="">All businesses</option>
+          {% for b in businesses %}
+            <option value="{{ b.id }}" {% if filter_initial.business == b.id|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Course type</label>
+        <select name="course_type" class="form-select">
+          <option value="">All courses</option>
+          {% for c in course_types %}
+            <option value="{{ c.id }}" {% if filter_initial.course_type == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Instructor</label>
+        <select name="instructor" class="form-select">
+          <option value="">All instructors</option>
+          {% for i in instructors %}
+            <option value="{{ i.id }}" {% if filter_initial.instructor == i.id|stringformat:"s" %}selected{% endif %}>{{ i.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">From</label>
+        <input type="date" name="date_from" value="{{ filter_initial.date_from }}" class="form-control">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">To</label>
+        <input type="date" name="date_to" value="{{ filter_initial.date_to }}" class="form-control">
+      </div>
+      <div class="col-md-12 d-flex gap-2 mt-2">
+        <button class="btn btn-primary"><i class="bi bi-search"></i> Apply</button>
+        <a class="btn btn-secondary" href="{% url 'admin_booking_list' %}"><i class="bi bi-x-circle"></i> Clear</a>
+      </div>
     </div>
-    <div class="col-md-2">
-      <label class="form-label">Status</label>
-      <select name="status" class="form-select">
-        {% for val,label in status_choices %}
-          <option value="{{ val }}" {% if filter_initial.status == val %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Business</label>
-      <select name="business" class="form-select">
-        <option value="">All businesses</option>
-        {% for b in businesses %}
-          <option value="{{ b.id }}" {% if filter_initial.business == b.id|stringformat:"s" %}selected{% endif %}>{{ b.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Course type</label>
-      <select name="course_type" class="form-select">
-        <option value="">All courses</option>
-        {% for c in course_types %}
-          <option value="{{ c.id }}" {% if filter_initial.course_type == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">Instructor</label>
-      <select name="instructor" class="form-select">
-        <option value="">All instructors</option>
-        {% for i in instructors %}
-          <option value="{{ i.id }}" {% if filter_initial.instructor == i.id|stringformat:"s" %}selected{% endif %}>{{ i.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">From</label>
-      <input type="date" name="date_from" value="{{ filter_initial.date_from }}" class="form-control">
-    </div>
-    <div class="col-md-2">
-      <label class="form-label">To</label>
-      <input type="date" name="date_to" value="{{ filter_initial.date_to }}" class="form-control">
-    </div>
-    <div class="col-md-12 d-flex gap-2 mt-2">
-      <button class="btn btn-primary"><i class="bi bi-search"></i> Apply</button>
-      <a class="btn btn-secondary" href="{% url 'admin_booking_list' %}"><i class="bi bi-x-circle"></i> Clear</a>
-    </div>
-  </div>
-</form>
+  </form>
 
-<div class="table-responsive">
-  <table class="table align-middle">
-    <thead>
-      <tr>
-        {% for h in headers %}
-          <th>
-            <a href="{{ h.url }}" class="text-decoration-none">
-              {{ h.title }}
-              {% if h.active %}
-                {% if h.dir == 'asc' %}
-                  <i class="bi bi-caret-up-fill"></i>
-                {% else %}
-                  <i class="bi bi-caret-down-fill"></i>
+  <div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+      <thead>
+        <tr>
+          {% for h in headers %}
+            <th>
+              <a href="{{ h.url }}" class="text-decoration-none">
+                {{ h.title }}
+                {% if h.active %}
+                  {% if h.dir == 'asc' %}
+                    <i class="bi bi-caret-up-fill"></i>
+                  {% else %}
+                    <i class="bi bi-caret-down-fill"></i>
+                  {% endif %}
                 {% endif %}
-              {% endif %}
-            </a>
-          </th>
-        {% endfor %}
-        <th style="width:70px;"></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row in rows %}
-        <tr>
-          <td>{{ row.date }}</td>
-          <td>{{ row.course }}</td>
-          <td>{{ row.business }}</td>
-          <td>
-            <span class="{{ row.status.cls }}" {% if row.status.style %}style="{{ row.status.style }}"{% endif %}>
-              {{ row.status.label }}
-            </span>
-          </td>
-          <td>{{ row.instructor }}</td>
-          <td>{{ row.ref }}</td>
-          <td class="text-end">
-            <a class="btn btn-light btn-sm" href="{{ row.edit_url }}" title="Edit"><i class="bi bi-pencil"></i></a>
-          </td>
+              </a>
+            </th>
+          {% endfor %}
+          <th style="width:70px;"></th>
         </tr>
-      {% empty %}
-        <tr>
-          <td colspan="{{ headers|length|add:'1' }}" class="text-muted">No bookings found.</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+      </thead>
+      <tbody>
+  {% for row in rows %}
+    <tr class="booking-row" data-href="{{ row.edit_url }}">
+      <!-- 1: Date -->
+      <td>{{ row.date }}</td>
 
-<!-- Simple pagination -->
-{% if page_info %}
-  <div class="d-flex justify-content-between align-items-center">
-    <div class="text-muted small">{{ page_info }}</div>
-    <div class="btn-group">
-      {% if page_prev_url %}
-        <a class="btn btn-outline-secondary btn-sm" href="{{ page_prev_url }}">← Previous</a>
-      {% endif %}
-      {% if page_next_url %}
-        <a class="btn btn-outline-secondary btn-sm" href="{{ page_next_url }}">Next →</a>
-      {% endif %}
-    </div>
+      <!-- 2: Course type -->
+      <td>{{ row.course }}</td>
+
+      <!-- 3: Business -->
+      <td>{{ row.business }}</td>
+
+      <!-- 4: Instructor -->
+      <td>{{ row.instructor }}</td>
+
+      <!-- 5: Course status -->
+      <td>
+        <span class="{{ row.status.cls }}"
+              {% if row.status.style %}style="{{ row.status.style }}"{% endif %}>
+          {{ row.status.label }}
+        </span>
+      </td>
+
+      <!-- 6: Ref -->
+      <td>{{ row.ref }}</td>
+
+      <!-- 7: Invoice status -->
+      <td>
+        {% if row.invoice_status %}
+          <span class="{{ row.invoice_status.cls }}"
+                {% if row.invoice_status.style %}style="{{ row.invoice_status.style }}"{% endif %}>
+            {{ row.invoice_status.label }}
+          </span>
+        {% else %}
+          <span class="text-muted">—</span>
+        {% endif %}
+      </td>
+
+      <!-- Actions -->
+      <td class="text-end">
+        <a class="btn btn-light btn-sm" href="{{ row.edit_url }}" title="Edit">
+          <i class="bi bi-pencil"></i>
+        </a>
+      </td>
+    </tr>
+  {% empty %}
+    <tr>
+      <td colspan="{{ headers|length|add:'1' }}" class="text-muted">
+        No bookings found.
+      </td>
+    </tr>
+  {% endfor %}
+</tbody>
+
+
+
+    </table>
   </div>
-{% endif %}
-{% endblock %}
+
+  <!-- Simple pagination -->
+  {% if page_info %}
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="text-muted small">{{ page_info }}</div>
+      <div class="btn-group">
+        {% if page_prev_url %}
+          <a class="btn btn-outline-secondary btn-sm" href="{{ page_prev_url }}">← Previous</a>
+        {% endif %}
+        {% if page_next_url %}
+          <a class="btn btn-outline-secondary btn-sm" href="{{ page_next_url }}">Next →</a>
+        {% endif %}
+      </div>
+    </div>
+
+  {% endif %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('tr.booking-row[data-href]').forEach(function (row) {
+      row.addEventListener('click', function (e) {
+        // If you clicked a button or link, let that do its own thing
+        if (e.target.closest('a, button')) {
+          return;
+        }
+        const href = row.getAttribute('data-href');
+        if (href) {
+          window.location = href;
+        }
+      });
+    });
+  });
+  </script>
+
+<style>
+  /* Make clickable rows show a pointer cursor */
+  tr.booking-row[data-href] {
+    cursor: pointer;
+  }
+
+  /* Odd rows – change Bootstrap’s table vars */
+  table.table.table-striped tbody tr.booking-row:nth-child(odd) {
+    --bs-table-bg: #f2f4f8;       /* light grey/blue */
+    --bs-table-color: #000000;    /* black text */
+  }
+
+  /* Even rows */
+  table.table.table-striped tbody tr.booking-row:nth-child(even) {
+    --bs-table-bg: #ffffff;       /* white */
+    --bs-table-color: #000000;
+  }
+
+  /* Strong hover colour */
+  table.table.table-striped.table-hover tbody tr.booking-row:hover {
+    --bs-table-bg: #ffe082;       /* noticeable yellow */
+    --bs-table-color: #000000;
+  }
+
+  /* Optional: row separators */
+  table.table.table-striped tbody tr.booking-row > td,
+  table.table.table-striped tbody tr.booking-row > th {
+    border-bottom: 1px solid #d0d7e2;
+  }
+</style>
+
+
+
+
+  {% endblock %}

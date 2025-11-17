@@ -498,8 +498,8 @@ def booking_list(request):
 
 
     qs = (Booking.objects
-          .select_related("business", "training_location", "course_type", "instructor")
-          .all())
+      .select_related("business", "training_location", "course_type", "instructor", "invoice")
+      .all())
 
     # ----- filters
     q           = (request.GET.get("q") or "").strip()
@@ -540,6 +540,7 @@ def booking_list(request):
         "status":     "status",
         "instructor": "instructor__name",
         "ref":        "course_reference",
+        "invoice":    "invoice__status",
     }
     order_field = allowed.get(sort_key, "course_date")
     if sort_dir == "desc":
@@ -566,23 +567,52 @@ def booking_list(request):
         "awaiting_closure": {"cls": "badge", "style": "background-color:#6f42c1;color:#fff"},  # purple
     }
 
+    invoice_status_style = {
+        "draft":            {"cls": "badge bg-secondary"},
+        "sent":             {"cls": "badge bg-primary"},
+        "viewed":           {"cls": "badge bg-info text-dark"},
+        "paid":             {"cls": "badge bg-success"},
+        "awaiting_review":  {"cls": "badge bg-warning text-dark"},
+        "rejected":         {"cls": "badge bg-danger"},
+    }
+
     # ----- rows for the table
     rows = []
     for b in page_obj.object_list:
+        # Booking status pill
         st = (b.status or "")
         pill = status_style.get(st, {"cls": "badge bg-secondary"})
         label_fn = getattr(b, "get_status_display", lambda: st.replace("_", " ").title())
+
+        # NEW: invoice status pill
+        inv = getattr(b, "invoice", None)
+        inv_ctx = None
+        if inv:
+            inv_st = (inv.status or "")
+            inv_pill = invoice_status_style.get(inv_st, {"cls": "badge bg-secondary"})
+            inv_label_fn = getattr(inv, "get_status_display",
+                                   lambda: inv_st.replace("_", " ").title())
+            inv_ctx = {
+                "label": inv_label_fn(),
+                "cls":   inv_pill.get("cls", "badge bg-secondary"),
+                "style": inv_pill.get("style", ""),
+            }
+
         rows.append({
             "date":       b.course_date,
             "course":     (b.course_type.name if b.course_type else ""),
             "business":   (b.business.name if b.business else ""),
-            "status":     {"label": label_fn(),
-                           "cls": pill.get("cls","badge bg-secondary"),
-                           "style": pill.get("style","")},
+            "status":     {
+                "label": label_fn(),
+                "cls":   pill.get("cls", "badge bg-secondary"),
+                "style": pill.get("style", ""),
+            },
+            "invoice_status": inv_ctx,   # <<< NEW
             "instructor": (b.instructor.name if b.instructor else ""),
             "ref":        (b.course_reference or ""),
             "edit_url":   reverse("admin_booking_edit", args=[b.id]),
         })
+
 
     # ----- helper to build URLs preserving current filters
     def url_with(**overrides):
@@ -601,9 +631,12 @@ def booking_list(request):
     # ----- build sort header links
     headers = []
     for key, title in [
-        ("date","Date"), ("course","Course"), ("business","Business"),
-        ("status","Status"), ("instructor","Instructor"), ("ref","Ref")
+        ("date","Date"), ("course","Course type"), ("business","Business"),
+        ("instructor","Instructor"), ("status","Course status"),  ("ref","Ref"),
+        ("invoice","Invoice status"),
+        
     ]:
+
         active = (sort_key == key)
         next_dir = "asc" if (active and sort_dir == "desc") else "desc"
         headers.append({
