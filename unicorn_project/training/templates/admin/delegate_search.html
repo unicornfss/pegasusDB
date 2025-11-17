@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Delegate search{% endblock %}
+
+{% block content %}
+<h1 class="mb-3">Delegate search</h1>
+<p class="text-muted">
+  Use the filters in the header row to find delegates.
+</p>
+
+{% if results %}
+  <p class="text-muted">
+    {% if query %}
+      Found {{ results|length }} result{{ results|length|pluralize }} for
+      "<strong>{{ query }}</strong>".
+    {% else %}
+      Showing {{ results|length }} delegate{{ results|length|pluralize }} (all courses).
+    {% endif %}
+  </p>
+  <button id="clear-all-filters" class="btn btn-sm btn-outline-secondary mb-2">
+  Clear all filters
+</button>
+
+  <div class="table-responsive mt-3">
+  <table class="table table-hover align-middle delegate-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Date of birth</th>
+        <th>Job title</th>
+        <th>Booking date</th>
+        <th>Course</th>
+        <th>Course ref</th>
+        <th>Business</th>
+        <th>View booking</th>
+      </tr>
+      <tr class="table-light">
+        <th>
+          <input
+            type="search"
+            class="form-control form-control-sm column-filter"
+            data-col="0"
+            placeholder="Filter name"
+          >
+        </th>
+
+        <th>
+          <div class="input-group input-group-sm">
+            <input
+              type="date"
+              class="form-control column-filter"
+              data-col="1"
+            >
+            <button class="btn btn-outline-secondary clear-date" data-col="1" type="button">&times;</button>
+          </div>
+        </th>
+
+        <th>
+          <input
+            type="search"
+            class="form-control form-control-sm column-filter"
+            data-col="2"
+            placeholder="Filter job"
+          >
+        </th>
+
+        <th>
+          <div class="input-group input-group-sm">
+            <input
+              type="date"
+              class="form-control column-filter"
+              data-col="3"
+            >
+            <button class="btn btn-outline-secondary clear-date" data-col="3" type="button">&times;</button>
+          </div>
+        </th>
+
+        <th>
+          <input
+            type="search"
+            class="form-control form-control-sm column-filter"
+            data-col="4"
+            placeholder="Filter course"
+          >
+        </th>
+
+        <th>
+          <input
+            type="search"
+            class="form-control form-control-sm column-filter"
+            data-col="5"
+            placeholder="Filter ref"
+          >
+        </th>
+
+        <th>
+          <input
+            type="search"
+            class="form-control form-control-sm column-filter"
+            data-col="6"
+            placeholder="Filter business"
+          >
+        </th>
+
+        <th></th>  <!-- no filter for action column -->
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in results %}
+        {% with booking=d.booking_day.booking %}
+        <tr data-href="{% url 'admin_booking_edit' booking.id %}?tab=assessments">
+          <td>{{ d.name }}</td>
+          <td>{{ d.date_of_birth|date:"d/m/Y" }}</td>
+          <td>{{ d.job_title }}</td>
+          <td>{{ d.booking_day.date|date:"d/m/Y" }}</td>
+          <td>{{ booking.course_type.name }}</td>
+          <td>{{ booking.course_reference }}</td>
+          <td>{{ booking.business.name }}</td>
+          <td>
+            <a href="{% url 'admin_booking_edit' booking.id %}?tab=assessments"
+               class="btn btn-sm btn-outline-secondary"
+               onclick="event.stopPropagation();">
+              Open booking
+            </a>
+          </td>
+        </tr>
+        {% endwith %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% else %}
+  {% if query %}
+    <p>No delegates found for "<strong>{{ query }}</strong>".</p>
+  {% else %}
+    <p>No delegates found.</p>
+  {% endif %}
+{% endif %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const table = document.querySelector('.delegate-table');
+    if (!table) return;
+
+    // --- Make rows clickable ---
+    table.querySelectorAll('tbody tr').forEach(function (row) {
+      row.addEventListener('click', function () {
+        const href = row.getAttribute('data-href');
+        if (href) {
+          window.location.href = href;
+        }
+      });
+    });
+
+    const filters = Array.from(document.querySelectorAll('.column-filter'));
+
+    function normaliseDate(str) {
+      // Converts dd/mm/yyyy → yyyy-mm-dd for matching
+      const parts = str.split('/');
+      if (parts.length === 3) {
+        return `${parts[2]}-${parts[1]}-${parts[0]}`;
+      }
+      return str;
+    }
+
+    function applyFilters() {
+      const rows = Array.from(table.tBodies[0].rows);
+      let visibleIndex = 0;
+
+      rows.forEach(function (row) {
+        let visible = true;
+
+        filters.forEach(function (input) {
+          const colIndex = parseInt(input.getAttribute('data-col'), 10);
+          const val = input.value.trim().toLowerCase();
+          if (!val) return;
+
+          let cellText = (row.cells[colIndex]?.innerText || '').toLowerCase();
+
+          if (input.type === "date") {
+            cellText = normaliseDate(cellText);
+          }
+
+          if (!cellText.includes(val)) {
+            visible = false;
+          }
+        });
+
+        if (visible) {
+          row.style.display = '';
+          row.classList.toggle('table-alt-row', visibleIndex % 2 === 1);
+          visibleIndex += 1;
+        } else {
+          row.style.display = 'none';
+          row.classList.remove('table-alt-row');
+        }
+      });
+    }
+
+    // Initial stripes
+    applyFilters();
+
+    // Re-filter on any input change
+    filters.forEach(function (input) {
+      input.addEventListener('input', applyFilters);
+    });
+
+    // --- Clear all filters button ---
+    const clearAllBtn = document.getElementById('clear-all-filters');
+    if (clearAllBtn) {
+      clearAllBtn.addEventListener('click', function () {
+        filters.forEach(function (input) {
+          input.value = "";
+        });
+        applyFilters();
+      });
+    }
+
+    // --- Per-date clear buttons ---
+    document.querySelectorAll('.clear-date').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        const col = this.getAttribute('data-col');
+        const input = document.querySelector(`.column-filter[data-col="${col}"]`);
+        if (input) {
+          input.value = "";
+          input.dispatchEvent(new Event('input'));
+        }
+      });
+    });
+  });
+</script>
+
+
+<style>
+  .delegate-table tbody tr {
+    cursor: pointer;
+  }
+
+  /* our own zebra stripe for visible rows */
+  .delegate-table tbody tr.table-alt-row > * {
+    background-color: #f8f9fa !important;  /* light grey stripe on cells */
+  }
+</style>
+
+
+
+{% endblock %}

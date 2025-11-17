@@ -108,6 +108,18 @@
                 </ul>
               </details>
 
+              <details class="branch" {% if request.resolver_match.url_name == 'admin_delegate_search' %}open{% endif %}>
+                <summary><i class="bi bi-search"></i> Delegate search</summary>
+                <ul>
+                  <li>
+                    <a class="leaf {% if request.resolver_match.url_name == 'admin_delegate_search' %}active{% endif %}"
+                      href="{% url 'admin_delegate_search' %}">
+                      <i class="bi bi-search"></i> Search delegates
+                    </a>
+                  </li>
+                </ul>
+              </details>
+
               <details class="branch" {% if request.resolver_match.url_name == 'admin_instructor_list' or request.resolver_match.url_name == 'admin_user_list' %}open{% endif %}>
                 <summary><i class="bi bi-people"></i> Personnel</summary>
                 <ul>

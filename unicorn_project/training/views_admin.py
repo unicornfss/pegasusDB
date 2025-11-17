@@ -33,7 +33,7 @@ from .models import (
     FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem
 )
 from .forms import (
-    BusinessForm, CourseTypeForm, TrainingLocationForm,
+    Attendance, BusinessForm, CourseTypeForm, TrainingLocationForm,
     InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
     CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm,
 )
@@ -1407,6 +1407,68 @@ def admin_instructor_list(request):
     )
     return render(request, "admin/instructors/list.html", {"instructors": instructors})
 
+@admin_required
+def admin_delegate_search(request):
+    query = (request.GET.get("q") or "").strip()
+
+    # Base queryset: all registers, with related booking info preloaded
+    qs = (
+        DelegateRegister.objects
+        .select_related(
+            "booking_day",
+            "booking_day__booking",
+            "booking_day__booking__course_type",
+            "booking_day__booking__business",
+            "booking_day__booking__training_location",
+        )
+    )
+
+    # Apply text search if user typed something
+    if query:
+        qs = qs.filter(
+            Q(name__icontains=query) |
+            Q(job_title__icontains=query) |
+            Q(employee_id__icontains=query) |
+            Q(notes__icontains=query)
+        )
+
+    # Order so earlier days for a course come first
+    qs = qs.order_by(
+        "name",
+        "date_of_birth",
+        "booking_day__booking__course_reference",
+        "booking_day__date",
+    )
+
+    # --- De-duplicate: one row per (delegate, course) ---
+    dedup = {}
+    for reg in qs:
+        key = (
+            (reg.name or "").strip().lower(),
+            reg.date_of_birth,
+            reg.booking_day.booking_id,
+        )
+        # keep the first (earliest date) we see for that delegate+course
+        if key not in dedup:
+            dedup[key] = reg
+
+    results = list(dedup.values())
+
+    # Sort final list by booking date DESC then name
+    results.sort(
+        key=lambda r: (r.booking_day.date, (r.name or "").lower()),
+        reverse=True,
+    )
+
+    return render(
+        request,
+        "admin/delegate_search.html",
+        {
+            "title": "Delegate search",
+            "query": query,
+            "results": results,
+        },
+    )
 
 @admin_required
 def admin_instructor_new(request):

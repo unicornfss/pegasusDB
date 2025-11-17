@@ -36,6 +36,16 @@
     </a>
   </div>
 
+  <button class="nav-link nav-toggle" data-bs-toggle="collapse" data-bs-target="#navDelegates" aria-expanded="true">
+    <i class="bi bi-search"></i> Delegate search
+    <i class="bi bi-caret-down ms-auto small"></i>
+  </button>
+  <div id="navDelegates" class="collapse show ms-3">
+    <a class="nav-link sub" href="{% url 'admin_delegate_search' %}">
+      <i class="bi bi-search"></i> Search delegates
+    </a>
+  </div>
+
   <button class="nav-link nav-toggle" data-bs-toggle="collapse" data-bs-target="#navPeople" aria-expanded="true">
     <i class="bi bi-people"></i> Personnel
     <i class="bi bi-caret-down ms-auto small"></i>
