@@ -800,7 +800,7 @@ def booking_form(request, pk=None):
                         if not day_date:
                             continue
                         start_t = (r.get("start_time") or "").strip()
-                        end_t   = (r.get("end_time") or "").strip()
+                        end_t = (r.get("end_time") or "").strip()
                         out.append((day_date, start_t, end_t))
                     return out
 
@@ -846,7 +846,7 @@ def booking_form(request, pk=None):
                             continue
 
                         start_t = _parse_time_or_none(row.get("start_time")) or booking.start_time
-                        end_t   = _parse_time_or_none(row.get("end_time"))
+                        end_t = _parse_time_or_none(row.get("end_time"))
 
                         if not end_t and start_t:
                             end_t = _add_hours_to_time(
@@ -861,7 +861,6 @@ def booking_form(request, pk=None):
                             end_time=end_t,
                         )
 
-
             messages.success(request, "Booking saved.")
             if "save_return" in request.POST:
                 return redirect("admin_booking_list")
@@ -875,7 +874,7 @@ def booking_form(request, pk=None):
 
         form = BookingForm(instance=obj)
 
-        # maps for client-side behaviour
+    # maps for client-side behaviour
     course_type_map = {
         str(ct.id): {
             "code": ct.code or "",
@@ -919,15 +918,12 @@ def booking_form(request, pk=None):
     if obj and obj.pk:
         # reuse the same logic as the instructor view
         from .views_instructor import _feedback_queryset_for_booking
+
         fb_qs = _feedback_queryset_for_booking(obj)
         fb_count = fb_qs.count()
         fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
 
-
-
-
     # ---------- NEW: tab + register detail support ----------
-
     # which tab is active (default = registers)
     active_tab = request.GET.get("tab", "registers")
 
@@ -948,7 +944,6 @@ def booking_form(request, pk=None):
                 pass
 
     # ---------- Read-only assessment matrix for admin ----------
-
     assessment_delegates = []
     assessment_competencies = []
     assessment_existing = {}
@@ -999,19 +994,18 @@ def booking_form(request, pk=None):
                     existing_map[key] = a
             assessment_existing = existing_map
 
-        # --- Exams / attempts for the Exams tab (read-only) ---
-        # --- Certificates tab delegates (read-only list for admin) ---
-        cert_delegates = []
-        if obj and obj.pk:
-            cert_delegates = _unique_delegates_for_booking(obj)
+    # --- Exams / attempts for the Exams tab (read-only)
+    # --- Certificates tab delegates (read-only list for admin) ---
 
-        course_exams = []
-        attempts_by_exam = {}
-        has_exam = False
+    # Always define these so they are safe even when creating a new booking
+    cert_delegates = []
+    course_exams = []
+    attempts_by_exam = {}
+    has_exam = False
 
-        if obj and obj.course_type:
-            ...
-
+    if obj and obj.pk:
+        # Certificates: unique delegates on this booking
+        cert_delegates = _unique_delegates_for_booking(obj)
 
     if obj and obj.course_type:
         # All exams for this course type
@@ -1019,6 +1013,8 @@ def booking_form(request, pk=None):
             Exam.objects.filter(course_type=obj.course_type).order_by("sequence", "id")
         )
 
+        # We consider the course to "have exams" if either the flag is set
+        # or there are actual Exam rows.
         has_exam = bool(course_exams) or getattr(obj.course_type, "has_exam", False)
 
         if course_exams:
@@ -1088,6 +1084,7 @@ def booking_form(request, pk=None):
         ctx.update(_admin_invoice_context(obj))
 
     return render(request, "admin/form_booking.html", ctx)
+
 
 @login_required
 @user_passes_test(lambda u: u.is_staff)

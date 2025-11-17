@@ -1218,6 +1218,7 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 </script>
 
+{% if booking %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
   const btn = document.getElementById('btn-cert-export');
@@ -1239,6 +1240,9 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 });
 </script>
+{% endif %}
+
+
 <script>
 (function () {
   const form   = document.getElementById('booking-form');
