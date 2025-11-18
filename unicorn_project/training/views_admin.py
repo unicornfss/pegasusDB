@@ -16,7 +16,7 @@ from django.db import transaction
 from django.db.models import Q, Count, Min, Max, Avg
 from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
-from django.http import HttpResponseForbidden, HttpResponse
+from django.http import HttpResponseForbidden, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -32,6 +32,7 @@ from .models import (
     Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer, CompetencyAssessment,
     FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem
 )
+
 from .forms import (
     Attendance, BusinessForm, CourseTypeForm, TrainingLocationForm,
     InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
@@ -115,14 +116,6 @@ def _make_local_aware(local_date, local_time):
         except Exception:
             # Non-existent local times (spring forward): nudge +1h
             return timezone.make_aware(naive + timedelta(hours=1), tz)
-
-# =========================
-# Admin dashboard
-# =========================
-@admin_required
-def dashboard(request):
-    return render(request, "admin/dashboard.html")
-
 
 # =========================
 # Businesses
@@ -1884,3 +1877,162 @@ def _provision_exams_for_course(ct):
             created += 1
     return created
 
+@login_required
+def admin_dashboard(request):
+    # Start with username as a fallback
+    display_name = request.user.username
+
+    # Prefer first_name if you start using it
+    if request.user.first_name:
+        display_name = request.user.first_name
+
+    # If there is a linked Instructor with a name, prefer that
+    try:
+        inst = Instructor.objects.get(user=request.user)
+        if inst.name:
+            display_name = inst.name.split()[0]  # first word only
+    except Instructor.DoesNotExist:
+        pass
+
+    return render(request, "admin/admin_dashboard.html", {
+        "display_name": display_name,
+    })
+
+
+@login_required
+def api_courses_today(request):
+    today = timezone.localdate()
+
+    bookings = (
+        Booking.objects.filter(
+            days__date=today,
+            status__in=["scheduled", "in_progress", "awaiting_closure"],
+        )
+        .select_related("instructor", "business", "training_location", "course_type")
+        .distinct()
+    )
+
+    results = []
+    for b in bookings:
+        results.append(
+            {
+                "id": b.id,
+                "reference": getattr(b, "course_reference", str(b.id)),
+                "course": str(b.course_type) if b.course_type else "",
+                "instructor": str(b.instructor) if b.instructor else "",
+                "business": str(b.business) if b.business else "",
+                "location": str(b.training_location) if b.training_location else "",
+                "date": b.course_date.isoformat() if b.course_date else "",
+                # 🔽 use the booking detail route, not course type
+                "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
+            }
+        )
+
+    return JsonResponse({"data": results})
+
+@login_required
+def api_courses_awaiting_closure(request):
+    today = timezone.localdate()
+
+    bookings = (
+        Booking.objects.filter(
+            status="awaiting_closure",
+            days__date__lt=today,
+        )
+        .select_related("instructor", "business", "training_location", "course_type")
+        .prefetch_related("days")
+        .distinct()
+    )
+
+    results = []
+    for b in bookings:
+        # Determine completed date = last course day
+        last_day = None
+        if hasattr(b, "days"):
+            dates = [d.date for d in b.days.all() if d.date]
+            last_day = max(dates) if dates else None
+
+        results.append(
+            {
+                "id": b.id,
+                "reference": getattr(b, "course_reference", str(b.id)),
+                "course": str(b.course_type) if b.course_type else "",
+                "instructor": str(b.instructor) if b.instructor else "",
+                "business": str(b.business) if b.business else "",
+                "location": str(b.training_location) if b.training_location else "",
+                "completed": last_day.isoformat() if last_day else "",
+                "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
+            }
+        )
+
+    return JsonResponse({"data": results})
+
+@login_required
+def api_courses_in_7_days(request):
+    target = timezone.localdate() + timedelta(days=7)
+
+    bookings = (
+        Booking.objects.filter(
+            days__date=target,
+            status="scheduled",  # only scheduled courses 7 days out
+        )
+        .select_related("instructor", "business", "training_location", "course_type")
+        .distinct()
+    )
+
+    results = []
+    for b in bookings:
+        results.append(
+            {
+                "id": b.id,
+                "reference": getattr(b, "course_reference", str(b.id)),
+                "course": str(b.course_type) if b.course_type else "",
+                "instructor": str(b.instructor) if b.instructor else "",
+                "business": str(b.business) if b.business else "",
+                "location": str(b.training_location) if b.training_location else "",
+                "date": target.isoformat(),  # the day this course is taking place
+                "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
+            }
+        )
+
+    return JsonResponse({"data": results})
+
+STATUS_BADGES = {
+    "sent": '<span class="badge bg-success">Sent</span>',
+    "awaiting_review": '<span class="badge bg-warning text-dark">Awaiting review</span>',
+    "draft": '<span class="badge bg-secondary">Draft</span>',
+    "viewed": '<span class="badge bg-info text-dark">Viewed</span>',
+    "paid": '<span class="badge bg-primary">Paid</span>',
+    "rejected": '<span class="badge bg-danger">Rejected</span>',
+}
+
+@login_required
+def api_outstanding_invoices(request):
+    invoices = (
+        Invoice.objects
+        .filter(status__in=["sent", "awaiting_review"])
+        .select_related(
+            "booking",
+            "booking__course_type",
+            "booking__business",
+            "booking__training_location",
+            "booking__instructor",
+        )
+    )
+
+    data = []
+
+    for inv in invoices:
+        data.append({
+            "course": getattr(inv.booking.course_type, "name", "–"),
+            "business": getattr(inv.booking.business, "name", "–"),
+            "instructor": inv.instructor.name,
+            "status": inv.status,
+            "status_badge": STATUS_BADGES.get(inv.status, inv.status),
+            "sent_date": inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else "–",
+
+            # 🔥 FIXED URL — Copy this line exactly
+            "url": f"/app/admin/bookings/{inv.booking.id}/?tab=invoice",
+        })
+
+    return JsonResponse({"data": data})

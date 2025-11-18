@@ -61,7 +61,7 @@ def home(request):
             return redirect("app_admin_dashboard")
         if is_instructor_user(request.user):
             return redirect("instructor_bookings")
-    return render(request, "home.html")
+    return render(request, "admin/admin_dashboard.html")
 
 
 
@@ -207,7 +207,7 @@ def home(request):
     if 'current_role' not in request.session:
         r = roles_for(request.user)
         if r: request.session['current_role']=r[0]
-    return render(request,'home.html',{})
+    return render(request,'admin/admin_dashboard.html',{})
 
 # Admin app
 @login_required

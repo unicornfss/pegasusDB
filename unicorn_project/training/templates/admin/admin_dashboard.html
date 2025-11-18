@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+
+<div class="container-fluid mt-4 px-4">
+    <h1 id="dashboard-greeting" class="mb-4">Welcome…</h1>
+
+    <div class="row g-4">
+
+        <!-- WIDGET 1: Courses taking place today -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">📅 Courses taking place today</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0" id="courses-today-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Course</th>
+                                <th>Business</th>
+                                <th>Instructor</th>
+                            </tr>
+                        </thead>
+                        <tbody id="courses-today-body">
+                            <tr><td colspan="3" class="text-muted p-3">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- WIDGET 2: Awaiting instructor closure -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">⌛ Awaiting instructor closure</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0" id="courses-awaiting-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Course</th>
+                                <th>Business</th>
+                                <th>Instructor</th>
+                                <th>Completed</th>
+                            </tr>
+                        </thead>
+                        <tbody id="courses-awaiting-body">
+                            <tr><td colspan="4" class="text-muted p-3">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- WIDGET 3: Courses taking place in 7 days -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">📆 Courses taking place in 7 days</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0" id="courses-7days-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Course</th>
+                                <th>Business</th>
+                                <th>Instructor</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody id="courses-7days-body">
+                            <tr><td colspan="4" class="text-muted p-3">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- WIDGET 4: Outstanding Instructor Invoices -->
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="mb-0">💰 Outstanding Instructor Invoices</h5>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0" id="invoices-outstanding-table">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Course</th>
+                                <th>Instr.</th>
+                                <th>Status</th>
+                                <th>Sent</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoices-outstanding-body">
+                            <tr>
+                                <td colspan="4" class="text-muted p-3">Loading…</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+
+    </div>
+</div>
+
+<script>
+// --- Greeting using display_name from the view ---
+document.addEventListener("DOMContentLoaded", function () {
+    const hour = new Date().getHours();
+    let greeting;
+
+    if (hour < 12) greeting = "Good morning";
+    else if (hour < 18) greeting = "Good afternoon";
+    else greeting = "Good evening";
+
+    document.getElementById("dashboard-greeting").innerText =
+        greeting + ", {{ display_name|escapejs }}";
+
+    loadCoursesToday();
+    loadAwaitingClosure();
+    loadCoursesIn7Days();
+});
+
+// --- Helper: format ISO date (YYYY-MM-DD) as DD/MM/YYYY ---
+function formatDate(dateStr) {
+    if (!dateStr) return "–";
+    const parts = dateStr.split("-");
+    if (parts.length !== 3) return dateStr;
+    const [year, month, day] = parts;
+    return `${day}/${month}/${year}`;
+}
+
+// --- Widget 1: today ---
+function loadCoursesToday() {
+    fetch("{% url 'api_courses_today' %}")
+        .then(response => response.json())
+        .then(json => {
+            const body = document.getElementById("courses-today-body");
+            const data = json.data || [];
+
+            if (data.length === 0) {
+                body.innerHTML = `
+                    <tr>
+                        <td colspan="3" class="text-muted p-3">No courses today.</td>
+                    </tr>`;
+                return;
+            }
+
+            let html = "";
+            data.forEach(item => {
+                html += `
+                    <tr class="clickable-row" data-url="${item.url}">
+                        <td><strong>${item.course}</strong></td>
+                        <td>${item.business || "–"}</td>
+                        <td>${item.instructor || "–"}</td>
+                    </tr>`;
+            });
+
+            body.innerHTML = html;
+
+            document.querySelectorAll("#courses-today-body .clickable-row").forEach(row => {
+                row.addEventListener("click", () => {
+                    window.location.href = row.dataset.url;
+                });
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById("courses-today-body").innerHTML = `
+                <tr>
+                    <td colspan="3" class="text-danger p-3">Error loading courses.</td>
+                </tr>`;
+        });
+}
+
+// --- Widget 2: awaiting closure ---
+function loadAwaitingClosure() {
+    fetch("{% url 'api_courses_awaiting_closure' %}")
+        .then(response => response.json())
+        .then(json => {
+            const body = document.getElementById("courses-awaiting-body");
+            const data = json.data || [];
+
+            if (data.length === 0) {
+                body.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-muted p-3">None awaiting closure.</td>
+                    </tr>`;
+                return;
+            }
+
+            let html = "";
+            data.forEach(item => {
+                html += `
+                    <tr class="clickable-row" data-url="${item.url}">
+                        <td><strong>${item.course}</strong></td>
+                        <td>${item.business || "–"}</td>
+                        <td>${item.instructor || "–"}</td>
+                        <td>${formatDate(item.completed)}</td>
+                    </tr>`;
+            });
+
+            body.innerHTML = html;
+
+            document.querySelectorAll("#courses-awaiting-body .clickable-row").forEach(row => {
+                row.addEventListener("click", () => {
+                    window.location.href = row.dataset.url;
+                });
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById("courses-awaiting-body").innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-danger p-3">Error loading data.</td>
+                </tr>`;
+        });
+}
+
+// --- Widget 3: in 7 days ---
+function loadCoursesIn7Days() {
+    fetch("{% url 'api_courses_in_7_days' %}")
+        .then(response => response.json())
+        .then(json => {
+            const body = document.getElementById("courses-7days-body");
+            const data = json.data || [];
+
+            if (data.length === 0) {
+                body.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-muted p-3">No courses in 7 days.</td>
+                    </tr>`;
+                return;
+            }
+
+            let html = "";
+            data.forEach(item => {
+                html += `
+                    <tr class="clickable-row" data-url="${item.url}">
+                        <td><strong>${item.course}</strong></td>
+                        <td>${item.business || "–"}</td>
+                        <td>${item.instructor || "–"}</td>
+                        <td>${formatDate(item.date)}</td>
+                    </tr>`;
+            });
+
+            body.innerHTML = html;
+
+            document.querySelectorAll("#courses-7days-body .clickable-row").forEach(row => {
+                row.addEventListener("click", () => {
+                    window.location.href = row.dataset.url;
+                });
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById("courses-7days-body").innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-danger p-3">Error loading data.</td>
+                </tr>`;
+        });
+}
+
+// --- Widget 4: Outstanding invoiced ---
+function loadOutstandingInvoices() {
+    fetch("{% url 'api_outstanding_invoices' %}")
+        .then(response => response.json())
+        .then(json => {
+            const body = document.getElementById("invoices-outstanding-body");
+            const data = json.data || [];
+
+            if (data.length === 0) {
+                body.innerHTML = `
+                    <tr>
+                        <td colspan="4" class="text-muted p-3">No outstanding invoices.</td>
+                    </tr>`;
+                return;
+            }
+
+            let html = "";
+            data.forEach(item => {
+                let badge = item.status_badge || item.status;
+
+                html += `
+                    <tr class="clickable-row" data-url="${item.url}">
+                        <td><strong>${item.course}</strong><br><small>${item.business}</small></td>
+                        <td>${item.instructor}</td>
+                        <td>${badge}</td>
+                        <td>${item.sent_date}</td>
+                    </tr>
+                `;
+            });
+
+            body.innerHTML = html;
+
+            // Make rows clickable
+            document.querySelectorAll(".clickable-row").forEach(row => {
+                row.addEventListener("click", () => {
+                    window.location.href = row.dataset.url;
+                });
+            });
+        })
+        .catch(err => {
+            console.error(err);
+            document.getElementById("invoices-outstanding-body").innerHTML = `
+                <tr>
+                    <td colspan="4" class="text-danger p-3">Error loading invoices.</td>
+                </tr>`;
+        });
+}
+
+document.addEventListener("DOMContentLoaded", loadOutstandingInvoices);
+
+</script>
+
+{% endblock %}

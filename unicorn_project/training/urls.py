@@ -63,11 +63,15 @@ urlpatterns = [
     path("api/locations/", views.api_locations_by_business, name="api_locations_by_business"),
 
     # ---------- Admin dashboard ----------
-    path("app/admin/", app_admin.dashboard, name="app_admin_dashboard"),
+    path("app/admin/", views_admin.admin_dashboard, name="app_admin_dashboard"),
     path("app/admin/courses/<uuid:pk>/", app_admin.course_form, name="admin_course_edit"),
     path("app/admin/exams/<int:pk>/", app_admin.exam_form, name="admin_exam_edit"),
     path("delegates/search/", views_admin.admin_delegate_search, name="admin_delegate_search"),
-
+    path("app-admin/dashboard/", views_admin.admin_dashboard, name="admin_dashboard"),
+    path("app-admin/api/courses-today/", views_admin.api_courses_today, name="api_courses_today"),
+    path("app-admin/api/courses-awaiting-closure/", views_admin.api_courses_awaiting_closure, name="api_courses_awaiting_closure"),
+    path("app-admin/api/courses-in-7-days/", views_admin.api_courses_in_7_days, name="api_courses_in_7_days"),
+    path("api/outstanding-invoices/", views_admin.api_outstanding_invoices, name="api_outstanding_invoices"),
 
     # Businesses
     path("app/admin/businesses/", app_admin.business_list, name="admin_business_list"),
