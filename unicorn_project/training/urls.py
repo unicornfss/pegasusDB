@@ -1,5 +1,5 @@
 # unicorn_project/training/urls.py
-from django.urls import path
+from django.urls import path, reverse_lazy
 from django.contrib.auth import views as auth_views
 
 from . import views
@@ -26,7 +26,7 @@ urlpatterns = [
 
     # Post-login routers
     path("app/after-login/", instv.post_login, name="post_login"),
-    path("post-login/", views.post_login_router, name="post_login_router"),
+    path("post-login/", instv.post_login, name="post_login"),
 
     # ---------- Instructor area ----------
     # Landing page -> My bookings
@@ -93,12 +93,14 @@ urlpatterns = [
     path("app/admin/course-types/", app_admin.course_list, name="admin_course_type_list"),  # alias
 
     # Instructors (admin)
-    path("app/admin/instructors/", app_admin.admin_instructor_list, name="admin_instructor_list"),
-    path("app/admin/instructors/new/", app_admin.admin_instructor_new, name="admin_instructor_new"),
-    path("app/admin/instructors/<uuid:pk>/", app_admin.admin_instructor_edit, name="admin_instructor_edit"),
-    path("app/admin/instructors/<uuid:pk>/delete/", app_admin.instructor_delete, name="admin_instructor_delete"),
+    path("app/admin/personnel/", app_admin.admin_personnel_list, name="admin_personnel_list"),
+    path("app/admin/personnel/new/", app_admin.admin_personnel_new, name="admin_personnel_new"),
+    path("app/admin/personnel/<uuid:pk>/", app_admin.admin_personnel_edit, name="admin_personnel_edit"),
+    path("app/admin/personnel/<uuid:pk>/delete/", app_admin.admin_personnel_delete, name="admin_personnel_delete"),
     path("app/instructor/booking/<uuid:pk>/invoice/preview/", views_instructor.invoice_preview, name="instructor_invoice_preview"),
     path("accident-reports/", views.accident_report_list, name="accident_report_list"),
+    path("app/admin/personnel/<uuid:pk>/resend-password/", app_admin.admin_personnel_resend_password, name="admin_personnel_resend_password"),
+
 
     # Bookings (admin)
     path("app/admin/bookings/", app_admin.booking_list, name="admin_booking_list"),
@@ -129,8 +131,33 @@ urlpatterns = [
     path("debug/whoami/", instv.whoami, name="debug_whoami"),
 
     # ---------- Auth ----------
-    path("accounts/login/", auth_views.LoginView.as_view(template_name="registration/login.html"), name="login"),
-    path("accounts/logout/", auth_views.LogoutView.as_view(), name="logout"),
+    path(
+        "accounts/login/",
+        auth_views.LoginView.as_view(template_name="registration/login.html"),
+        name="login",
+    ),
+
+    path(
+        "accounts/logout/",
+        auth_views.LogoutView.as_view(),
+        name="logout",
+    ),
+
+    path(
+        "accounts/password_change/",
+        auth_views.PasswordChangeView.as_view(
+            template_name="registration/password_change_form.html",
+            success_url="/accounts/password_change/done/",
+        ),
+        name="password_change",
+    ),
+
+    path(
+        "accounts/password_change/done/",
+        views_admin.password_change_done_and_clear,
+        name="password_change_done",
+    ),
+
 
     # ---------- Assessments ----------
     # (matrix is embedded in booking detail; these are save/export endpoints)
@@ -194,3 +221,6 @@ urlpatterns = [
 
     path("bookings/<uuid:booking_id>/certificates/preview/", views_certificates.booking_certificates_preview, name="booking_certificates_preview")  ,
 ]
+
+
+

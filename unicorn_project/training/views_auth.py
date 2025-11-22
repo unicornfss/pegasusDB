@@ -11,7 +11,7 @@ class ForcePasswordChangeView(PasswordChangeView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        prof = getattr(self.request.user, 'staff_profile', None)
+        prof = getattr(self.request.user, 'personnel', None)
         if prof and getattr(prof, 'must_change_password', False):
             prof.must_change_password = False
             prof.save(update_fields=['must_change_password'])

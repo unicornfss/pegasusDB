@@ -20,23 +20,26 @@ from django.http import HttpResponseForbidden, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.crypto import get_random_string
+
 from django.utils.formats import date_format
 from django.views.decorators.http import require_http_methods
 from math import ceil, floor
+from unicorn_project.training.utils.passwords import send_initial_password_email
 
 from .services.booking_status import auto_update_booking_statuses
 
 from .models import (
-    Business, CourseType, Instructor, Booking, TrainingLocation,
-    StaffProfile, BookingDay, DelegateRegister, CourseCompetency,
+    Business, CourseType, Personnel, Booking, TrainingLocation,
+    BookingDay, DelegateRegister, CourseCompetency,
     Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer, CompetencyAssessment,
     FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem
 )
 
 from .forms import (
     Attendance, BusinessForm, CourseTypeForm, TrainingLocationForm,
-    InstructorForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
-    CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm,
+    PersonnelForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
+    CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm, PersonnelProfileForm,
 )
 
 from .views_instructor import _feedback_queryset_for_booking, list_course_receipts_drive, render_invoice_pdf_via_preview
@@ -1389,13 +1392,18 @@ def admin_user_edit(request, pk: int):
 # Instructors (personnel)
 # =========================
 @admin_required
-def admin_instructor_list(request):
-    instructors = (
-        Instructor.objects.select_related("user")
+def admin_personnel_list(request):
+    people = (
+        Personnel.objects.select_related("user")
         .filter(Q(user__isnull=True) | Q(user__is_superuser=False))
         .order_by("name")
     )
-    return render(request, "admin/instructors/list.html", {"instructors": instructors})
+
+    return render(
+        request,
+        "admin/personnel/list.html",
+        {"instructors": people},   # keep the same key so template still works
+    )
 
 @admin_required
 def admin_delegate_search(request):
@@ -1461,51 +1469,170 @@ def admin_delegate_search(request):
     )
 
 @admin_required
-def admin_instructor_new(request):
+def admin_personnel_new(request):
     if request.method == "POST":
-        form = InstructorForm(request.POST)
+        form = PersonnelForm(request.POST)
+
         if form.is_valid():
-            inst = form.save()
-            messages.success(request, "Instructor created.")
+            inst = form.save(commit=False)
+
+            # Active toggle logic
+            is_active = form.cleaned_data.get("is_active", True)
+            can_login = form.cleaned_data.get("can_login", False)
+
+            inst.is_active = is_active
+            inst.can_login = can_login if is_active else False
+
+            inst.save()
+
+            # --- CREATE DJANGO USER IF LOGIN ALLOWED ---
+            if inst.can_login and inst.user is None:
+
+                # Generate secure temporary password
+                temp_password = get_random_string(12)
+
+                # Create Django user
+                user = User.objects.create_user(
+                    username=inst.email,
+                    email=inst.email,
+                    password=temp_password,   # <-- correct for first login
+                    is_active=True,
+                    is_staff=False,
+                )
+
+                inst.user = user
+                inst.must_change_password = True
+                inst.save()
+
+                # Email the password (dev or prod behaviour)
+                send_initial_password_email(inst, temp_password)
+
+                # DEV ONLY: show password on screen
+                if settings.DEBUG:
+                    messages.success(
+                        request,
+                        f"User created. Temporary password: {temp_password} "
+                        f"(Email sent to {settings.DEV_CATCH_ALL_EMAIL})"
+                    )
+                else:
+                    messages.success(request, "User created and password emailed.")
+
+            # --- Apply groups to linked user ---
+            groups = form.cleaned_data.get("groups")
+            if inst.user and groups is not None:
+                inst.user.groups.set(groups)
+                inst.user.save()
+
             if "save_return" in request.POST:
-                return redirect("admin_instructor_list")
-            return redirect("admin_instructor_edit", pk=inst.pk)
+                return redirect("admin_personnel_list")
+            return redirect("admin_personnel_edit", pk=inst.pk)
+
         else:
             messages.error(request, "Please fix the errors below.")
-    else:
-        form = InstructorForm()
 
-    return render(request, "admin/instructors/form_instructor.html", {
-        "title": "Add Instructor",
+    else:
+        form = PersonnelForm()
+
+    return render(request, "admin/personnel/form.html", {
+        "title": "Add Staff Member",
         "form": form,
-        "back_url": "admin_instructor_list",
+        "back_url": "admin_personnel_list",
+        "instructor": None,  # <-- IMPORTANT so template buttons don't error
     })
 
 
 @admin_required
-def admin_instructor_edit(request, pk):
-    inst = get_object_or_404(Instructor.objects.select_related("user"), pk=pk)
+def admin_personnel_edit(request, pk):
+    inst = get_object_or_404(Personnel.objects.select_related("user"), pk=pk)
 
+    # Protect superusers
     if inst.user and inst.user.is_superuser and not request.user.is_superuser:
         return HttpResponseForbidden("You cannot edit an account attached to a superuser.")
 
     if request.method == "POST":
-        form = InstructorForm(request.POST, instance=inst)
+        form = PersonnelForm(request.POST, instance=inst)
+
         if form.is_valid():
-            form.save()
+            inst = form.save(commit=False)
+
+            # Consistent toggle behaviour
+            is_active = form.cleaned_data.get("is_active", True)
+            can_login = form.cleaned_data.get("can_login", False)
+
+            inst.is_active = is_active
+            inst.can_login = can_login if is_active else False
+
+            inst.save()
+
+            groups = form.cleaned_data.get("groups")
+
+            # --- USER LOGIC --------------------------------------------------
+            if inst.can_login:
+
+                if inst.user is None:
+                    # CREATE USER (same as new view)
+                    temp_password = get_random_string(12)
+
+                    user = User.create_user(
+                        username=inst.email,
+                        email=inst.email,
+                        password=temp_password,
+                        is_active=True,
+                        is_staff=False,
+                    )
+
+                    inst.user = user
+                    inst.must_change_password = True
+                    inst.save()
+
+                    # Email temp password
+                    send_initial_password_email(inst, temp_password)
+
+                    if settings.DEBUG:
+                        messages.success(
+                            request,
+                            f"Login enabled. Temporary password: {temp_password} "
+                            f"(Email sent to DEV catch-all {settings.DEV_CATCH_ALL_EMAIL})"
+                        )
+
+                else:
+                    # UPDATE EXISTING USER DETAILS
+                    inst.user.is_active = True
+                    inst.user.email = inst.email
+                    inst.user.username = inst.email
+                    inst.user.save()
+
+                # SYNC GROUPS
+                if groups is not None:
+                    inst.user.groups.set(groups)
+                    inst.user.save()
+
+            else:
+                # Cannot login → deactivate user
+                if inst.user:
+                    inst.user.is_active = False
+                    inst.user.save()
+
             messages.success(request, "Changes saved.")
+
             if "save_return" in request.POST:
-                return redirect("admin_instructor_list")
-            return redirect("admin_instructor_edit", pk=inst.pk)
+                return redirect("admin_personnel_list")
+
+            return redirect("admin_personnel_edit", pk=inst.pk)
+
         else:
             messages.error(request, "Please fix the errors below.")
-    else:
-        form = InstructorForm(instance=inst)
 
-    return render(request, "admin/instructors/form_instructor.html", {
-        "title": f"Edit Instructor — {inst.name}",
+    else:
+        form = PersonnelForm(instance=inst)
+
+        if inst.user:
+            form.fields["groups"].initial = inst.user.groups.all()
+
+    return render(request, "admin/personnel/form.html", {
+        "title": f"Edit Staff Member — {inst.name}",
         "form": form,
-        "back_url": "admin_instructor_list",
+        "back_url": "admin_personnel_list",
         "instructor": inst,
     })
 
@@ -1582,12 +1709,12 @@ def admin_certificate_name_edit(request, reg_pk: int):
 
 @admin_required
 @require_http_methods(["GET", "POST"])
-def instructor_delete(request, pk):
+def admin_personnel_delete(request, pk):
     inst = get_object_or_404(Instructor, pk=pk)
     if request.method == "POST":
         inst.delete()
         messages.success(request, "Instructor deleted.")
-        return redirect("admin_instructor_list")
+        return redirect("admin_personnel_list")
     return render(request, "admin/confirm_delete.html", {
         "title": "Delete instructor",
         "object": inst,
@@ -1886,17 +2013,19 @@ def admin_dashboard(request):
     if request.user.first_name:
         display_name = request.user.first_name
 
-    # If there is a linked Instructor with a name, prefer that
+    # If there is a linked Personnel with a name, prefer that
     try:
-        inst = Instructor.objects.get(user=request.user)
-        if inst.name:
-            display_name = inst.name.split()[0]  # first word only
-    except Instructor.DoesNotExist:
+        person = Personnel.objects.get(user=request.user)
+        if person.name:
+            display_name = person.name.split()[0]  # first word only
+    except Personnel.DoesNotExist:
         pass
 
     return render(request, "admin/admin_dashboard.html", {
         "display_name": display_name,
     })
+
+
 
 
 @login_required
@@ -2036,3 +2165,70 @@ def api_outstanding_invoices(request):
         })
 
     return JsonResponse({"data": data})
+
+@admin_required
+def admin_personnel_resend_password(request, pk):
+    inst = get_object_or_404(Personnel, pk=pk)
+
+    if not inst.user:
+        messages.error(request, "This staff member does not have a login account.")
+        return redirect("admin_personnel_edit", pk=pk)
+
+    temp_password = get_random_string(12)
+
+    inst.user.set_password(temp_password)
+    inst.user.is_active = True
+    inst.user.save()
+
+    inst.must_change_password = True
+    inst.save()
+
+    send_initial_password_email(inst, temp_password)
+
+    if settings.DEBUG:
+        messages.success(
+            request,
+            f"New temporary password: {temp_password} "
+            f"(Email sent to DEV catch-all {settings.DEV_CATCH_ALL_EMAIL})"
+        )
+    else:
+        messages.success(request, "A new temporary password email has been sent.")
+
+    return redirect("admin_personnel_edit", pk=pk)
+
+@admin_required
+def admin_personnel_delete(request, pk):
+    inst = get_object_or_404(Personnel, pk=pk)
+
+    if inst.user and inst.user.is_superuser:
+        messages.error(request, "You cannot delete a superuser-linked staff record.")
+        return redirect("admin_personnel_edit", pk=pk)
+
+    user = inst.user  # store reference
+
+    # Delete Personnel first
+    inst.delete()
+
+    # Now safe to delete/deactivate the User
+    if user:
+        try:
+            user.delete()
+        except ProtectedError:
+            # If some other model protects it, fall back to deactivation
+            user.is_active = False
+            user.save()
+
+    messages.success(request, "Staff member deleted permanently.")
+    return redirect("admin_personnel_list")
+
+@login_required
+def password_change_done_and_clear(request):
+    profile = getattr(request.user, "personnel", None)
+
+    if profile:
+        profile.must_change_password = False
+        profile.save()
+
+    messages.success(request, "Your password has been changed successfully.")
+    return redirect("home")
+

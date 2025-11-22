@@ -8,18 +8,22 @@ from django.contrib import admin
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
 
+from django.contrib.auth.models import User
+from django.contrib.auth.admin import UserAdmin
+
 from import_export import resources, fields
 from import_export.widgets import ForeignKeyWidget
 from import_export.admin import ImportExportModelAdmin
 
 from .models import (
     AccidentReport, Business, TrainingLocation, CourseType,
-    Instructor, Booking, BookingDay, Attendance, CourseCompetency,
+    Personnel, Booking, BookingDay, Attendance, CourseCompetency,
     Invoice, InvoiceItem,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
     LogoOverride
 )
 
+Instructor = Personnel
 # ---------- Forms ----------
 
 class CourseTypeAdminForm(forms.ModelForm):
@@ -481,3 +485,49 @@ class LogoOverrideAdmin(admin.ModelAdmin):
     list_display = ("file_name", "active", "starts_at", "ends_at", "priority", "reason")
     list_filter = ("active",)
     search_fields = ("file_name", "reason")
+
+class PersonnelInline(admin.StackedInline):
+    model = Personnel
+    can_delete = False
+    verbose_name_plural = "Personnel details"
+
+
+class CustomUserAdmin(UserAdmin):
+    """
+    Custom User admin that:
+    - Uses email in list display & ordering
+    - Shows Personnel details inline on the same screen
+    """
+    inlines = [PersonnelInline]
+
+    fieldsets = (
+        (None, {"fields": ("email", "password")}),
+        ("Personal info", {"fields": ("first_name", "last_name")}),
+        ("Permissions", {
+            "fields": (
+                "is_active", "is_staff", "is_superuser",
+                "groups", "user_permissions",
+            )
+        }),
+        ("Important dates", {"fields": ("last_login", "date_joined")}),
+    )
+
+    add_fieldsets = (
+        (None, {
+            "classes": ("wide",),
+            "fields": ("email", "password1", "password2"),
+        }),
+    )
+
+    list_display = ("email", "first_name", "last_name", "is_staff")
+    search_fields = ("email", "first_name", "last_name")
+    ordering = ("email",)
+
+
+# Replace Django’s default User admin with your custom version
+try:
+    admin.site.unregister(User)
+except admin.sites.NotRegistered:
+    pass
+
+admin.site.register(User, CustomUserAdmin)

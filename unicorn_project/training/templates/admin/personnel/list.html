@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Instructors{% endblock %}
+{% block title %}Personnel{% endblock %}
 {% block content %}
 <div class="d-flex align-items-center justify-content-between mb-3">
-  <h3 class="m-0">Instructors</h3>
-  <a class="btn btn-primary" href="{% url 'admin_instructor_new' %}">
-    <i class="bi bi-person-plus"></i> New instructor
+  <h3 class="m-0">Personnel</h3>
+  <a class="btn btn-primary" href="{% url 'admin_personnel_new' %}">
+    <i class="bi bi-person-plus"></i> New staff member
   </a>
 </div>
 
@@ -20,7 +20,7 @@
       <td>{{ i.email|default:"—" }}</td>
       <td>{{ i.telephone|default:"—" }}</td>
       <td class="text-end">
-        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin_instructor_edit' i.pk %}">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'admin_personnel_edit' i.pk %}">
           <i class="bi bi-pencil-square"></i> Edit
         </a>
       </td>

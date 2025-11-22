@@ -37,7 +37,7 @@ from reportlab.lib import colors
 from statistics import mean
 from django.template.loader import render_to_string
 import subprocess, tempfile, os
-from .models import Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome
+from .models import Personnel as Instructor, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm
 from .utils.invoice import (
     get_invoice_template_path,
@@ -448,18 +448,22 @@ def _get_instructor(user):
 
 @login_required
 def post_login(request):
-    """
-    Smart landing after login:
-    - If user is linked to an Instructor -> go to their upcoming bookings
-    - If user is staff -> go to admin dashboard
-    - Else -> fall back to instructor bookings (safe)
-    """
+    # 1. Superusers always go to admin dashboard
+    if request.user.is_superuser:
+        return redirect("app_admin_dashboard")
+
+    # 2. Real admin group users go to admin dashboard
+    if request.user.groups.filter(name__iexact="admin").exists():
+        return redirect("app_admin_dashboard")
+
+    # 3. Instructors go to instructor dashboard
     inst = _get_instructor(request.user)
     if inst:
         return redirect("instructor_bookings")
-    if request.user.is_staff:
-        return redirect("app_admin_dashboard")
+
+    # 4. Everyone else → instructor homepage fallback
     return redirect("instructor_bookings")
+
 
 @login_required
 def booking_fee(request, pk):

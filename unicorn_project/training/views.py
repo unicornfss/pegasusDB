@@ -11,8 +11,16 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_GET, require_POST
 from django.template.loader import render_to_string
-from .models import AccidentReport, Business, TrainingLocation, CourseType, Instructor, Booking, BookingDay, StaffProfile, DelegateRegister, FeedbackResponse
-from .forms import  AccidentReportForm, BookingForm, InstructorForm, InstructorProfileForm, DelegateRegisterForm, FeedbackForm
+from .models import AccidentReport, Business, TrainingLocation, CourseType, Personnel, Booking, BookingDay, DelegateRegister, FeedbackResponse
+from .forms import (
+    AccidentReportForm,
+    BookingForm,
+    PersonnelAdminForm,
+    PersonnelProfileForm,
+    DelegateRegisterForm,
+    FeedbackForm,
+)
+
 from datetime import timedelta, datetime
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE as SHAPE
@@ -62,36 +70,6 @@ def home(request):
         if is_instructor_user(request.user):
             return redirect("instructor_bookings")
     return render(request, "admin/admin_dashboard.html")
-
-
-
-def _must_change_password_gate(request):
-    if not request.user.is_authenticated:
-        return None
-    prof = getattr(request.user, "staff_profile", None)
-    if prof and prof.must_change_password and request.path != "/accounts/password_change/":
-        return redirect("password_change")
-    return None
-
-def _parse_yyyy_mm_dd(s: str):
-    try:
-        return datetime.strptime(s, "%Y-%m-%d").date()
-    except Exception:
-        return None
-
-def _instructors_for_date(course: CourseType, day_date):
-    """
-    Return instructors who are delivering *this* course on the given date,
-    by traversing Booking -> BookingDay(date=day_date).
-    """
-    if not (course and day_date):
-        return Instructor.objects.none()
-    return (
-        Instructor.objects
-        .filter(bookings__course_type=course, bookings__days__date=day_date)
-        .distinct()
-        .order_by("name")
-    )
 
 def ensure_groups():
     Group.objects.get_or_create(name='admin')
@@ -256,50 +234,6 @@ _STATUS_MAP = {
     "cancelled":        ("Cancelled", "badge bg-warning text-dark"),
 }
 
-@login_required
-def instructor_bookings(request):
-    """
-    Landing page for instructors: upcoming courses for the logged-in instructor.
-    """
-    today = timezone.localdate()
-
-    # Find the instructor record for this user
-    inst = Instructor.objects.filter(user=request.user).first()
-    if not inst:
-        # No instructor linked — show an empty page with a friendly message
-        return render(request, "instructor/bookings.html", {
-            "title": "My bookings",
-            "rows": [],
-            "empty_reason": "Your account isn’t linked to an instructor profile yet.",
-        })
-
-    qs = (Booking.objects
-          .select_related("course_type", "business", "training_location")
-          .filter(instructor=inst, course_date__gte=today)
-          .order_by("course_date", "start_time"))
-
-    rows = []
-    for b in qs:
-        # ----- NEW: precompute label & badge style so template is simple
-        label, cls, *opt_style = _STATUS_MAP.get(b.status or "", ("", "badge bg-secondary"))
-        rows.append({
-            "id":           b.id,
-            "date":         b.course_date,
-            "start":        b.start_time.strftime("%H:%M") if b.start_time else "",
-            "course":       b.course_type.name if b.course_type else "",
-            "business":     b.business.name if b.business else "",
-            "location":     b.training_location.name if b.training_location else "",
-            "ref":          b.course_reference or "",
-            "status_label": label,
-            "status_cls":   cls,
-            "status_style": opt_style[0] if opt_style else "",
-        })
-
-    return render(request, "instructor/bookings.html", {
-        "title": "My bookings",
-        "rows": rows,
-        "empty_reason": "" if rows else "You have no upcoming bookings.",
-    })
 
 @login_required
 def instructor_profile(request):

@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.core.exceptions import ValidationError
 from django.core.validators import EmailValidator
 from django.db.models import Q
@@ -11,7 +11,7 @@ from .models import (
     AccidentReport,
     Business,
     CourseType,
-    Instructor,
+    Personnel,
     TrainingLocation,
     Booking,
     BookingDay,
@@ -275,20 +275,23 @@ CourseCompetencyFormSet = inlineformset_factory(
 )
 
 # ---------------- Instructor (Admin view) ----------------
-class InstructorForm(forms.ModelForm):
+class PersonnelAdminForm(forms.ModelForm):
     """
-    Admin form for instructors with a 'user' selector that:
-      - lists only non-superusers not already assigned to another instructor
-      - keeps the currently assigned user when editing
+    Admin form for Personnel with a 'user' selector that:
+      - lists non-superusers
+      - lists only users not already assigned to another Personnel
+      - keeps the current linked user when editing
     """
+
     user = forms.ModelChoiceField(
         queryset=User.objects.none(),
         required=False,
-        help_text="Optional login for this instructor. Only unassigned (non-superuser) users are listed.",
+        help_text="Optional login for this person. Only unassigned (non-superuser) users are listed.",
+        widget=forms.Select(attrs={"class": "form-select"})
     )
 
     class Meta:
-        model = Instructor
+        model = Personnel
         fields = [
             "name",
             "address_line",
@@ -303,15 +306,14 @@ class InstructorForm(forms.ModelForm):
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
-            "address_line": forms.TextInput(attrs={"class": "form-control", "id": "id_address_line"}),
-            "town": forms.TextInput(attrs={"class": "form-control", "id": "id_town"}),
-            "postcode": forms.TextInput(attrs={"class": "form-control", "id": "id_postcode"}),
+            "address_line": forms.TextInput(attrs={"class": "form-control"}),
+            "town": forms.TextInput(attrs={"class": "form-control"}),
+            "postcode": forms.TextInput(attrs={"class": "form-control"}),
             "telephone": forms.TextInput(attrs={"class": "form-control"}),
             "email": forms.EmailInput(attrs={"class": "form-control"}),
             "bank_sort_code": forms.TextInput(attrs={"class": "form-control"}),
             "bank_account_number": forms.TextInput(attrs={"class": "form-control"}),
             "name_on_account": forms.TextInput(attrs={"class": "form-control"}),
-            "user": forms.Select(attrs={"class": "form-select"}),
         }
 
     def __init__(self, *args, **kwargs):
@@ -320,23 +322,29 @@ class InstructorForm(forms.ModelForm):
         base_qs = User.objects.filter(is_superuser=False)
 
         if self.instance and self.instance.pk and self.instance.user_id:
-            qs = base_qs.filter(Q(instructor__isnull=True) | Q(pk=self.instance.user_id))
+            qs = base_qs.filter(
+                Q(personnel__isnull=True) | Q(pk=self.instance.user_id)
+            )
         else:
-            qs = base_qs.filter(instructor__isnull=True)
+            qs = base_qs.filter(personnel__isnull=True)
 
-        self.fields["user"].queryset = qs.order_by("username")
+        self.fields["user"].queryset = qs.order_by("email", "username")
 
     def clean_user(self):
         user = self.cleaned_data.get("user")
         if not user:
             return user
+
         if user.is_superuser:
             raise forms.ValidationError("You cannot assign a superuser account.")
-        existing = Instructor.objects.filter(user=user)
+
+        existing = Personnel.objects.filter(user=user)
         if self.instance and self.instance.pk:
             existing = existing.exclude(pk=self.instance.pk)
+
         if existing.exists():
-            raise forms.ValidationError("That user is already assigned to another instructor.")
+            raise forms.ValidationError("That user is already linked to another Personnel record.")
+
         return user
 
 
@@ -357,10 +365,13 @@ class TrainingLocationForm(forms.ModelForm):
 
 
 # ---------------- Instructor (self-service) ----------------
-class InstructorProfileForm(forms.ModelForm):
-    """Used by instructors themselves; no 'user' linkage exposed here."""
+class PersonnelProfileForm(forms.ModelForm):
+    """
+    Form used in your custom front-end for instructors to edit their own profile.
+    Does NOT allow changing the linked User account.
+    """
     class Meta:
-        model = Instructor
+        model = Personnel
         fields = [
             "name",
             "address_line",
@@ -372,6 +383,18 @@ class InstructorProfileForm(forms.ModelForm):
             "bank_account_number",
             "name_on_account",
         ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "address_line": forms.TextInput(attrs={"class": "form-control"}),
+            "town": forms.TextInput(attrs={"class": "form-control"}),
+            "postcode": forms.TextInput(attrs={"class": "form-control"}),
+            "telephone": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+            "bank_sort_code": forms.TextInput(attrs={"class": "form-control"}),
+            "bank_account_number": forms.TextInput(attrs={"class": "form-control"}),
+            "name_on_account": forms.TextInput(attrs={"class": "form-control"}),
+        }
+
 
 
 # ---------------- Admin Instructor (explicit) ----------------
@@ -383,7 +406,7 @@ class AdminInstructorForm(forms.ModelForm):
     )
 
     class Meta:
-        model = Instructor
+        model = Personnel
         fields = [
             "user",
             "name",
@@ -500,7 +523,7 @@ class BookingNotesForm(forms.ModelForm):
         }
 
 from django import forms
-from .models import FeedbackResponse, Instructor, CourseType
+from .models import FeedbackResponse, Personnel as Instructor, CourseType
 
 RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]
 
@@ -517,7 +540,7 @@ EMOJI_1_TO_5 = (
 
 # forms.py
 from django import forms
-from .models import FeedbackResponse, CourseType, Instructor
+from .models import FeedbackResponse, CourseType, Personnel as Instructor
 
 RATING_CHOICES = (
     (1, "1"),
@@ -647,3 +670,81 @@ class AccidentReportForm(forms.ModelForm):
         self.fields["first_aider_name"].widget.attrs.setdefault("id", "ar-first-aider")
         self.fields["reporter_name"].widget.attrs.setdefault("id", "ar-reporter")
 
+class PersonnelForm(forms.ModelForm):
+
+    groups = forms.ModelMultipleChoiceField(
+        queryset=Group.objects.all().order_by("name"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(
+            attrs={"class": "form-check-input"}
+        ),
+    )
+
+    class Meta:
+        model = Personnel
+        fields = [
+            "name",
+            "email",
+            "telephone",
+            "address_line",
+            "town",
+            "postcode",
+            "bank_sort_code",
+            "bank_account_number",
+            "name_on_account",
+            "can_login",
+            "is_active",
+        ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+            "telephone": forms.TextInput(attrs={"class": "form-control"}),
+            "address_line": forms.TextInput(attrs={"class": "form-control"}),
+            "town": forms.TextInput(attrs={"class": "form-control"}),
+            "postcode": forms.TextInput(attrs={"class": "form-control"}),
+            "bank_sort_code": forms.TextInput(attrs={"class": "form-control"}),
+            "bank_account_number": forms.TextInput(attrs={"class": "form-control"}),
+            "name_on_account": forms.TextInput(attrs={"class": "form-control"}),
+            "can_login": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    # --------------------------
+    # PRE-POPULATE GROUPS
+    # --------------------------
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.instance and self.instance.user:
+            # Load user's groups into the form
+            self.fields["groups"].initial = self.instance.user.groups.all()
+
+        # Disable the "can_login" checkbox if inactive
+        if self.instance and not self.instance.is_active:
+            self.fields["can_login"].widget.attrs["disabled"] = True
+
+    # --------------------------
+    # SAVE LOGIC
+    # --------------------------
+    def save(self, commit=True):
+        inst = super().save(commit=False)
+
+        # If inactive → force disable login
+        if not inst.is_active:
+            inst.can_login = False
+
+        if commit:
+            inst.save()
+
+        # APPLY GROUPS + LOGIN SETTINGS TO USER
+        if inst.user:
+
+            # Apply groups
+            groups = self.cleaned_data.get("groups", [])
+            inst.user.groups.set(groups)
+
+            # Activate/deactivate user login
+            inst.user.is_active = inst.can_login and inst.is_active
+            inst.user.save()
+
+        return inst

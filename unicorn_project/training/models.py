@@ -107,25 +107,36 @@ class CourseType(models.Model):
         return f"{self.name} ({self.code})"
 
 
-class Instructor(models.Model):
-    id   = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(User, null=True, blank=True, on_delete=models.PROTECT, related_name="instructor")
+class Personnel(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    name     = models.CharField(max_length=255)
+    # The important fix is here ↓↓↓
+    user = models.OneToOneField(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="personnel",
+    )
+
+    name = models.CharField(max_length=255)
     address_line = models.CharField(max_length=255, blank=True)
-    town         = models.CharField(max_length=120, blank=True)
-    postcode     = models.CharField(max_length=12,  blank=True)
+    town = models.CharField(max_length=120, blank=True)
+    postcode = models.CharField(max_length=12, blank=True)
 
     telephone = models.CharField(max_length=32, blank=True)
-    email     = models.EmailField(unique=True)
+    email = models.EmailField(unique=True)
 
-    bank_sort_code       = models.CharField(max_length=16, blank=True)
-    bank_account_number  = models.CharField(max_length=20, blank=True)
-    name_on_account      = models.CharField(max_length=255, blank=True)
+    bank_sort_code = models.CharField(max_length=16, blank=True)
+    bank_account_number = models.CharField(max_length=20, blank=True)
+    name_on_account = models.CharField(max_length=255, blank=True)
+
+    is_active = models.BooleanField(default=True)
+    can_login = models.BooleanField(default=True)
+    must_change_password = models.BooleanField(default=True)
 
     def __str__(self):
         return self.name
-
 
 # =========================
 # Operational Models
@@ -141,7 +152,7 @@ class Booking(models.Model):
     business          = models.ForeignKey(Business,         on_delete=models.CASCADE, related_name="bookings")
     training_location = models.ForeignKey(TrainingLocation, on_delete=models.CASCADE, related_name="bookings")
     course_type       = models.ForeignKey(CourseType,       on_delete=models.PROTECT, related_name="bookings")
-    instructor        = models.ForeignKey(Instructor,       on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings")
+    instructor        = models.ForeignKey("Personnel",      on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings")
 
     course_date = models.DateField()
     start_time  = models.TimeField(null=True, blank=True, default=None)
@@ -230,25 +241,6 @@ class Attendance(models.Model):
     def __str__(self):
         return f"{self.delegate_name} @ {self.booking_day}"
 
-
-# =========================
-# Staff profile / signals
-# =========================
-
-class StaffProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="staff_profile")
-    must_change_password = models.BooleanField(default=False)
-
-    def __str__(self):
-        return f"Profile({self.user.username})"
-
-
-@receiver(post_save, sender=User)
-def ensure_staff_profile(sender, instance, created, **kwargs):
-    if created:
-        StaffProfile.objects.get_or_create(user=instance)
-
-
 @receiver(post_save, sender=Business)
 def sync_business_training_location(sender, instance: Business, created, **kwargs):
     """
@@ -289,7 +281,7 @@ class DelegateRegister(models.Model):
     job_title = models.CharField(max_length=100)
     employee_id = models.CharField(max_length=50, blank=True)
     date = models.DateField(default=timezone.localdate)  # forced to 'today' server-side
-    instructor = models.ForeignKey("Instructor", on_delete=models.PROTECT)
+    instructor = models.ForeignKey("Personnel", on_delete=models.PROTECT)
     health_status = models.CharField(
         max_length=24,
         choices=HealthStatus.choices,
@@ -418,7 +410,7 @@ class CompetencyAssessment(models.Model):
         blank=True,
         help_text="Optional note (e.g. 'carried from DNF on 2025-03-12')."
     )
-    assessed_by = models.ForeignKey("Instructor", on_delete=models.PROTECT)
+    assessed_by = models.ForeignKey("Personnel", on_delete=models.PROTECT)
     assessed_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -430,18 +422,24 @@ class FeedbackResponse(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     course_type = models.ForeignKey(CourseType, on_delete=models.PROTECT, related_name="feedback")
     date = models.DateField(default=timezone.localdate)  # auto "today"
-    instructor = models.ForeignKey(Instructor, on_delete=models.SET_NULL, null=True, blank=True, related_name="feedback")
+
+    # still called "instructor" but now links to Personnel
+    instructor = models.ForeignKey(
+        "Personnel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="feedback",
+    )
 
     # 1–5 ratings
-    prior_knowledge = models.PositiveSmallIntegerField(null=True, blank=True)   # "Level of knowledge prior to course"
-    post_knowledge  = models.PositiveSmallIntegerField(null=True, blank=True)   # "Level of knowledge post course"
+    prior_knowledge = models.PositiveSmallIntegerField(null=True, blank=True)
+    post_knowledge  = models.PositiveSmallIntegerField(null=True, blank=True)
 
-    # Course objectives & content
     q_purpose_clear     = models.PositiveSmallIntegerField(null=True, blank=True)
     q_personal_needs    = models.PositiveSmallIntegerField(null=True, blank=True)
     q_exercises_useful  = models.PositiveSmallIntegerField(null=True, blank=True)
 
-    # Presentation
     q_structure         = models.PositiveSmallIntegerField(null=True, blank=True)
     q_pace              = models.PositiveSmallIntegerField(null=True, blank=True)
     q_content_clear     = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -449,22 +447,17 @@ class FeedbackResponse(models.Model):
     q_materials_quality = models.PositiveSmallIntegerField(null=True, blank=True)
     q_books_quality     = models.PositiveSmallIntegerField(null=True, blank=True)
 
-    # Venue
     q_venue_suitable    = models.PositiveSmallIntegerField(null=True, blank=True)
 
-    # Summary
     q_benefit_at_work   = models.PositiveSmallIntegerField(null=True, blank=True)
     q_benefit_outside   = models.PositiveSmallIntegerField(null=True, blank=True)
 
-    # Overall
     overall_rating = models.PositiveSmallIntegerField(
         null=True, blank=True, help_text="Delegate’s overall 1–5 rating"
     )
 
-    # Free text
     comments = models.TextField(blank=True)
 
-    # Contact follow-up
     wants_callback = models.BooleanField(default=False)
     contact_name   = models.CharField(max_length=200, blank=True)
     contact_email  = models.EmailField(blank=True)
@@ -488,6 +481,7 @@ class FeedbackResponse(models.Model):
         ref = self.course_type.code if self.course_type_id else "Course"
         return f"Feedback {ref} {self.date} ({self.id})"
 
+
 class Invoice(models.Model):
     STATUS_CHOICES = [
         ("draft", "Awaiting completion and sending"),
@@ -498,7 +492,7 @@ class Invoice(models.Model):
         ("rejected", "Rejected"),
     ]
     booking = models.OneToOneField("Booking", on_delete=models.CASCADE, related_name="invoice")
-    instructor = models.ForeignKey("Instructor", on_delete=models.CASCADE)
+    instructor = models.ForeignKey("Personnel", on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
 
     invoice_date = models.DateField(null=True, blank=True)
@@ -660,86 +654,82 @@ class ExamAnswer(models.Model):
     def __str__(self):
         return f"{self.text}{' (correct)' if self.is_correct else ''}"
     
-from django.utils import timezone
-
 class ExamAttempt(models.Model):
     exam = models.ForeignKey("Exam", on_delete=models.CASCADE, related_name="attempts")
+
     # Snapshot of who started (from the start page)
     delegate_name = models.CharField(max_length=120)
     date_of_birth = models.DateField()
-    instructor = models.ForeignKey("Instructor", null=True, blank=True, on_delete=models.SET_NULL)
+    instructor = models.ForeignKey("Personnel", null=True, blank=True, on_delete=models.SET_NULL)
     exam_date = models.DateField()
 
+    # Timing
     started_at = models.DateTimeField(default=timezone.now)
     expires_at = models.DateTimeField()
     finished_at = models.DateTimeField(null=True, blank=True)
 
+    # Scoring
     score_correct = models.PositiveIntegerField(default=0)
     total_questions = models.PositiveIntegerField(default=0)
-
     passed = models.BooleanField(default=False)
     viva_eligible = models.BooleanField(default=False)
 
+    # Viva / oral follow-up
     viva_notes = models.TextField(blank=True)
     viva_decided_at = models.DateTimeField(null=True, blank=True)
     viva_decided_by = models.ForeignKey(
-        "Instructor",  # or settings.AUTH_USER_MODEL if you prefer
-        null=True, blank=True,
+        "Personnel",
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
         related_name="viva_decisions",
     )
 
-    def is_viva_pending(self) -> bool:
-        return (self.result or "").lower() == "viva" and not self.viva_decided_at
+    # Retake management
+    retake_authorised = models.BooleanField(default=False)
+    retake_authorised_until = models.DateTimeField(null=True, blank=True)
+
+    # ----- Methods / helpers -------------------------------------
 
     def remaining_seconds(self) -> int:
+        """
+        Number of seconds remaining before the attempt expires.
+        Returns 0 if already finished.
+        """
         if self.finished_at:
             return 0
         now = timezone.now()
         return max(0, int((self.expires_at - now).total_seconds()))
 
-class ExamAttemptAnswer(models.Model):
-    attempt = models.ForeignKey("ExamAttempt", on_delete=models.CASCADE, related_name="answers")
-    question = models.ForeignKey("ExamQuestion", on_delete=models.CASCADE)
-    answer = models.ForeignKey("ExamAnswer", null=True, blank=True, on_delete=models.SET_NULL)
-    is_correct = models.BooleanField(default=False)
-
-    class Meta:
-        unique_together = ("attempt", "question")
-
-class ExamAttempt(models.Model):
-    exam = models.ForeignKey("Exam", on_delete=models.CASCADE, related_name="attempts")
-    delegate_name = models.CharField(max_length=120)
-    date_of_birth = models.DateField()
-    instructor = models.ForeignKey("Instructor", null=True, blank=True, on_delete=models.SET_NULL)
-    exam_date = models.DateField()
-
-    started_at = models.DateTimeField(default=timezone.now)
-    expires_at = models.DateTimeField()
-    finished_at = models.DateTimeField(null=True, blank=True)
-
-    score_correct = models.PositiveIntegerField(default=0)
-    total_questions = models.PositiveIntegerField(default=0)
-
-    passed = models.BooleanField(default=False)
-    viva_eligible = models.BooleanField(default=False)
-
-    retake_authorised = models.BooleanField(default=False)
-    retake_authorised_until = models.DateTimeField(null=True, blank=True)
+    def is_viva_pending(self) -> bool:
+        """
+        True if this attempt is eligible for viva and a decision
+        has not yet been recorded.
+        """
+        return self.viva_eligible and not self.viva_decided_at
 
     @property
     def attempt_number(self) -> int:
-        qs = (ExamAttempt.objects
-              .filter(exam=self.exam,
-                      delegate_name__iexact=self.delegate_name,
-                      date_of_birth=self.date_of_birth)
-              .order_by("started_at", "pk")
-              .values_list("pk", flat=True))
+        """
+        1-based index of this attempt for the same delegate / exam / DOB,
+        ordered by started_at then primary key.
+        """
+        qs = (
+            ExamAttempt.objects
+            .filter(
+                exam=self.exam,
+                delegate_name__iexact=self.delegate_name,
+                date_of_birth=self.date_of_birth,
+            )
+            .order_by("started_at", "pk")
+            .values_list("pk", flat=True)
+        )
         try:
             return list(qs).index(self.pk) + 1
         except ValueError:
             return 1  # fallback if not in the list
 
+
 class ExamAttemptAnswer(models.Model):
     attempt = models.ForeignKey("ExamAttempt", on_delete=models.CASCADE, related_name="answers")
     question = models.ForeignKey("ExamQuestion", on_delete=models.CASCADE)
@@ -748,6 +738,7 @@ class ExamAttemptAnswer(models.Model):
 
     class Meta:
         unique_together = ("attempt", "question")
+
 
 class AccidentReport(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

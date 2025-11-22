@@ -1,7 +1,7 @@
 # training/forms_exam.py
 from django import forms
 from django.utils import timezone
-from .models import Instructor
+from .models import Personnel as Instructor
 
 class DelegateExamStartForm(forms.Form):
     exam_code = forms.CharField(label="Exam code", disabled=True)

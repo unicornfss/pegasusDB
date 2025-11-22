@@ -125,14 +125,8 @@
                 <ul>
                   <li>
                     <a class="leaf {% if request.resolver_match.url_name == 'admin_instructor_list' %}active{% endif %}"
-                       href="{% url 'admin_instructor_list' %}">
+                       href="{% url 'admin_personnel_list' %}">
                       <i class="bi bi-columns"></i> View / edit / add
-                    </a>
-                  </li>
-                  <li>
-                    <a class="leaf {% if request.resolver_match.url_name == 'admin_user_list' %}active{% endif %}"
-                       href="{% url 'admin_user_list' %}">
-                      <i class="bi bi-people-fill"></i> Users
                     </a>
                   </li>
                 </ul>

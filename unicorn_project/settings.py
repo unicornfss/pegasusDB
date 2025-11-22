@@ -165,3 +165,8 @@ ANYMAIL = {
     "SEND_DEFAULTS": {"from_email": DEFAULT_FROM_EMAIL},
 }
 
+AUTHENTICATION_BACKENDS = [
+    "unicorn_project.training.auth_backends.EmailBackend",
+    "django.contrib.auth.backends.ModelBackend",
+]
+

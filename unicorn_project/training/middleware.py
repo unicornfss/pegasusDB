@@ -28,28 +28,56 @@ def _is_admin(user):
         or user.groups.filter(name__iexact="admin").exists()
     )
 
-class MustChangePasswordMiddleware(MiddlewareMixin):
-    def process_request(self, request):
-        user = getattr(request, "user", None)
-        if not (user and user.is_authenticated):
-            return None
+class MustChangePasswordMiddleware:
+    ALLOWED_PATHS = (
+        "/accounts/login/",
+        "/accounts/logout/",
+        "/accounts/password_change/",
+        "/accounts/password_change/done/",
+        "/accounts/password_reset/",
+        "/accounts/password_reset/done/",
+        "/static/",
+        "/favicon.ico",
+        "/post-login/",
+        # DO NOT include "/" here — causes match-all bug
+    )
 
-        # OLD:
-        # prof = getattr(user, "profile", None)
-        # NEW:
-        prof = getattr(user, "staff_profile", None)
+    def __init__(self, get_response):
+        self.get_response = get_response
 
-        must_change = getattr(prof, "must_change_password", False)
-        if not must_change:
-            return None
+    def __call__(self, request):
+        user = request.user
 
-        path = request.path or "/"
-        if path.startswith("/accounts/password_change/") or path.startswith("/accounts/login/") or path.startswith("/accounts/logout/"):
-            return None
+        # Not logged in
+        if not user.is_authenticated:
+            return self.get_response(request)
+
+        # Allow true homepage explicitly
+        if request.path == "/":
+            return self.get_response(request)
+
+        # Use CORRECT related_name → user.personnel
+        profile = getattr(user, "personnel", None)
+
+        if not profile:
+            return self.get_response(request)
+
+        if not profile.must_change_password:
+            return self.get_response(request)
+
+        path = request.path
+
+        # Do NOT redirect on allowed pages
+        for allowed in self.ALLOWED_PATHS:
+            if path.startswith(allowed):
+                return self.get_response(request)
+
+        # Avoid redirect loop
+        if path == reverse("password_change"):
+            return self.get_response(request)
 
         messages.warning(request, "You must change your password before continuing.")
         return redirect("password_change")
-
 
 class AdminGateMiddleware(MiddlewareMixin):
     """
@@ -59,15 +87,20 @@ class AdminGateMiddleware(MiddlewareMixin):
     def process_request(self, request):
         path = request.path or "/"
 
-        # Fast pass: ignore clearly safe paths
+        # -------------------------------------------
+        # FIRST: allow safe pages (prevents loops!)
+        # -------------------------------------------
         for p in SAFE_ADMIN_WHITELIST:
             if path.startswith(p):
                 return None
 
-        # Only check our custom admin area patterns
+        # -------------------------------------------
+        # THIRD: admin-area restriction
+        # -------------------------------------------
         if any(path.startswith(prefix) for prefix in ADMIN_PREFIXES):
             if not _is_admin(getattr(request, "user", None)):
                 messages.error(request, "You don't have access to the admin area.")
                 return redirect("home")
 
         return None
+
