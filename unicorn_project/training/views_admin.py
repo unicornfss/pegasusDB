@@ -806,7 +806,7 @@ def booking_form(request, pk=None):
                 ).exists()
 
                 if has_delegates:
-                    # Compare against existing BookingDay rows
+                    # Compare dates/times only
                     existing_rows = [
                         (
                             d.date.isoformat(),
@@ -817,16 +817,37 @@ def booking_form(request, pk=None):
                     ]
 
                     if posted_rows != existing_rows:
-                        # They really are trying to change the dates/times – block it
+                        # BLOCK date/time changes only
                         messages.error(
                             request,
-                            "Cannot change course days because delegates are already registered. "
-                            "Remove delegates or their registers before altering course dates.",
+                            "Cannot change course days or times because delegates are already registered."
                         )
                         if "save_return" in request.POST:
                             return redirect("admin_booking_list")
                         return redirect("admin_booking_edit", pk=booking.pk)
-                    # If posted days are identical to existing ones, do nothing
+
+                    # ---------- NEW: Update only instructor + note ----------
+                    # Dates and times unchanged, but instructors ARE allowed to change.
+                    for i, d in enumerate(booking.days.all().order_by("date"), start=1):
+                        row = days_payload[i-1] if i-1 < len(days_payload) else None
+                        if not row:
+                            continue
+
+                        inst_id = (row.get("instructor") or "").strip() or None
+                        note = (row.get("note") or "").strip()
+
+                        # Update these two fields only
+                        changed = False
+                        if d.instructor_id != inst_id:
+                            d.instructor_id = inst_id
+                            changed = True
+                        if hasattr(d, "note") and d.note != note:
+                            d.note = note
+                            changed = True
+
+                        if changed:
+                            d.save(update_fields=["instructor", "note"])
+
                     # (no change to BookingDay rows).
 
                 else:
@@ -850,11 +871,14 @@ def booking_form(request, pk=None):
                                 _hours_for_day_index(i, total_days, rows),
                             )
 
+                        inst_id = (row.get("instructor") or "").strip() or None
+
                         BookingDay.objects.create(
                             booking=booking,
                             date=datetime.fromisoformat(day_date_str).date(),
                             start_time=start_t,
                             end_time=end_t,
+                            instructor_id=inst_id,
                         )
 
             messages.success(request, "Booking saved.")
@@ -896,13 +920,16 @@ def booking_form(request, pk=None):
 
     if obj and obj.pk:
         booking_days_initial = [
-            {
-                "day_date": d.date.isoformat(),
-                "start_time": d.start_time.strftime("%H:%M") if d.start_time else "",
-                "end_time": d.end_time.strftime("%H:%M") if d.end_time else "",
-            }
-            for d in obj.days.all().order_by("date")
-        ]
+        {
+            "day_date": d.date.isoformat(),
+            "start_time": d.start_time.strftime("%H:%M") if d.start_time else "",
+            "end_time": d.end_time.strftime("%H:%M") if d.end_time else "",
+            "instructor": str(d.instructor_id or ""),   # <-- NEW FIELD
+            "note": getattr(d, "note", "") or "",       # optional
+        }
+        for d in obj.days.all().order_by("date")
+    ]
+
     else:
         booking_days_initial = []
 

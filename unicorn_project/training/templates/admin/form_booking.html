@@ -93,7 +93,7 @@
             </div>
 
             <div class="col-md-6">
-              <label class="form-label">Course date *</label>
+              <label class="form-label">Course start date *</label>
               {{ form.course_date }}
               {% for err in form.course_date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
             </div>
@@ -113,48 +113,66 @@
       </div>
     </div>
 
-    <!-- Instructor & contact -->
-    <div class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-header">Instructor &amp; contact</div>
-        <div class="card-body">
-          <div class="row g-3">
-            <div class="col-md-12">
-              <label class="form-label">Instructor</label>
-              {{ form.instructor }}
-              {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </div>
+        <!-- Instructor & contact -->
+        <div class="col-12 col-xl-6">
+          <div class="card h-100">
+            <div class="card-header">Instructor, contact & notes</div>
+            <div class="card-body">
 
-            <div class="col-md-6">
-              <label class="form-label">Course fee</label>
-              {{ form.course_fee }}
-              {% for err in form.course_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </div>
-            <div class="col-md-6">
-              <label class="form-label">Instructor fee</label>
-              {{ form.instructor_fee }}
-              {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </div>
+              <div class="row g-3">
 
-            <div class="col-md-4">
-              <label class="form-label">Contact name</label>
-              {{ form.contact_name }}
-              {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Telephone</label>
-              {{ form.telephone }}
-              {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-            </div>
-            <div class="col-md-4">
-              <label class="form-label">Email</label>
-              {{ form.email }}
-              {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                <div class="col-md-12">
+                  <label class="form-label">Lead Instructor</label>
+                  {{ form.instructor }}
+                  {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Course fee</label>
+                  {{ form.course_fee }}
+                  {% for err in form.course_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+
+                <div class="col-md-6">
+                  <label class="form-label">Instructor fee</label>
+                  {{ form.instructor_fee }}
+                  {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Contact name</label>
+                  {{ form.contact_name }}
+                  {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Telephone</label>
+                  {{ form.telephone }}
+                  {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+
+                <div class="col-md-4">
+                  <label class="form-label">Email</label>
+                  {{ form.email }}
+                  {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                </div>
+
+              </div><!-- end row -->
+
+              <hr>
+
+              <div class="mt-3">
+                <label class="form-label">Course notes</label>
+                {{ form.booking_notes }}
+                {% for err in form.booking_notes.errors %}
+                  <div class="text-danger small">{{ err }}</div>
+                {% endfor %}
+              </div>
+
             </div>
           </div>
         </div>
-      </div>
-    </div>
+
 
     <!-- Course days + notes row -->
   </div><!-- end main details row -->
@@ -162,7 +180,7 @@
   <div class="row g-3 mt-3">
 
     <!-- Course days -->
-    <div class="col-12 col-xl-6">
+    <div class="col-12">
       <div class="card h-100">
         <div class="card-header">Course days</div>
         <div class="card-body">
@@ -174,6 +192,7 @@
                   <th style="width:220px">Date</th>
                   <th style="width:160px">Start</th>
                   <th style="width:160px">End</th>
+                  <th style="width:200px">Instructor</th>
                   <th>Notes</th>
                 </tr>
               </thead>
@@ -187,19 +206,6 @@
         </div>
       </div>
     </div>
-
-    <!-- Notes -->
-    <div class="col-12 col-xl-6">
-      <div class="card h-100">
-        <div class="card-header">Course notes</div>
-        <div class="card-body">
-          <label class="form-label">Comments</label>
-          {{ form.booking_notes }}
-          {% for err in form.booking_notes.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-        </div>
-      </div>
-    </div>
-
   </div>
 
   {% if booking %}
@@ -964,8 +970,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function buildRows(count){
-    const tb = $tbody(); if (!tb) return;
+    const tb = $tbody(); 
+    if (!tb) return;
     tb.innerHTML = '';
+
     for (let i = 1; i <= count; i++) {
       const tr = document.createElement('tr');
       tr.dataset.index = i;
@@ -985,7 +993,28 @@ document.addEventListener('DOMContentLoaded', function () {
       enI.className = 'form-control form-control-sm';
       enI.id = `day-${i}-end`;
 
-      if (i === 1) { dateI.readOnly = true; stI.readOnly = true; dateI.title="Controlled by Course date above"; stI.title="Controlled by Start time above"; }
+      if (i === 1) {
+        dateI.readOnly = true;
+        stI.readOnly = true;
+        dateI.title="Controlled by Course date above";
+        stI.title="Controlled by Start time above";
+      }
+
+      // Instructor selector
+      const instSel = document.createElement('select');
+      instSel.className = 'form-select form-select-sm';
+      instSel.id = `day-${i}-instructor`;
+
+      const mainInst = document.querySelector('select[name="instructor"]');
+      if (mainInst) {
+        for (let opt of mainInst.options) {
+          const newOpt = document.createElement('option');
+          newOpt.value = opt.value;
+          newOpt.textContent = opt.textContent;
+          instSel.appendChild(newOpt);
+        }
+        instSel.value = mainInst.value;
+      }
 
       const noteI = document.createElement('input');
       noteI.type = 'text';
@@ -997,38 +1026,142 @@ document.addEventListener('DOMContentLoaded', function () {
       const td1 = document.createElement('td'); td1.appendChild(dateI);
       const td2 = document.createElement('td'); td2.appendChild(stI);
       const td3 = document.createElement('td'); td3.appendChild(enI);
-      const td4 = document.createElement('td'); td4.appendChild(noteI);
 
-      tr.append(td0, td1, td2, td3, td4);
+      const tdInstructor = document.createElement('td');
+      tdInstructor.appendChild(instSel);
+
+      // Reset button
+      const resetBtn = document.createElement('button');
+      resetBtn.type = "button";
+      resetBtn.className = "btn btn-sm btn-outline-secondary ms-2";
+      resetBtn.textContent = "Reset";
+
+      resetBtn.addEventListener('click', () => {
+        const leadInstSel = document.querySelector('select[name="instructor"]');
+        if (leadInstSel) {
+          instSel.value = leadInstSel.value;
+          delete instSel.dataset.userEdited;
+          highlightInstructorDifferences();
+        }
+      });
+
+      tdInstructor.appendChild(resetBtn);
+
+      const td4 = document.createElement('td');
+      td4.appendChild(noteI);
+
+      tr.append(td0, td1, td2, td3, tdInstructor, td4);
       tb.appendChild(tr);
     }
-  }
+
+    // ⭐⭐⭐ THIS IS THE MISSING LINE ⭐⭐⭐
+    highlightInstructorDifferences();
+}
+
 
   function buildFromExisting(days){
-    const tb=$tbody(); if(!tb) return; tb.innerHTML="";
-    days.forEach((d, idx)=>{
-      const i = idx+1;
-      const tr=document.createElement('tr'); tr.dataset.index=i;
+    const tb = $tbody(); 
+    if (!tb) return; 
+    tb.innerHTML = "";
 
-      const dateI=document.createElement('input'); dateI.type='date'; dateI.className='form-control form-control-sm'; dateI.id=`day-${i}-date`; dateI.value=d.day_date||"";
-      const stI  =document.createElement('input'); stI.type  ='time'; stI.className  ='form-control form-control-sm'; stI.id =`day-${i}-start`; stI.value=d.start_time||"";
-      const enI  =document.createElement('input'); enI.type  ='time'; enI.className  ='form-control form-control-sm'; enI.id =`day-${i}-end`;   enI.value=d.end_time||"";
+    days.forEach((d, idx) => {
+        const i = idx + 1;
 
-      if (i === 1) { dateI.readOnly = true; stI.readOnly = true; dateI.title="Controlled by Course date above"; stI.title="Controlled by Start time above"; }
+        const tr = document.createElement('tr');
+        tr.dataset.index = i;
 
-      const noteI=document.createElement('input'); noteI.type='text'; noteI.className='form-control form-control-sm'; noteI.placeholder='(optional)';
-      noteI.id = `day-${i}-note`;
-      noteI.value = d.note || '';
+        const dateI = document.createElement('input');
+        dateI.type = 'date';
+        dateI.className = 'form-control form-control-sm';
+        dateI.id = `day-${i}-date`;
+        dateI.value = d.day_date || "";
 
-      const td0=document.createElement('td'); td0.textContent=`Day ${i}`;
-      const td1=document.createElement('td'); td1.appendChild(dateI);
-      const td2=document.createElement('td'); td2.appendChild(stI);
-      const td3=document.createElement('td'); td3.appendChild(enI);
-      const td4=document.createElement('td'); td4.appendChild(noteI);
-      tr.append(td0,td1,td2,td3,td4);
-      tb.appendChild(tr);
+        const stI = document.createElement('input');
+        stI.type = 'time';
+        stI.className = 'form-control form-control-sm';
+        stI.id = `day-${i}-start`;
+        stI.value = d.start_time || "";
+
+        const enI = document.createElement('input');
+        enI.type = 'time';
+        enI.className = 'form-control form-control-sm';
+        enI.id = `day-${i}-end`;
+        enI.value = d.end_time || "";
+
+        if (i === 1) {
+            dateI.readOnly = true;
+            stI.readOnly = true;
+            dateI.title = "Controlled by Course date above";
+            stI.title = "Controlled by Start time above";
+        }
+
+        // -----------------------------
+        // Instructor dropdown
+        // -----------------------------
+        const instSel = document.createElement('select');
+        instSel.className = 'form-select form-select-sm';
+        instSel.id = `day-${i}-instructor`;
+
+        const mainInst = document.querySelector('select[name="instructor"]');
+
+        if (mainInst) {
+            for (let opt of mainInst.options) {
+                const newOpt = document.createElement('option');
+                newOpt.value = opt.value;
+                newOpt.textContent = opt.textContent;
+                instSel.appendChild(newOpt);
+            }
+
+            // LOAD SAVED VALUE FROM JSON
+            if (d.instructor) {
+                instSel.value = d.instructor;
+                instSel.dataset.userEdited = "1"; // mark as edited
+            } else {
+                // default to lead instructor
+                instSel.value = mainInst.value;
+            }
+        }
+
+        const noteI = document.createElement('input');
+        noteI.type = 'text';
+        noteI.className = 'form-control form-control-sm';
+        noteI.placeholder = '(optional)';
+        noteI.id = `day-${i}-note`;
+        noteI.value = d.note || '';
+
+        // Reset button
+        const resetBtn = document.createElement('button');
+        resetBtn.type = "button";
+        resetBtn.className = "btn btn-sm btn-outline-secondary ms-2";
+        resetBtn.textContent = "Reset";
+
+        resetBtn.addEventListener('click', () => {
+            if (mainInst) {
+                instSel.value = mainInst.value;
+                delete instSel.dataset.userEdited;
+                highlightInstructorDifferences();
+            }
+        });
+
+        const td0 = document.createElement('td'); td0.textContent = `Day ${i}`;
+        const td1 = document.createElement('td'); td1.appendChild(dateI);
+        const td2 = document.createElement('td'); td2.appendChild(stI);
+        const td3 = document.createElement('td'); td3.appendChild(enI);
+
+        const tdInstructor = document.createElement('td');
+        tdInstructor.appendChild(instSel);
+        tdInstructor.appendChild(resetBtn);
+
+        const td4 = document.createElement('td');
+        td4.appendChild(noteI);
+
+        tr.append(td0, td1, td2, td3, tdInstructor, td4);
+        tb.appendChild(tr);
     });
-  }
+
+    // VERY IMPORTANT: highlight AFTER all rows exist
+    highlightInstructorDifferences();
+}
 
   function populateFromHeader(){
     const tb=$tbody(); if(!tb) return; const rows=tb.children.length; if(!rows) return;
@@ -1082,9 +1215,14 @@ document.addEventListener('DOMContentLoaded', function () {
         day_index:  i,
         day_date:   document.getElementById(`day-${i}-date`)?.value || '',
         start_time: document.getElementById(`day-${i}-start`)?.value || '',
-        end_time:   document.getElementById(`day-${i}-end`)?.value   || '',
-        note:       document.getElementById(`day-${i}-note`)?.value  || ''
+        end_time:   document.getElementById(`day-${i}-end`)?.value || '',
+
+        // NEW: per-day instructor
+        instructor: document.getElementById(`day-${i}-instructor`)?.value || '',
+
+        note:       document.getElementById(`day-${i}-note`)?.value || ''
       };
+
     });
 
     const json = JSON.stringify(payload);
@@ -1172,19 +1310,50 @@ document.addEventListener('DOMContentLoaded', function () {
     populateFromHeader();
     applyCourseFeesFromType();
     // NOTE: DO NOT auto-generate reference here; we only do it on CT change when safe.
+
+    highlightInstructorDifferences();
   }
 
   /* ---- Global listeners ---- */
   document.addEventListener('change', (e) => {
+
+    // ---------------------------
+    // NEW: mark instructor edits
+    // ---------------------------
+    if (e.target && e.target.id && e.target.id.endsWith('-instructor')) {
+        e.target.dataset.userEdited = "1";
+        highlightInstructorDifferences();
+    }
+
     if (e.target.name === 'business')           rebuildLocationOptions();
     if (e.target.name === 'training_location')  onLocationChange();
     if (e.target.name === 'course_type')        handleCourseChanged();
     if (e.target.name === 'course_date')        populateFromHeader();
     if (e.target.name === 'start_time')         populateFromHeader();
-  });
+});
+
+  function highlightInstructorDifferences() {
+    const leadInstSel = document.querySelector('select[name="instructor"]');
+    if (!leadInstSel) return;
+
+    const lead = leadInstSel.value;
+
+    document.querySelectorAll('tr[data-index]').forEach(tr => {
+        const idx = tr.dataset.index;
+        const sel = document.getElementById(`day-${idx}-instructor`);
+        if (!sel) return;
+
+        if (sel.value !== lead) {
+            tr.classList.add("instructor-different");
+        } else {
+            tr.classList.remove("instructor-different");
+        }
+    });
+}
 
   document.addEventListener('DOMContentLoaded', () => {
-    const locSel = byName('training_location'); if(locSel) locSel.setAttribute('autocomplete','off');
+    const locSel = byName('training_location'); 
+    if (locSel) locSel.setAttribute('autocomplete','off');
     rebuildLocationOptions();
     onLocationChange();
 
@@ -1195,6 +1364,27 @@ document.addEventListener('DOMContentLoaded', function () {
     rebuildDaysUI();
     populateFromHeader();
     applyCourseFeesFromType();
+    highlightInstructorDifferences();
+
+    // ----------------------------------------------------
+    // NEW: Sync per-day instructors to lead instructor
+    // ----------------------------------------------------
+    const leadInstSel = document.querySelector('select[name="instructor"]');
+    if (leadInstSel) {
+        leadInstSel.addEventListener('change', function () {
+            const newLead = leadInstSel.value;
+
+            document.querySelectorAll('[id^="day-"][id$="-instructor"]').forEach(sel => {
+                if (!sel.dataset.userEdited) {
+                    sel.value = newLead;
+                }
+            });
+
+            // NEW: update highlight colours
+            highlightInstructorDifferences();
+        });
+    }
+    // ----------------------------------------------------
 
     // Keep the payload in sync and ensure it’s written before submit
     const form = document.getElementById('booking-form');
@@ -1215,7 +1405,9 @@ document.addEventListener('DOMContentLoaded', function () {
       });
       notes.dispatchEvent(new Event('input'));
     }
-  });
+
+    highlightInstructorDifferences();
+});
 </script>
 
 {% if booking %}

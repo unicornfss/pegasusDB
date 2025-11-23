@@ -151,3 +151,28 @@
     max-width: 280px !important;
     flex: 0 0 280px !important; /* absolutely critical */
 }
+
+.instructor-different {
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .25);
+}
+
+/* Highlight rows where per-day instructor differs from lead instructor */
+#booking-days tr.instructor-different {
+    background-color: rgba(255, 235, 59, 0.25) !important;
+    border-left: 4px solid #0d6efd !important;
+}
+/* Make entire row highlight + full outline */
+#booking-days tr.instructor-different > td {
+    background-color: rgba(255, 235, 59, 0.25) !important;
+    border-top: 2px solid #0d6efd !important;
+    border-bottom: 2px solid #0d6efd !important;
+}
+
+#booking-days tr.instructor-different > td:first-child {
+    border-left: 2px solid #0d6efd !important;
+}
+
+#booking-days tr.instructor-different > td:last-child {
+    border-right: 2px solid #0d6efd !important;
+}

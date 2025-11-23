@@ -235,6 +235,16 @@ class BookingDay(models.Model):
     # Make it safe to migrate without a one-off default:
     day_code = models.CharField(max_length=64, blank=True, default='', db_index=True)
 
+    instructor = models.ForeignKey(
+        'Personnel',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='booking_days'
+    )
+    
+    note = models.CharField(max_length=255, blank=True, default="")
+
     def save(self, *args, **kwargs):
         # auto-generate if missing
         if not self.day_code and self.booking_id and self.date:
