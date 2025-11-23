@@ -4,37 +4,33 @@
 
 .bg-unicorn { background: var(--unicorn-red); }
 
-/* Sidebar base (desktop width handled below via media query) */
+/* FORCE SIDEBAR BACKGROUND — OVERRIDES EVERYTHING */
+.sidebar,
+.sidebar.offcanvas,
+.sidebar.offcanvas-lg {
+    background-color: #8B0000 !important;
+}
+
+/* Sidebar base */
 .sidebar {
   background: var(--unicorn-red);
   color: #fff;
 }
 
-/* Keep the sidebar 280px and full height only on lg+ (offcanvas handles mobile) */
+/* Keep the sidebar fixed on desktop */
 @media (min-width: 992px) {
   .sidebar { width: 280px; min-height: 100vh; }
 }
 
-/* When used as offcanvas, make the body stretch so footer pins to bottom */
 .sidebar .offcanvas-body { display: flex; flex-direction: column; min-height: 100%; }
 
-/* Slightly darker backdrop for the drawer */
 .offcanvas-backdrop.show { opacity: .65; }
 
-/* Typography tweaks inside the red sidebar */
 .sidebar .small,
 .sidebar .text-muted { color: rgba(255,255,255,.85) !important; }
 
 /* ----- Nav tree ----- */
-
-.sidebar .nav-tree {
-  display: flex;
-  flex-direction: column;
-  gap: .5rem;
-}
-
-
-/* Clean text-style section headers */
+.sidebar .nav-tree { display: flex; flex-direction: column; gap: .5rem; }
 
 .sidebar .menu-group-header {
   margin-top: 1rem;
@@ -42,40 +38,24 @@
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  color: #ffdddd;      /* light red (similar to your old look) */
+  color: #ffdddd;
   opacity: 0.85;
   cursor: pointer;
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
-
 .sidebar .menu-group-header:hover {
   opacity: 1;
   color: #ffffff;
   text-decoration: underline;
 }
+.sidebar .menu-group-chevron { font-size: 0.65rem; transition: transform 0.15s ease-in-out; }
+.sidebar .menu-group-content { padding-left: 0; }
+.sidebar .menu-group.collapsed .menu-group-content { display: none; }
+.sidebar .menu-group.collapsed .menu-group-chevron { transform: rotate(-90deg); }
 
-
-.sidebar .menu-group-chevron {
-  font-size: 0.65rem;
-  transition: transform 0.15s ease-in-out;
-}
-
-.sidebar .menu-group-content {
-  padding-left: 0; /* keep alignment with existing items */
-}
-
-/* Collapsed state */
-.sidebar .menu-group.collapsed .menu-group-content {
-  display: none;
-}
-
-.sidebar .menu-group.collapsed .menu-group-chevron {
-  transform: rotate(-90deg);
-}
-
-/* Links (and logout button when styled as .leaf) */
+/* Links */
 .sidebar .nav-tree a.leaf,
 .sidebar .nav-tree button.leaf {
   display: flex;
@@ -100,7 +80,6 @@
   color: #fff;
 }
 
-/* Icons keep a fixed gutter */
 .sidebar .nav-tree i {
   width: 1.25rem;
   text-align: center;
@@ -127,119 +106,45 @@
   border-left: 2px solid rgba(255,255,255,.25);
 }
 .sidebar .nav-tree li { list-style: none; margin: .15rem 0; }
-.sidebar .nav-tree .btn-link { color: #fff; text-decoration: none; padding: 0; }
-.sidebar .nav-tree .btn-link:hover { color: #fff; text-decoration: none; }
 
-/* ----- Footer (user area) ----- */
-.sidebar .sidebar-footer{
-  margin-top: auto;                       /* pin to bottom */
+/* ----- Sidebar Footer (user area) ----- */
+.sidebar .sidebar-footer {
+  margin-top: auto;
   padding-top: .75rem;
   border-top: 1px solid rgba(255,255,255,.25);
   display: grid;
-  grid-template-columns: 32px 1fr;        /* avatar + name column */
+  grid-template-columns: 44px 1fr;
   column-gap: .75rem;
-  align-items: start;
-}
-.sidebar .sidebar-footer .avatar{
-  grid-column:1; grid-row:1;
-  width:32px; height:32px; border-radius:50%;
-  background:rgba(255,255,255,.25);
-  display:inline-flex; align-items:center; justify-content:center;
-  font-weight:700; margin-top:2px;
-}
-.sidebar .sidebar-footer .who{ grid-column:2; grid-row:1; }
-.sidebar .sidebar-footer .actions{ grid-column:1 / -1; grid-row:2; margin-top:.5rem; }
-
-/* Footer actions look like menu items */
-.sidebar .sidebar-footer a.leaf,
-.sidebar .sidebar-footer button.leaf{
-  display:flex; align-items:center; gap:.5rem;
-  width:100%; padding:.45rem .75rem; line-height:1.25;
-  border-radius:.5rem; color:#fff; text-decoration:none;
-  background:transparent; border:0;
-}
-.sidebar .sidebar-footer a.leaf:hover,
-.sidebar .sidebar-footer button.leaf:hover{ background:rgba(255,255,255,.15); }
-.sidebar .sidebar-footer .actions .leaf i{
-  width:1.25rem; text-align:center; flex:0 0 1.25rem;
+  align-items: center;
 }
 
-/* Version text line */
-.sidebar .sidebar-footer .version{
-  grid-column:1 / -1; grid-row:3;
-  margin-top:.5rem; font-weight:700; font-size:.85rem; opacity:.95;
+.sidebar-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.3); /* soft white glow */
+    color: white;
+    font-size: 1.3rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
-/* Center brand + clock */
-.sidebar .brand { text-align: center; }
-.sidebar .brand-logo { display: block; margin-left: auto; margin-right: auto; }
-.sidebar #clock { text-align: center; }
-
-/* Misc */
-.badge.bg-danger { background:#d6336c !important; }
-.unicorn-geo-pin { position: relative; top: .25rem; }
-
-/* Make sure Bootstrap's offcanvas doesn't force a white background */
-.sidebar.offcanvas,
-.sidebar.offcanvas-lg { background: var(--unicorn-red) !important; }
-
-/* Text inside the drawer stays readable */
-.sidebar.offcanvas .offcanvas-body { color: #fff; }
-
-/* Remove fixed width on mobile; no stray white rail */
-@media (max-width: 991.98px) {
-  .sidebar { width: 100%; }          /* offcanvas controls width */
-  .sidebar.border-end { border-right: 0; }
+.sidebar .sidebar-footer button.leaf {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .45rem .75rem;
+    border-radius: .5rem;
+    background: transparent !important;
+    border: 0 !important;
+    color: #fff !important;
+    text-decoration: none;
 }
 
-/* Make table rows that we mark as clickable look/feel clickable */
-.clickable-row { cursor: pointer; }
-.clickable-row:focus { outline: 2px solid var(--bs-primary); outline-offset: -2px; }
-
-/* Exam answer UX improvements */
-
-/* Clear, visible hover/focus on any clickable list item */
-.list-group-item-action { cursor: pointer; }
-.list-group-item-action:hover,
-.list-group-item-action:focus,
-.list-group-item-action:focus-within {
-  background-color: rgba(13,110,253,.10) !important; /* stronger tint */
-}
-
-/* Persistently highlight the row when its radio is selected.
-   :has(...) is supported in all modern Chromium/Firefox/Safari. */
-.list-group-item:has(input[type="radio"]:checked) {
-  background-color: rgba(13,110,253,.18) !important;
-  border-color: #0d6efd !important;
-}
-
-/* Slight text weight bump for selected option */
-.list-group-item:has(input[type="radio"]:checked) span {
-  font-weight: 600;
-}
-
-/* === Sidebar: stick to viewport on desktop & don't shrink === */
-@media (min-width: 992px) {
-  .sidebar {
-    position: sticky;   /* keeps it fixed while the page scrolls */
-    top: 0;
-    height: 100vh;      /* full viewport height */
-    overflow-y: auto;   /* sidebar scrolls internally if long */
-    flex-shrink: 0;     /* prevents the width from collapsing */
-    /* keep your existing width (e.g., 280px) from earlier rules */
-  }
-
-  /* whichever you use for the main content area, keep it flexible */
-  .content, main {
-    min-width: 0;
-  }
-}
-
-/* If the sticky doesn’t “stick”, set the wrapper's overflow to visible */
-.layout { overflow: visible; }
-
-/* Force page content to start at the top of the right-hand pane */
-main.flex-grow-1 > *:first-child {
-  margin-top: 0 !important;
-  padding-top: 0 !important;
+.sidebar .sidebar-footer button.leaf:hover {
+    background: rgba(255,255,255,.15) !important;
 }

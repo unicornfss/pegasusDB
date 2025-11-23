@@ -56,157 +56,181 @@
 
         {# Centered clock #}
         <div class="small mb-3 text-center" id="clock" aria-live="polite"></div>
-
+        
         <nav class="nav-tree" aria-label="Main navigation">
-          <a class="leaf {% if request.resolver_match.url_name == 'home' %}active{% endif %}"
-             href="{% url 'home' %}">
-            <i class="bi bi-house"></i> Home
-          </a>
 
-          {# ===== ADMIN MENU GROUP ===== #}
-          {% if is_admin %}
-          <div class="menu-group collapsed" data-menu-group="admin">
-            <div class="menu-group-header">
-              <span>Admin menu</span>
-              <span class="menu-group-chevron bi bi-chevron-down"></span>
-            </div>
+    {# ===================== ADMIN MENU ===================== #}
+    {% if is_admin %}
+    <div class="menu-group collapsed" data-menu-group="admin">
+        <div class="menu-group-header">
+            <span>Admin menu</span>
+            <span class="menu-group-chevron bi bi-chevron-down"></span>
+        </div>
+        <div class="menu-group-content">
 
-            <div class="menu-group-content">
-              <details class="branch" {% if request.resolver_match.url_name == 'admin_business_list' %}open{% endif %}>
+            <a class="leaf {% if request.resolver_match.url_name == 'app_admin_dashboard' %}active{% endif %}"
+               href="{% url 'app_admin_dashboard' %}">
+                <i class="bi bi-speedometer2"></i> Admin dashboard
+            </a>
+
+            <details class="branch">
                 <summary><i class="bi bi-building"></i> Businesses</summary>
                 <ul>
-                  <li>
-                    <a class="leaf {% if request.resolver_match.url_name == 'admin_business_list' %}active{% endif %}"
-                       href="{% url 'admin_business_list' %}">
-                      <i class="bi bi-columns"></i> View / edit / add
-                    </a>
-                  </li>
+                    <li>
+                        <a class="leaf {% if request.resolver_match.url_name == 'admin_business_list' %}active{% endif %}"
+                           href="{% url 'admin_business_list' %}">
+                           <i class="bi bi-columns"></i> View / edit / add
+                        </a>
+                    </li>
                 </ul>
-              </details>
+            </details>
 
-              <details class="branch" {% if request.resolver_match.url_name == 'admin_course_type_list' %}open{% endif %}>
+            <details class="branch">
                 <summary><i class="bi bi-journal-bookmark"></i> Course Types</summary>
                 <ul>
-                  <li>
-                    <a class="leaf {% if request.resolver_match.url_name == 'admin_course_type_list' %}active{% endif %}"
-                       href="{% url 'admin_course_type_list' %}">
-                      <i class="bi bi-columns"></i> View / edit / add
-                    </a>
-                  </li>
+                    <li>
+                        <a class="leaf {% if request.resolver_match.url_name == 'admin_course_type_list' %}active{% endif %}"
+                           href="{% url 'admin_course_type_list' %}">
+                           <i class="bi bi-columns"></i> View / edit / add
+                        </a>
+                    </li>
                 </ul>
-              </details>
+            </details>
 
-              <details class="branch" {% if request.resolver_match.url_name == 'admin_booking_list' %}open{% endif %}>
+            <details class="branch">
                 <summary><i class="bi bi-calendar2-check"></i> Bookings</summary>
                 <ul>
-                  <li>
-                    <a class="leaf {% if request.resolver_match.url_name == 'admin_booking_list' %}active{% endif %}"
-                       href="{% url 'admin_booking_list' %}">
-                      <i class="bi bi-columns"></i> View / edit / add
-                    </a>
-                  </li>
+                    <li>
+                        <a class="leaf {% if request.resolver_match.url_name == 'admin_booking_list' %}active{% endif %}"
+                           href="{% url 'admin_booking_list' %}">
+                           <i class="bi bi-columns"></i> View / edit / add
+                        </a>
+                    </li>
                 </ul>
-              </details>
+            </details>
 
-              <details class="branch" {% if request.resolver_match.url_name == 'admin_delegate_search' %}open{% endif %}>
-                <summary><i class="bi bi-search"></i> Delegate search</summary>
-                <ul>
-                  <li>
-                    <a class="leaf {% if request.resolver_match.url_name == 'admin_delegate_search' %}active{% endif %}"
-                      href="{% url 'admin_delegate_search' %}">
-                      <i class="bi bi-search"></i> Search delegates
-                    </a>
-                  </li>
-                </ul>
-              </details>
+            <a class="leaf {% if request.resolver_match.url_name == 'admin_delegate_search' %}active{% endif %}"
+               href="{% url 'admin_delegate_search' %}">
+               <i class="bi bi-search"></i> Delegate search
+            </a>
 
-              <details class="branch" {% if request.resolver_match.url_name == 'admin_instructor_list' or request.resolver_match.url_name == 'admin_user_list' %}open{% endif %}>
-                <summary><i class="bi bi-people"></i> Personnel</summary>
-                <ul>
-                  <li>
-                    <a class="leaf {% if request.resolver_match.url_name == 'admin_instructor_list' %}active{% endif %}"
-                       href="{% url 'admin_personnel_list' %}">
-                      <i class="bi bi-columns"></i> View / edit / add
-                    </a>
-                  </li>
-                </ul>
-              </details>
-            </div>
-          </div>
-          {% endif %}
+            <a class="leaf {% if request.resolver_match.url_name == 'admin_personnel_list' %}active{% endif %}"
+               href="{% url 'admin_personnel_list' %}">
+               <i class="bi bi-people"></i> Personnel
+            </a>
 
-          {# ===== INSTRUCTOR MENU GROUP ===== #}
-          {% if is_instructor %}
-          <div class="menu-group collapsed" data-menu-group="instructor">
-            <div class="menu-group-header">
-              <span>Instructor menu</span>
-              <span class="menu-group-chevron bi bi-chevron-down"></span>
-            </div>
+        </div>
+    </div>
+    {% endif %}
 
-            <div class="menu-group-content">
-              <a class="leaf {% if request.resolver_match.url_name == 'instructor_bookings' %}active{% endif %}"
-                 href="{% url 'instructor_bookings' %}">
+
+    {# ===================== INSTRUCTOR MENU ===================== #}
+    {% if is_instructor %}
+    <div class="menu-group collapsed" data-menu-group="instructor">
+        <div class="menu-group-header">
+            <span>Instructor menu</span>
+            <span class="menu-group-chevron bi bi-chevron-down"></span>
+        </div>
+        <div class="menu-group-content">
+
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_home' %}active{% endif %}"
+               href="{% url 'instructor_home' %}">
+                <i class="bi bi-speedometer"></i> Instructor dashboard
+            </a>
+
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_bookings' %}active{% endif %}"
+               href="{% url 'instructor_bookings' %}">
                 <i class="bi bi-calendar-event"></i> My bookings
-              </a>
+            </a>
 
-              <a class="leaf {% if request.resolver_match.url_name == 'accident_report_list' or request.resolver_match.url_name == 'accident_report_create' %}active{% endif %}"
-                 href="{% url 'accident_report_list' %}">
+            <a class="leaf {% if request.resolver_match.url_name == 'accident_report_list' %}active{% endif %}"
+               href="{% url 'accident_report_list' %}">
                 <i class="bi bi-clipboard2"></i> Accident reports
-              </a>
+            </a>
 
-              <a class="leaf {% if request.resolver_match.url_name == 'instructor_profile' %}active{% endif %}"
-                 href="{% url 'instructor_profile' %}">
+            <a class="leaf {% if request.resolver_match.url_name == 'user_profile' %}active{% endif %}"
+               href="{% url 'user_profile' %}">
                 <i class="bi bi-person-gear"></i> My Profile
-              </a>
-            </div>
-          </div>
-          {% endif %}
-
-          {# ===== Django admin / login links ===== #}
-          {% if request.user.is_superuser %}
-            <a class="leaf {% if '/admin/' in request.path %}active{% endif %}" href="/admin/">
-              <i class="bi bi-tools"></i> Django Admin
             </a>
-          {% endif %}
 
-          {% if not user.is_authenticated %}
-            <a class="leaf {% if request.resolver_match.url_name == 'login' %}active{% endif %}"
-               href="{% url 'login' %}">
-              <i class="bi bi-box-arrow-in-right"></i> Login
+        </div>
+    </div>
+    {% endif %}
+
+
+    {# ===================== ENGINEER MENU ===================== #}
+    {% if is_engineer %}
+    <div class="menu-group collapsed" data-menu-group="engineer">
+        <div class="menu-group-header">
+            <span>Engineer menu</span>
+            <span class="menu-group-chevron bi bi-chevron-down"></span>
+        </div>
+        <div class="menu-group-content">
+
+            <a class="leaf {% if request.resolver_match.url_name == 'engineer_dashboard' %}active{% endif %}"
+               href="{% url 'engineer_dashboard' %}">
+                <i class="bi bi-wrench"></i> Engineer dashboard
             </a>
-          {% endif %}
-        </nav>
 
+        </div>
+    </div>
+    {% endif %}
+
+
+    {# ===================== INSPECTOR MENU ===================== #}
+    {% if is_inspector %}
+    <div class="menu-group collapsed" data-menu-group="inspector">
+        <div class="menu-group-header">
+            <span>Inspector menu</span>
+            <span class="menu-group-chevron bi bi-chevron-down"></span>
+        </div>
+        <div class="menu-group-content">
+
+            <a class="leaf {% if request.resolver_match.url_name == 'inspector_dashboard' %}active{% endif %}"
+               href="{% url 'inspector_dashboard' %}">
+                <i class="bi bi-eye"></i> Inspector dashboard
+            </a>
+
+        </div>
+    </div>
+    {% endif %}
+
+</nav>
+
+
+        
         {% if request.user.is_authenticated %}
         <div class="sidebar-footer mt-auto">
-          <div class="avatar">
-            {{ request.user.get_full_name|default:request.user.username|slice:":1"|upper }}
+
+  <a href="{% url 'user_profile' %}" class="text-decoration-none text-white">
+    <div class="sidebar-avatar">
+    {{ request.user.personnel.name|slice:":1"|upper }}
+</div>
+
+</a>
+
+
+
+  <div class="who">
+      <a href="{% url 'user_profile' %}" class="text-white text-decoration-none">
+          <div class="fw-semibold">
+              {{ request.user.personnel.name }}
           </div>
+          <div class="small" style="opacity:.8;">My settings / profile</div>
+      </a>
+  </div>
 
-          <div class="who">
-            <div class="fw-semibold">{{ request.user.get_full_name|default:request.user.username }}</div>
-            <div class="small" style="opacity:.8;">Signed in</div>
-          </div>
+  <div class="actions d-flex flex-column gap-1">
+      <form method="post" action="{% url 'logout' %}" class="m-0">
+          {% csrf_token %}
+          <button type="submit" class="leaf text-start">
+              <i class="bi bi-box-arrow-right"></i> Logout
+          </button>
+      </form>
+  </div>
 
-          <div class="actions d-flex flex-column gap-1">
-            <a class="leaf {% if request.resolver_match.url_name == 'instructor_profile' %}active{% endif %}"
-               href="{% url 'instructor_profile' %}">
-              <i class="bi bi-person-gear"></i> My Profile
-            </a>
+</div>
 
-            <a class="leaf {% if request.resolver_match.url_name == 'password_change' %}active{% endif %}"
-               href="{% url 'password_change' %}">
-              <i class="bi bi-key"></i> Change password
-            </a>
-
-            <form method="post" action="{% url 'logout' %}" class="m-0">
-              {% csrf_token %}
-              <button type="submit" class="leaf text-start">
-                <i class="bi bi-box-arrow-right"></i> Logout
-              </button>
-            </form>
-          </div>
-        </div>
 
         <div class="version text-center"><strong>Pegasus v0.1</strong></div>
         {% endif %}

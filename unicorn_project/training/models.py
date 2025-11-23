@@ -120,17 +120,17 @@ class Personnel(models.Model):
     )
 
     name = models.CharField(max_length=255)
-    address_line = models.CharField(max_length=255, blank=True)
-    town = models.CharField(max_length=120, blank=True)
-    postcode = models.CharField(max_length=12, blank=True)
+    address_line = models.CharField(max_length=255, blank=True, default="")
+    town = models.CharField(max_length=120, blank=True, default="")
+    postcode = models.CharField(max_length=12, blank=True, default="")
 
-    telephone = models.CharField(max_length=32, blank=True)
+    telephone = models.CharField(max_length=32, blank=True, default="")
     email = models.EmailField(unique=True)
 
-    bank_sort_code = models.CharField(max_length=16, blank=True)
-    bank_account_number = models.CharField(max_length=20, blank=True)
-    name_on_account = models.CharField(max_length=255, blank=True)
-
+    bank_sort_code = models.CharField(max_length=16, blank=True, default="")
+    bank_account_number = models.CharField(max_length=20, blank=True, default="")
+    name_on_account = models.CharField(max_length=255, blank=True, default="")
+  
     is_active = models.BooleanField(default=True)
     can_login = models.BooleanField(default=True)
     must_change_password = models.BooleanField(default=True)

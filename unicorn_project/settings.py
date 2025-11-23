@@ -80,6 +80,7 @@ TEMPLATES = [
                 "unicorn_project.training.context_processors.globals",
                 "unicorn_project.training.context_processors.role_context",
                 "unicorn_project.training.context_processors.logo_context",
+                'unicorn_project.training.context_processors.user_display_name',
             ],
         },
     },
@@ -135,6 +136,9 @@ elif DEBUG:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"  # or dummy if you want
+
+# Office phone
+OFFICE_PHONE = os.getenv("OFFICE_PHONE", "")
 
 
 # --- HTML invoice rendering & wkhtmltopdf --------------------

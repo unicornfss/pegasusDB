@@ -667,7 +667,7 @@ def booking_list(request):
         ],
         "businesses":  Business.objects.order_by("name"),
         "course_types": CourseType.objects.order_by("name"),
-        "instructors": Instructor.objects.order_by("name"),
+        "instructors": Personnel.objects.filter(is_active=True).order_by("name"),
 
         "page_obj": page_obj,
         "page_prev_url": prev_url,

@@ -5,6 +5,8 @@ from django.contrib.auth import views as auth_views
 from . import views
 from . import views_admin
 from . import views_admin as app_admin
+from . import views_engineer as engv
+from . import views_inspector as inspv
 from . import views_instructor as instv
 from . import views_instructor
 from . import views_public
@@ -25,18 +27,18 @@ urlpatterns = [
     path("switch-role/<str:role>/", views.switch_role, name="switch_role"),
 
     # Post-login routers
-    path("app/after-login/", instv.post_login, name="post_login"),
+    # path("app/after-login/", instv.post_login, name="post_login"),
     path("post-login/", instv.post_login, name="post_login"),
 
     # ---------- Instructor area ----------
     # Landing page -> My bookings
-    path("app/instructor/", instv.instructor_bookings, name="instructor_dashboard"),
+    path("app/instructor/", instv.instructor_dashboard, name="instructor_dashboard"),
     path("app/instructor/bookings/", instv.instructor_bookings, name="instructor_bookings"),
     path("app/instructor/booking/<uuid:pk>/", instv.instructor_booking_detail, name="instructor_booking_detail"),
     path("app/instructor/day/<int:pk>/registers/", instv.instructor_day_registers, name="instructor_day_registers"),
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
-    path("app/instructor/profile/", views.instructor_profile, name="instructor_profile"),
+    path("app/profile/", views.user_profile, name="user_profile"),
     path("app/instructor/day/<int:pk>/registers/send-pdf/", views_instructor.instructor_day_registers_pdf, name="instructor_send_register_pdf"),
     path("app/instructor/day/<int:pk>/registers/poll/", views_instructor.instructor_day_registers_poll, name="instructor_day_registers_poll"),
     path("app/instructor/booking/<uuid:pk>/upload-receipt/", instv.instructor_upload_receipt, name="instructor_upload_receipt"),
@@ -46,6 +48,8 @@ urlpatterns = [
     path("instructor/booking/<uuid:pk>/course-summary.pdf", views_instructor.instructor_course_summary_pdf, name="instructor_course_summary_pdf"),
     path("instructor/booking/ref/<slug:ref>/course-summary.pdf", views_instructor.instructor_course_summary_by_ref_pdf, name="instructor_course_summary_by_ref_pdf"),
     path("instructor/booking/<uuid:pk>/certificates/", instv.instructor_booking_certificates_pdf, name="instructor_booking_certificates"),
+    path("app/instructor/home/", instv.instructor_dashboard, name="instructor_home"),
+
 
     
     # Instructor: delete a delegate row
@@ -220,6 +224,16 @@ urlpatterns = [
 ),
 
     path("bookings/<uuid:booking_id>/certificates/preview/", views_certificates.booking_certificates_preview, name="booking_certificates_preview")  ,
+
+
+        # Engineer
+    path("app/engineer/", engv.engineer_dashboard, name="engineer_dashboard"),
+
+    # Inspector
+    path("app/inspector/", inspv.inspector_dashboard, name="inspector_dashboard"),
+
+    path("app/no-roles/", views.no_roles_assigned, name="no_roles"),
+
 ]
 
 

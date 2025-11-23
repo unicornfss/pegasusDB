@@ -5,6 +5,7 @@ from django.contrib.auth.models import Group
 from django.db.models import Q
 from django.http import JsonResponse, HttpResponseForbidden, FileResponse, HttpResponse, HttpResponseBadRequest
 from django.contrib import messages
+from django.contrib.auth import update_session_auth_hash
 from django.shortcuts import redirect, render, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -20,6 +21,8 @@ from .forms import (
     DelegateRegisterForm,
     FeedbackForm,
 )
+from .forms_profile import UserProfileForm, PersonnelProfileForm
+from .signal_control import disable, enable
 
 from datetime import timedelta, datetime
 from pptx import Presentation
@@ -234,29 +237,50 @@ _STATUS_MAP = {
     "cancelled":        ("Cancelled", "badge bg-warning text-dark"),
 }
 
-
 @login_required
-def instructor_profile(request):
+def user_profile(request):
+
+    from django.contrib.auth import update_session_auth_hash
+
+    if request.user.is_superuser:
+        messages.error(request, "Superuser cannot edit profile here.")
+        return redirect("app_admin_dashboard")
+
     try:
-        inst = Instructor.objects.get(user=request.user)
-    except Instructor.DoesNotExist:
-        inst = None
+        personnel = request.user.personnel
+    except Personnel.DoesNotExist:
+        messages.error(request, "No personnel profile linked to this account.")
+        return redirect("no_roles")
 
     if request.method == "POST":
-        form = InstructorProfileForm(request.POST, instance=inst)
-        if form.is_valid():
-            obj = form.save(commit=False)
-            # lock to current user
-            obj.user = request.user
-            obj.save()
-            messages.success(request, "Profile saved.")
-            return redirect("instructor_profile")
-    else:
-        form = InstructorProfileForm(instance=inst)
+        uform = UserProfileForm(request.POST, instance=request.user)
+        pform = PersonnelProfileForm(request.POST, instance=personnel)
 
-    return render(request, "instructor/profile.html", {
-        "title": "My Profile",
-        "form": form,
+        if uform.is_valid() and pform.is_valid():
+
+            user = uform.save(commit=False)
+
+            new_email = uform.cleaned_data["email"].strip().lower()
+            user.username = new_email
+            user.email = new_email
+            user.save()
+
+            # 🟢 FIX: sync Personnel.email
+            personnel.email = new_email
+            pform.save()  # saves other personnel fields too
+
+            update_session_auth_hash(request, user)
+
+            messages.success(request, "Your profile has been updated.")
+            return redirect("user_profile")
+
+    else:
+        uform = UserProfileForm(instance=request.user)
+        pform = PersonnelProfileForm(instance=personnel)
+
+    return render(request, "profile.html", {
+        "uform": uform,
+        "pform": pform,
     })
 
 # Public attendance
@@ -350,34 +374,27 @@ def instructor_booking_detail(request, pk):
         "today": timezone.localdate(),
     })
 
-def _user_is_instructor(user) -> bool:
-    # Safe check: user linked to Instructor?
-    try:
-        return hasattr(user, "instructor") and user.instructor is not None
-    except Instructor.DoesNotExist:
-        return False
+def _user_is_instructor(user):
+    return hasattr(user, "personnel") and user.personnel.is_active and user.personnel.can_login
+
 
 @login_required
 def post_login_router(request):
     user = request.user
 
-    # 1) Admin/staff ALWAYS go to admin dashboard
     if user.is_superuser or user.is_staff:
         return redirect("app_admin_dashboard")
 
-    # 2) Respect explicit role choice in session (but admin already took precedence)
-    role = request.session.get("role")
-    if role == "admin":
-        return redirect("app_admin_dashboard")
-    if role == "instructor" and _user_is_instructor(user):
-        return redirect("instructor_bookings")
-
-    # 3) Sensible defaults
     if _user_is_instructor(user):
-        return redirect("instructor_bookings")
+        return redirect("instructor_dashboard")
 
-    # If neither admin nor instructor, drop them at admin (or your public home)
+    return redirect("home")
+
+
+
+    # Fallback
     return redirect("app_admin_dashboard")
+
 
 def _resolve_course_type(value):
     if not value:
@@ -594,6 +611,10 @@ def public_feedback_pdf(request, pk):
 def public_feedback_thanks(request):
     """Simple thank-you page after feedback submission."""
     return render(request, "public/feedback_thanks.html")
+
+def no_roles_assigned(request):
+    return render(request, "no_roles.html")
+
 
 @login_required
 def accident_report_list(request):

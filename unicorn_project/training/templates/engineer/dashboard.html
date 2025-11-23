@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>Engineer Dashboard</h1>
+    <p>Welcome, {{ user.get_full_name|default:user.username }}.</p>
+
+    <div class="alert alert-info">
+        This is your temporary Engineer home page.
+    </div>
+</div>
+{% endblock %}
