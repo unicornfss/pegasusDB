@@ -130,6 +130,21 @@ class Personnel(models.Model):
     bank_sort_code = models.CharField(max_length=16, blank=True, default="")
     bank_account_number = models.CharField(max_length=20, blank=True, default="")
     name_on_account = models.CharField(max_length=255, blank=True, default="")
+
+    dyslexia_mode = models.BooleanField(default=False)
+    PASTEL_CHOICES = [
+        ('none', 'Default (off-white)'),
+        ('cream', 'Cream'),
+        ('yellow', 'Soft Yellow'),
+        ('blue', 'Soft Blue'),
+        ('green', 'Soft Green'),
+    ]
+
+    pastel_background = models.CharField(
+        max_length=20,
+        choices=PASTEL_CHOICES,
+        default='none'
+    )
   
     is_active = models.BooleanField(default=True)
     can_login = models.BooleanField(default=True)

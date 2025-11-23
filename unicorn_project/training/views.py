@@ -293,12 +293,18 @@ def user_profile(request):
 
             # 🟢 FIX: sync Personnel.email
             personnel.email = new_email
-            pform.save()  # saves other personnel fields too
+
+            # 🟢 NEW: update dyslexia mode (checkbox present? → True)
+            personnel.dyslexia_mode = bool(request.POST.get("dyslexia_mode"))
+            personnel.pastel_background = request.POST.get("pastel_background", "none")
+
+            pform.save()  # saves other personnel fields
 
             update_session_auth_hash(request, user)
 
             messages.success(request, "Your profile has been updated.")
             return redirect("user_profile")
+
 
     else:
         uform = UserProfileForm(instance=request.user)

@@ -1,0 +1,111 @@
+/* Dyslexia Mode – high clarity theme */
+
+@import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible&display=swap');
+
+html, body {
+    font-family: 'Atkinson Hyperlegible', Arial, sans-serif !important;
+    font-size: 18px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+}
+
+/* Remove justification (makes reading harder) */
+p, li, label, .form-text {
+    text-align: left !important;
+}
+/* Default pastel (off-white) */
+html[data-pastel="none"] body {
+    background: #faf7f0 !important;
+}
+
+/* Cream */
+html[data-pastel="cream"] body {
+    background: #fff7e6 !important;
+}
+
+/* Soft yellow */
+html[data-pastel="yellow"] body {
+    background: #fffde1 !important;
+}
+
+/* Soft blue */
+html[data-pastel="blue"] body {
+    background: #eef7ff !important;
+}
+
+/* Soft green */
+html[data-pastel="green"] body {
+    background: #f3fff3 !important;
+}
+
+/* Form fields */
+input[type=text],
+input[type=email],
+input[type=password],
+select,
+textarea {
+    font-size: 18px !important;
+    padding: 10px 12px !important;
+    border: 2px solid #333 !important;
+    border-radius: 6px !important;
+}
+
+/* Add spacing between fields */
+.form-group,
+.form-row {
+    margin-bottom: 20px !important;
+}
+
+/* High visibility focus outlines */
+*:focus {
+    outline: 3px solid #ff9500 !important;
+    outline-offset: 2px;
+}
+
+/* Buttons */
+button, .btn {
+    font-size: 18px !important;
+    padding: 12px 20px !important;
+    border-radius: 10px !important;
+}
+
+/* Links */
+a {
+    color: #0050a8 !important;
+    text-decoration: underline;
+}
+a:hover {
+    color: #003f7d !important;
+}
+
+/* Pastel background */
+html, body {
+    background: #faf7f0 !important;  /* soft pastel */
+    font-family: 'Atkinson Hyperlegible', Arial, sans-serif !important;
+    font-size: 18px;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+    color: #1a1a1a !important;
+}
+
+/* General link colour */
+a {
+    color: #2a2a2a !important;
+    text-decoration: underline;
+}
+a:hover {
+    color: #000000 !important;
+}
+
+/* Sidebar link override (red nav column) */
+.bg-unicorn a,
+.bg-unicorn .nav-link {
+    color: #ffffff !important;
+    text-decoration: underline;
+}
+.bg-unicorn a:hover,
+.bg-unicorn .nav-link:hover {
+    color: #f0f0f0 !important;
+}
