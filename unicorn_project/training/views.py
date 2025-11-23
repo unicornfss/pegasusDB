@@ -62,7 +62,21 @@ def get_instructor_for_user(user):
     except Instructor.DoesNotExist:
         pass
     # fallback: name/email match, if you’ve used that pattern in your data
-    return Instructor.objects.filter(user=user).first()
+    return Personnel.objects.filter(user=user).first()
+
+from datetime import datetime
+
+def _parse_yyyy_mm_dd(s: str):
+    """
+    Convert 'YYYY-MM-DD' → date object.
+    Returns None if invalid.
+    """
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s, "%Y-%m-%d").date()
+    except ValueError:
+        return None
 
 # --- home redirect --------------------------------------------
 
@@ -98,9 +112,21 @@ def public_delegate_instructors_api(request):
     day_date = _parse_yyyy_mm_dd(date_str) or timezone.localdate()
 
     course = CourseType.objects.filter(code__iexact=code).first()
-    qs = _instructors_for_date(course, day_date) if course else Instructor.objects.none()
+    if not course:
+        return JsonResponse({"instructors": []})
+
+    qs = (
+        Personnel.objects.filter(
+            bookings__course_type=course,
+            bookings__days__date=day_date
+        )
+        .distinct()
+        .order_by("name")
+    )
+
     data = [{"id": i.id, "name": i.name} for i in qs]
     return JsonResponse({"instructors": data})
+
 
 def public_delegate_register(request):
     """
@@ -133,7 +159,7 @@ def public_delegate_register(request):
     bound_date = form.data.get("date") if form.is_bound else initial.get("date")
     if course and bound_date:
         instructors = (
-            Instructor.objects
+            Personnel.objects
             .filter(
                 bookings__course_type=course,
                 bookings__days__date=bound_date
@@ -327,7 +353,7 @@ def switch_role(request, role):
 def instructor_bookings(request):
     # Require the user to be linked to an Instructor record
     try:
-        instructor = Instructor.objects.select_related('user').get(user=request.user)
+        instructor = Personnel.objects.select_related('user').get(user=request.user)
     except Instructor.DoesNotExist:
         messages.error(request, "Your user account isn’t linked to an Instructor profile yet.")
         return redirect('instructor_dashboard')  # or 'home'
@@ -456,10 +482,10 @@ def public_feedback_instructors_api(request):
                 the_date = None
 
     # Strict behaviour: only return matches when both pieces are present
-    qs = Instructor.objects.none()
+    qs = Personnel.objects.none()
     if ct and the_date:
         qs = (
-            Instructor.objects
+            Personnel.objects
             .filter(
                 bookings__course_type=ct,
                 bookings__days__date=the_date,
@@ -515,7 +541,7 @@ def public_feedback_form(request):
     inst_q = request.GET.get("instructor") or ""
     if inst_q:
         try:
-            init["instructor"] = Instructor.objects.get(pk=inst_q)
+            init["instructor"] = Personnel.objects.get(pk=inst_q)
         except Instructor.DoesNotExist:
             pass
 

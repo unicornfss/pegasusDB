@@ -626,7 +626,7 @@ def _get_user_instructor(user):
     """Return Instructor linked to this user (or None)."""
     if not user.is_authenticated:
         return None
-    return Instructor.objects.filter(user=user).first()
+    return Personnel.objects.filter(user=user).first()
 
 def _unique_delegates_for_booking(booking):
     """
@@ -957,7 +957,7 @@ def instructor_assessment_autosave(request, pk):
         return JsonResponse({"ok": False, "error": "Competency not found"}, status=404)
 
     # we must store an Instructor instance, not a User
-    instr = Instructor.objects.filter(user=request.user).first()
+    instr = Personnel.objects.filter(user=request.user).first()
     if not instr:
         return JsonResponse({"ok": False, "error": "No instructor profile found"}, status=400)
 
@@ -3051,7 +3051,7 @@ def instructor_attempt_incorrect(request, attempt_id: int):
             if not getattr(attempt, "finished_at", None):
                 attempt.finished_at = now()
             attempt.viva_decided_at = now()
-            attempt.viva_decided_by = getattr(request.user, "instructor", None) or request.user
+            attempt.viva_decided_by = getattr(request.user, "personnel", None)
 
             attempt.save()
             messages.success(request, f"Viva saved: {outcome.title()} recorded at {attempt.viva_decided_at:%d %b %Y, %H:%M}.")

@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from django.db.models import Q
-from .models import Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel as Instructor
+from .models import Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel
 from .forms_exam import DelegateExamStartForm
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -327,8 +327,8 @@ def _get_or_create_attempt(request, exam: Exam):
 
     from unicorn_project.training.models import Instructor  # adjust import path if needed
     try:
-        instructor = Instructor.objects.get(pk=instructor_id)
-    except Instructor.DoesNotExist:
+        instructor = Personnel.objects.get(pk=instructor_id)
+    except Personnel.DoesNotExist:
         return None, "Instructor not found."
 
     # Look for attempts for THIS delegate on THIS day for THIS exam & instructor
@@ -460,7 +460,7 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
     if not examcode:
         return HttpResponseBadRequest("Missing examcode.")
 
-    from .models import Exam, ExamAttempt, ExamAnswer, ExamAttemptAnswer, ExamQuestion, Instructor
+    # from .models import Exam, ExamAttempt, ExamAnswer, ExamAttemptAnswer, ExamQuestion, Instructor
 
     exam = get_object_or_404(Exam, exam_code__iexact=examcode)
 
@@ -490,8 +490,8 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
         instructor = None
         if instructor_id:
             try:
-                instructor = Instructor.objects.get(pk=instructor_id)
-            except Instructor.DoesNotExist:
+                instructor = Personnel.objects.get(pk=instructor_id)
+            except Personnel.DoesNotExist:
                 instructor = None
 
         # If the user POSTed “accept rules”, normalise to a clean GET URL

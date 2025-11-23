@@ -505,7 +505,7 @@ class DelegateRegisterInstructorForm(forms.ModelForm):
         current_instructor = kwargs.pop("current_instructor", None)
         super().__init__(*args, **kwargs)
         if current_instructor:
-            self.fields["instructor"].queryset = Instructor.objects.filter(pk=current_instructor.pk)
+            self.fields["instructor"].queryset = Personnel.objects.filter(pk=current_instructor.pk)
             self.fields["instructor"].initial = current_instructor.pk
 
         # sensible default for new rows

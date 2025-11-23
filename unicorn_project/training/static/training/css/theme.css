@@ -17,11 +17,6 @@
   color: #fff;
 }
 
-/* Keep the sidebar fixed on desktop */
-@media (min-width: 992px) {
-  .sidebar { width: 280px; min-height: 100vh; }
-}
-
 .sidebar .offcanvas-body { display: flex; flex-direction: column; min-height: 100%; }
 
 .offcanvas-backdrop.show { opacity: .65; }
@@ -147,4 +142,12 @@
 
 .sidebar .sidebar-footer button.leaf:hover {
     background: rgba(255,255,255,.15) !important;
+}
+
+/* ===== FIXED SIDEBAR WIDTH (prevents resizing completely) ===== */
+.sidebar {
+    width: 280px !important;
+    min-width: 280px !important;
+    max-width: 280px !important;
+    flex: 0 0 280px !important; /* absolutely critical */
 }

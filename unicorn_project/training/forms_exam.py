@@ -1,7 +1,7 @@
 # training/forms_exam.py
 from django import forms
 from django.utils import timezone
-from .models import Personnel as Instructor
+from .models import Personnel
 
 class DelegateExamStartForm(forms.Form):
     exam_code = forms.CharField(label="Exam code", disabled=True)
@@ -9,7 +9,7 @@ class DelegateExamStartForm(forms.Form):
     date_of_birth = forms.DateField(label="Date of birth",
                                     widget=forms.DateInput(attrs={"type": "date"}))
     instructor = forms.ModelChoiceField(label="Instructor",
-                                        queryset=Instructor.objects.order_by("name"))
+                                        queryset=Personnel.objects.order_by("name"))
     exam_date = forms.DateField(label="Exam date",
                                 initial=timezone.localdate,
                                 widget=forms.DateInput(attrs={"type": "date"}))

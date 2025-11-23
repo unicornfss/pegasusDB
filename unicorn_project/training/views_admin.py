@@ -214,7 +214,7 @@ def business_form(request, pk=None):
 
         # Instructors who have bookings with this business (for dropdown)
         instructors = (
-            Instructor.objects
+            Personnel.objects
             .filter(bookings__business=obj)   # related_name 'bookings' on Booking.instructor
             .distinct()
             .order_by("name")

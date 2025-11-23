@@ -60,7 +60,7 @@ urlpatterns = [
 
     # ---------- Public delegate register ----------
     path("register/", views.public_delegate_register, name="public_delegate_register"),
-    path("register/instructors", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),
+    path("register/instructors/", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),
 
     # ---------- Public/API helpers ----------
     path("public/attendance/<int:booking_day_id>/", views.public_attendance, name="public_attendance"),
