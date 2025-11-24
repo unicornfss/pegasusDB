@@ -69,6 +69,33 @@
               <div id="loc-address-text" class="form-text mt-1"></div>
             </div>
 
+            <!-- Select precise map location -->
+            <div class="mt-2 mb-2">
+              <button type="button" 
+                      class="btn btn-outline-success btn-sm"
+                      data-bs-toggle="modal" 
+                      data-bs-target="#MapPickerModal">
+                  <i class="bi bi-geo-alt-fill"></i>
+                  Select precise map location
+              </button>
+              <small class="text-muted ms-2">
+                  (Click to set exact point on the map)
+              </small>
+            </div>
+            <div id="precise-location-display" class="form-text mt-1">
+                {% if form.instance.precise_lat and form.instance.precise_lng %}
+                    Precise location saved:
+                    <strong>{{ form.instance.precise_lat }}, {{ form.instance.precise_lng }}</strong>
+                {% else %}
+                    No precise map location selected yet.
+                {% endif %}
+            </div>
+
+
+            {{ form.precise_lat }}
+            {{ form.precise_lng }}
+
+
             <div class="col-md-12">
               <label class="form-label">Course type *</label>
               <select name="{{ form.course_type.html_name }}" id="{{ form.course_type.id_for_label }}" class="form-select">
@@ -861,6 +888,151 @@ document.addEventListener('DOMContentLoaded', function () {
     {% endif %}
   </div>
 </form>
+
+<!-- Precise Location Picker Modal -->
+<div class="modal fade" id="MapPickerModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Select precise map location</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body" style="height:600px;">
+        <input id="map-search-input" 
+               class="form-control mb-2" 
+               placeholder="Search for a place or postcode…">
+
+        <div id="map-canvas" style="width:100%; height:520px;"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="save-map-location">
+            Save location
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+
+function getTrainingAddress() {
+    return document.getElementById("loc-address-text")?.innerText?.trim() || "";
+}
+
+
+let map, marker, searchBox;
+
+// Called when opening the modal
+function createMap() {
+    const latField = document.getElementById("id_precise_lat");
+    const lngField = document.getElementById("id_precise_lng");
+
+    const defaultLat = parseFloat(latField.value) || 52.4895;
+    const defaultLng = parseFloat(lngField.value) || -1.8986;
+
+    map = new google.maps.Map(document.getElementById("map-canvas"), {
+        center: { lat: defaultLat, lng: defaultLng },
+        zoom: 14
+    });
+
+    marker = new google.maps.Marker({
+        position: { lat: defaultLat, lng: defaultLng },
+        map: map,
+        draggable: true
+    });
+
+    // ⭐ Choose best starting point:
+    // 1. Use saved lat/lng if available
+    // 2. Otherwise fall back to geocoder based on address
+    if (!latField.value || !lngField.value) {
+
+        const trainingAddress = getTrainingAddress();
+        if (trainingAddress) {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ address: trainingAddress }, function (results, status) {
+                if (status === "OK" && results[0]) {
+                    const loc = results[0].geometry.location;
+                    map.setCenter(loc);
+                    marker.setPosition(loc);
+                }
+            });
+        }
+    }
+
+
+
+    // Reposition marker on click
+    map.addListener("click", (e) => {
+        marker.setPosition(e.latLng);
+    });
+
+    // Places search
+    const input = document.getElementById("map-search-input");
+    searchBox = new google.maps.places.SearchBox(input);
+
+    searchBox.addListener("places_changed", () => {
+        const places = searchBox.getPlaces();
+        if (!places.length) return;
+
+        const place = places[0];
+        map.setCenter(place.geometry.location);
+        marker.setPosition(place.geometry.location);
+    });
+
+    // Save button
+    document.getElementById("save-map-location").onclick = function () {
+        const pos = marker.getPosition();
+        latField.value = pos.lat();
+        lngField.value = pos.lng();
+
+        const label = document.getElementById("precise-location-display");
+        if (label) {
+            label.innerHTML = `
+                Precise location selected:
+                <strong>${pos.lat().toFixed(6)}, ${pos.lng().toFixed(6)}</strong>
+                <br><em>Saving…</em>
+            `;
+        }
+
+        // hide modal
+        bootstrap.Modal.getInstance(
+            document.getElementById("MapPickerModal")
+        ).hide();
+
+        // ⭐ automatic save
+        document.getElementById("booking-form").submit();
+    };
+
+
+}
+
+// WAIT FOR GOOGLE MAPS API TO FINISH LOADING (from base.html)
+document.addEventListener("gmaps:ready", function () {
+
+    // When modal becomes visible, create the map
+    document.getElementById("MapPickerModal")
+        .addEventListener("shown.bs.modal", function () {
+
+            createMap();
+
+            // Fix invisible-but-grey map by forcing a resize
+            setTimeout(() => {
+                google.maps.event.trigger(map, "resize");
+                map.setCenter(marker.getPosition());
+            }, 200);
+        });
+});
+</script>
+
+
+<style>
+#map-canvas {
+    height: 520px !important;
+    width: 100%;
+    background: #eee;
+}
+</style>
 
 <script>
   /* ---- Data from view (safe defaults) ---- */

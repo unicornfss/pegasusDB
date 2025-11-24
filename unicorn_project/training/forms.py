@@ -41,6 +41,8 @@ class BookingForm(forms.ModelForm):
         fields = [
             "business",
             "training_location",
+            "precise_lat",
+            "precise_lng",
             "course_type",
             "instructor",
             "course_date",
@@ -59,6 +61,8 @@ class BookingForm(forms.ModelForm):
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "course_reference": forms.TextInput(attrs={"readonly": "readonly"}),
             "booking_notes": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
+            'precise_lat': forms.HiddenInput(),
+            'precise_lng': forms.HiddenInput(), 
         }
 
     def __init__(self, *args, **kwargs):

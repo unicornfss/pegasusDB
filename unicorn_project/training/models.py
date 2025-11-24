@@ -176,6 +176,9 @@ class Booking(models.Model):
     # generated reference
     course_reference = models.CharField(max_length=40, unique=True, blank=True)
 
+    precise_lat = models.FloatField(null=True, blank=True)
+    precise_lng = models.FloatField(null=True, blank=True)
+
     # fees (prefilled from CourseType, but editable)
     course_fee     = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     instructor_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
