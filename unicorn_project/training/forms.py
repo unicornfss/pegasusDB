@@ -21,7 +21,8 @@ from .models import (
     FeedbackResponse,
     Exam,
     ExamQuestion,
-    ExamAnswer
+    ExamAnswer,
+    MetaSetting
 )
 
 import string, secrets
@@ -756,3 +757,9 @@ class PersonnelForm(forms.ModelForm):
             inst.user.save()
 
         return inst
+    
+
+class MetaSettingForm(forms.ModelForm):
+    class Meta:
+        model = MetaSetting
+        fields = ["key", "value"]

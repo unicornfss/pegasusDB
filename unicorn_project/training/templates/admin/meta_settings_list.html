@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Meta Settings</h2>
+
+<div class="mb-3">
+    <a href="{% url 'admin_meta_settings_edit' 0 %}" class="btn btn-success">
+        Add New Setting
+    </a>
+</div>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Key</th>
+            <th>Value</th>
+            <th></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in settings %}
+        <tr>
+            <td>{{ s.key }}</td>
+            <td>{{ s.value }}</td>
+            <td>
+                <a href="{% url 'admin_meta_settings_edit' s.pk %}" class="btn btn-sm btn-primary">
+                    Edit
+                </a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

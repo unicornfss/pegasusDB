@@ -21,6 +21,9 @@ from .views_public import (
 
 from . import views_certificates
 
+from .views_admin import meta_settings_list, meta_settings_edit
+
+
 urlpatterns = [
     # ---------- Core / Home ----------
     path("", views.home, name="home"),
@@ -240,6 +243,8 @@ urlpatterns = [
         name="api_instructor_postcode",
     ),
 
+    path("app/admin/meta-settings/", meta_settings_list, name="admin_meta_settings"),
+    path("app/admin/meta-settings/<int:pk>/", meta_settings_edit, name="admin_meta_settings_edit"),
 
 ]
 

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Edit Meta Setting</h2>
+
+<form method="post">
+    {% csrf_token %}
+
+    <div class="mb-3">
+        <label class="form-label">Key</label>
+        <input type="text" name="key" class="form-control" value="{{ setting.key }}">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Value</label>
+        <input type="text" name="value" class="form-control" value="{{ setting.value }}">
+    </div>
+
+    <button type="submit" class="btn btn-success">Save</button>
+    <a href="{% url 'admin_meta_settings' %}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %}

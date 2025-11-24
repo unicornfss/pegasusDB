@@ -40,6 +40,7 @@ from .forms import (
     Attendance, BusinessForm, CourseTypeForm, TrainingLocationForm,
     PersonnelForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
     CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm, PersonnelProfileForm,
+    MetaSettingForm
 )
 
 from .views_instructor import _feedback_queryset_for_booking, list_course_receipts_drive, render_invoice_pdf_via_preview
@@ -2270,3 +2271,32 @@ def password_change_done_and_clear(request):
 def api_instructor_postcode(request, pk):
     inst = get_object_or_404(Personnel, pk=pk)
     return JsonResponse({"postcode": inst.postcode or ""})
+
+@admin_required
+def meta_settings_list(request):
+    settings = MetaSetting.objects.order_by("key")
+    return render(request, "admin/meta_settings_list.html", {"settings": settings})
+
+
+@admin_required
+@transaction.atomic
+def meta_settings_edit(request, pk):
+    # pk == 0 means “add new”
+    if pk == 0:
+        setting = None
+    else:
+        setting = get_object_or_404(MetaSetting, pk=pk)
+
+    if request.method == "POST":
+        form = MetaSettingForm(request.POST, instance=setting)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Setting saved.")
+            return redirect("admin_meta_settings")
+    else:
+        form = MetaSettingForm(instance=setting)
+
+    return render(request, "admin/meta_settings_edit.html", {
+        "form": form,
+        "setting": setting,
+    })
