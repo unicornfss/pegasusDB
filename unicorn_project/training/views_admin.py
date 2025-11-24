@@ -33,7 +33,7 @@ from .models import (
     Business, CourseType, Personnel, Booking, TrainingLocation,
     BookingDay, DelegateRegister, CourseCompetency,
     Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer, CompetencyAssessment,
-    FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem
+    FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem, MetaSetting
 )
 
 from .forms import (
@@ -51,6 +51,12 @@ from .google_oauth import get_drive_service
 # =========================
 # Helpers / guards
 # =========================
+
+def get_meta(key, default=None):
+    try:
+        return MetaSetting.objects.get(key=key).value
+    except MetaSetting.DoesNotExist:
+        return default
 
 def _parse_time_or_none(s):
     if not s:
@@ -1100,6 +1106,7 @@ def booking_form(request, pk=None):
         "has_exam": has_exam,
         # certificates
         "cert_delegates": cert_delegates,
+        "mileage_rate": get_meta("mileage_rate", "0"),
     }
 
     # ---- NEW: attach admin invoice context if there is a booking ----
@@ -2259,3 +2266,7 @@ def password_change_done_and_clear(request):
     messages.success(request, "Your password has been changed successfully.")
     return redirect("home")
 
+@admin_required
+def api_instructor_postcode(request, pk):
+    inst = get_object_or_404(Personnel, pk=pk)
+    return JsonResponse({"postcode": inst.postcode or ""})

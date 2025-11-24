@@ -234,6 +234,13 @@ urlpatterns = [
 
     path("app/no-roles/", views.no_roles_assigned, name="no_roles"),
 
+    path(
+        "api/instructor/<uuid:pk>/postcode/",
+        views_admin.api_instructor_postcode,
+        name="api_instructor_postcode",
+    ),
+
+
 ]
 
 

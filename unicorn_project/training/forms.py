@@ -49,6 +49,8 @@ class BookingForm(forms.ModelForm):
             "start_time",
             "course_fee",
             "instructor_fee",
+            "allow_mileage_claim",
+            "mileage_fee",
             "contact_name",
             "telephone",
             "email",
@@ -63,6 +65,8 @@ class BookingForm(forms.ModelForm):
             "booking_notes": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
             'precise_lat': forms.HiddenInput(),
             'precise_lng': forms.HiddenInput(), 
+            "allow_mileage_claim": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "mileage_fee": forms.HiddenInput(),
         }
 
     def __init__(self, *args, **kwargs):

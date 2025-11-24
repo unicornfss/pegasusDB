@@ -151,6 +151,15 @@
                 <div class="col-md-12">
                   <label class="form-label">Lead Instructor</label>
                   {{ form.instructor }}
+                  <div id="instructor-mileage" class="mt-1 text-muted small"></div>
+                  <div id="mileage-fee" class="mt-1 text-muted small"></div>
+                  {{ form.mileage_fee }}
+                  <div class="form-check form-switch mt-2">
+                      {{ form.allow_mileage_claim }}
+                      <label class="form-check-label" for="id_allow_mileage_claim">
+                          Allow mileage claim?
+                      </label>
+                  </div>
                   {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
                 </div>
 
@@ -1662,5 +1671,101 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 })();
 </script>
+
+<script>
+document.addEventListener("gmaps:ready", () => {
+    const instructorSelect = document.getElementById("id_instructor");
+    const locationSelect = document.getElementById("id_training_location");
+
+    const mileageBox = document.getElementById("instructor-mileage");
+    const feeBox = document.getElementById("mileage-fee");
+
+    const mileageFeeField = document.getElementById("id_mileage_fee");
+    const mileageClaimToggle = document.getElementById("id_allow_mileage_claim");
+
+    const mileageRate = parseFloat("{{ mileage_rate }}") || 0;
+
+    function fetchLocationPostcode() {
+        const el = document.getElementById("loc-address-text");
+        if (!el) return "";
+        return el.textContent.trim();
+    }
+
+    function updateMileage() {
+        mileageBox.textContent = "Calculating mileage…";
+        feeBox.textContent = "";
+        if (mileageFeeField) mileageFeeField.value = "";
+
+        const instId = instructorSelect.value;
+        if (!instId) return;
+
+        fetch(`/api/instructor/${instId}/postcode/`)
+            .then(r => r.json())
+            .then(data => {
+                const instructorPostcode = data.postcode;
+                const locationPostcode = fetchLocationPostcode();
+
+                if (!instructorPostcode || !locationPostcode) {
+                    mileageBox.textContent = "Postcode missing";
+                    return;
+                }
+
+                const service = new google.maps.DistanceMatrixService();
+                service.getDistanceMatrix(
+                    {
+                        origins: [instructorPostcode],
+                        destinations: [locationPostcode],
+                        travelMode: google.maps.TravelMode.DRIVING
+                    },
+                    (response, status) => {
+                        if (status !== "OK") {
+                            mileageBox.textContent = "Distance unavailable";
+                            return;
+                        }
+
+                        const elem = response.rows[0].elements[0];
+                        if (elem.status !== "OK") {
+                            mileageBox.textContent = "Distance unavailable";
+                            return;
+                        }
+
+                        const meters = elem.distance.value;
+                        const milesOneWay = meters / 1609.34;
+                        const milesReturn = milesOneWay * 2;
+
+                        mileageBox.textContent =
+                            `Estimated return mileage: ${milesReturn.toFixed(1)} miles`;
+
+                        // If mileage claim disabled
+                        if (mileageClaimToggle && !mileageClaimToggle.checked) {
+                            feeBox.textContent = "Mileage claim disabled";
+                            if (mileageFeeField) mileageFeeField.value = "";
+                            return;
+                        }
+
+                        // Compute mileage fee
+                        const fee = milesReturn * mileageRate;
+
+                        feeBox.textContent =
+                            `Mileage fee (@ £${mileageRate.toFixed(2)}/mile): £${fee.toFixed(2)}`;
+
+                        // SAVE the numerical value to hidden field
+                        if (mileageFeeField) {
+                            mileageFeeField.value = fee.toFixed(2);
+                        }
+                    }
+                );
+            });
+    }
+
+    instructorSelect.addEventListener("change", updateMileage);
+    locationSelect.addEventListener("change", updateMileage);
+    if (mileageClaimToggle) mileageClaimToggle.addEventListener("change", updateMileage);
+
+    updateMileage(); // run on page load
+});
+</script>
+
+
 
 {% endblock %}
