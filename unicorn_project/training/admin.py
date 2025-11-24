@@ -18,7 +18,7 @@ from import_export.admin import ImportExportModelAdmin
 from .models import (
     AccidentReport, Business, TrainingLocation, CourseType,
     Personnel, Booking, BookingDay, Attendance, CourseCompetency,
-    Invoice, InvoiceItem,
+    Invoice, InvoiceItem, MetaSetting,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
     LogoOverride
 )
@@ -531,3 +531,8 @@ except admin.sites.NotRegistered:
     pass
 
 admin.site.register(User, CustomUserAdmin)
+
+@admin.register(MetaSetting)
+class MetaSettingAdmin(admin.ModelAdmin):
+    list_display = ("key", "value")
+    search_fields = ("key",)

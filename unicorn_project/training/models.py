@@ -843,3 +843,14 @@ class LogoOverride(models.Model):
 
     def __str__(self):
         return f"{self.file_name} ({'ON' if self.active else 'off'})"
+
+class MetaSetting(models.Model):
+    key = models.CharField(max_length=100, unique=True)
+    value = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = "Meta setting"
+        verbose_name_plural = "Meta settings"
+
+    def __str__(self):
+        return f"{self.key}: {self.value}"
