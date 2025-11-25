@@ -85,6 +85,13 @@
         </div>
       </div>
 
+      {% if booking.allow_mileage_claim and booking.mileage_fee %}
+        <div class="mb-3">
+          <div class="text-muted small">Mileage allowance</div>
+          <div>£{{ booking.mileage_fee }} per mile</div>
+        </div>
+        {% endif %}
+
         <div class="mb-3">
           <div class="text-muted small">Location contact</div>
           {% if booking.training_location %}
@@ -801,7 +808,7 @@ document.addEventListener('DOMContentLoaded', function() {
   let hideTimer = null;
 
   function showPopover(message) {
-    txt.textContent = message;
+    txt.innerHTML = message;
     pop.classList.add('show');
     clearTimeout(hideTimer);
     hideTimer = setTimeout(hidePopover, 4000);
@@ -824,7 +831,22 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
       const data = await res.json();
-      showPopover('Your fee: ' + data.amount);
+      let message = 'Your fee: ' + data.amount;
+
+      // Mileage — keep on one line
+      if (data.mileage) {
+          message += '<br><span style="white-space: nowrap;">Mileage allowance: ' + data.mileage + '</span>';
+      }
+
+      // Accommodation ✓ — only if allowed
+      if (data.accommodation) {
+          message += '<br><span style="white-space: nowrap;">Accommodation: ✓</span>';
+      }
+
+      // Render as HTML
+      txt.innerHTML = message;
+      showPopover(message);
+
     } catch (err) {
       console.error(err);
       showPopover('Error loading fee');

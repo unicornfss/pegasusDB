@@ -483,7 +483,7 @@ def post_login(request):
 def booking_fee(request, pk):
     booking = get_object_or_404(Booking, pk=pk)
 
-    # Replace this with your real permission logic:
+    # Permission check
     is_instructor_for_booking = (
         hasattr(booking, "instructor") and booking.instructor and
         hasattr(booking.instructor, "user") and booking.instructor.user_id == request.user.id
@@ -493,9 +493,21 @@ def booking_fee(request, pk):
     if not (is_instructor_for_booking or is_admin_or_staff):
         return HttpResponseForbidden("Not allowed")
 
-    # Format the amount how you prefer (e.g., with currency symbol)
-    amount = booking.instructor_fee  # Decimal field
-    return JsonResponse({"amount": f"£{amount:,.2f}"})
+    # Instructor fee
+    amount = booking.instructor_fee or 0
+
+    # Mileage allowance (total lump sum — NOT per mile)
+    mileage = (
+        f"£{booking.mileage_fee:,.2f}"
+        if booking.allow_mileage_claim and booking.mileage_fee
+        else None
+    )
+
+    return JsonResponse({
+        "amount": f"£{amount:,.2f}",
+        "mileage": mileage,
+        "accommodation": booking.allow_accommodation,
+    })
 
 def _invoicing_tab_context(booking):
     """Build context keys that _invoicing_tab.html expects."""
