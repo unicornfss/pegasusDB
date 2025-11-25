@@ -184,6 +184,7 @@ class Booking(models.Model):
     instructor_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     allow_mileage_claim = models.BooleanField(default=True)
     mileage_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    allow_accommodation = models.BooleanField(default=False)
 
     # snapshot of location’s contact (prefilled, editable)
     contact_name   = models.CharField(max_length=200, blank=True)

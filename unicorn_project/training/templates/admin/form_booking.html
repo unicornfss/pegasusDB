@@ -148,52 +148,81 @@
 
               <div class="row g-3">
 
+                <!-- Lead Instructor + mileage info -->
                 <div class="col-md-12">
                   <label class="form-label">Lead Instructor</label>
                   {{ form.instructor }}
-                  <div id="instructor-mileage" class="mt-1 text-muted small"></div>
-                  <div id="mileage-fee" class="mt-1 text-muted small"></div>
-                  {{ form.mileage_fee }}
+
+                  <!-- Mileage info boxes -->
+                  <div class="small text-muted mt-2" id="instructor-mileage"></div>
+                  <div class="small text-muted" id="mileage-fee"></div>
+
+                  <!-- Allow mileage claim toggle -->
                   <div class="form-check form-switch mt-2">
-                      {{ form.allow_mileage_claim }}
-                      <label class="form-check-label" for="id_allow_mileage_claim">
-                          Allow mileage claim?
-                      </label>
+                    {{ form.allow_mileage_claim }}
+                    <label class="form-check-label" for="id_allow_mileage_claim">
+                      Allow mileage claim?
+                    </label>
                   </div>
-                  {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+                  <!-- NEW: Accommodation allowance toggle -->
+                  <div class="form-check form-switch mt-2">
+                    {{ form.allow_accommodation }}
+                    <label class="form-check-label" for="id_allow_accommodation">
+                      Accommodation allowance?
+                    </label>
+                  </div>
+
+                  {{ form.mileage_fee }}
+                  {% for err in form.instructor.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
                 </div>
 
+                <!-- Fees -->
                 <div class="col-md-6">
                   <label class="form-label">Course fee</label>
                   {{ form.course_fee }}
-                  {% for err in form.course_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                  {% for err in form.course_fee.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
                 </div>
 
                 <div class="col-md-6">
                   <label class="form-label">Instructor fee</label>
                   {{ form.instructor_fee }}
-                  {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                  {% for err in form.instructor_fee.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
                 </div>
 
+                <!-- Contact details -->
                 <div class="col-md-4">
                   <label class="form-label">Contact name</label>
                   {{ form.contact_name }}
-                  {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                  {% for err in form.contact_name.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
                 </div>
 
                 <div class="col-md-4">
                   <label class="form-label">Telephone</label>
                   {{ form.telephone }}
-                  {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                  {% for err in form.telephone.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
                 </div>
 
                 <div class="col-md-4">
                   <label class="form-label">Email</label>
                   {{ form.email }}
-                  {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                  {% for err in form.email.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
                 </div>
 
-              </div><!-- end row -->
+              </div>
+
 
               <hr>
 
@@ -1674,27 +1703,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <script>
 document.addEventListener("gmaps:ready", () => {
-    const instructorSelect = document.getElementById("id_instructor");
-    const locationSelect = document.getElementById("id_training_location");
+    const instructorSelect      = document.getElementById("id_instructor");
+    const locationSelect        = document.getElementById("id_training_location");
 
-    const mileageBox = document.getElementById("instructor-mileage");
-    const feeBox = document.getElementById("mileage-fee");
+    const mileageBox            = document.getElementById("instructor-mileage");
+    const feeBox                = document.getElementById("mileage-fee");
 
-    const mileageFeeField = document.getElementById("id_mileage_fee");
-    const mileageClaimToggle = document.getElementById("id_allow_mileage_claim");
+    const mileageFeeField       = document.getElementById("id_mileage_fee");
+    const mileageClaimToggle    = document.getElementById("id_allow_mileage_claim");
+    const accommodationToggle   = document.getElementById("id_allow_accommodation");
 
-    const mileageRate = parseFloat("{{ mileage_rate }}") || 0;
+    const mileageRate           = parseFloat("{{ mileage_rate }}") || 0;
 
     function fetchLocationPostcode() {
         const el = document.getElementById("loc-address-text");
-        if (!el) return "";
-        return el.textContent.trim();
+        return el ? el.textContent.trim() : "";
+    }
+
+    function getCourseDays() {
+        const sel = document.getElementById("id_course_type");
+        if (!sel) return 1;
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt) return 1;
+        const raw = parseFloat(opt.dataset.duration || "1");
+        return Math.max(1, Math.ceil(raw));   // e.g. 1.5 days → 2
     }
 
     function updateMileage() {
         mileageBox.textContent = "Calculating mileage…";
         feeBox.textContent = "";
-        if (mileageFeeField) mileageFeeField.value = "";
+        mileageFeeField.value = "";
 
         const instId = instructorSelect.value;
         if (!instId) return;
@@ -1702,10 +1740,10 @@ document.addEventListener("gmaps:ready", () => {
         fetch(`/api/instructor/${instId}/postcode/`)
             .then(r => r.json())
             .then(data => {
-                const instructorPostcode = data.postcode;
-                const locationPostcode = fetchLocationPostcode();
+                const instructorPC = data.postcode;
+                const locationPC = fetchLocationPostcode();
 
-                if (!instructorPostcode || !locationPostcode) {
+                if (!instructorPC || !locationPC) {
                     mileageBox.textContent = "Postcode missing";
                     return;
                 }
@@ -1713,8 +1751,8 @@ document.addEventListener("gmaps:ready", () => {
                 const service = new google.maps.DistanceMatrixService();
                 service.getDistanceMatrix(
                     {
-                        origins: [instructorPostcode],
-                        destinations: [locationPostcode],
+                        origins: [instructorPC],
+                        destinations: [locationPC],
                         travelMode: google.maps.TravelMode.DRIVING
                     },
                     (response, status) => {
@@ -1732,27 +1770,37 @@ document.addEventListener("gmaps:ready", () => {
                         const meters = elem.distance.value;
                         const milesOneWay = meters / 1609.34;
                         const milesReturn = milesOneWay * 2;
+                        const days = getCourseDays();
+
+                        let totalMiles;
+                        
+                        // -----------------------------------------------------
+                        // NEW RULES:
+                        //   • If accommodation = ON → only *one* return journey
+                        //   • If accommodation = OFF → multiply by number of days
+                        // -----------------------------------------------------
+                        if (accommodationToggle && accommodationToggle.checked) {
+                            totalMiles = milesReturn;               // one return trip
+                        } else {
+                            totalMiles = milesReturn * days;        // per-day return
+                        }
 
                         mileageBox.textContent =
-                            `Estimated return mileage: ${milesReturn.toFixed(1)} miles`;
+                            `Estimated mileage: ${totalMiles.toFixed(1)} miles`;
 
                         // If mileage claim disabled
                         if (mileageClaimToggle && !mileageClaimToggle.checked) {
                             feeBox.textContent = "Mileage claim disabled";
-                            if (mileageFeeField) mileageFeeField.value = "";
+                            mileageFeeField.value = "";
                             return;
                         }
 
-                        // Compute mileage fee
-                        const fee = milesReturn * mileageRate;
+                        const fee = totalMiles * mileageRate;
 
                         feeBox.textContent =
                             `Mileage fee (@ £${mileageRate.toFixed(2)}/mile): £${fee.toFixed(2)}`;
 
-                        // SAVE the numerical value to hidden field
-                        if (mileageFeeField) {
-                            mileageFeeField.value = fee.toFixed(2);
-                        }
+                        mileageFeeField.value = fee.toFixed(2);
                     }
                 );
             });
@@ -1761,9 +1809,94 @@ document.addEventListener("gmaps:ready", () => {
     instructorSelect.addEventListener("change", updateMileage);
     locationSelect.addEventListener("change", updateMileage);
     if (mileageClaimToggle) mileageClaimToggle.addEventListener("change", updateMileage);
+    if (accommodationToggle) accommodationToggle.addEventListener("change", updateMileage);
 
-    updateMileage(); // run on page load
+    updateMileage(); // run on load
 });
+
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    const instructorSelect = document.getElementById("id_instructor");
+    const allowMileage = document.getElementById("allowMileageClaim");
+    const allowAccommodation = document.getElementById("allowAccommodation");
+
+    const distanceInfo = document.getElementById("distance-info");
+    const mileageFeeInfo = document.getElementById("mileage-fee-info");
+
+    let lastDistanceMiles = null;
+    let mileageRate = window.mileageRate || 0;
+
+    function updateUI() {
+        // Distance text
+        if (!lastDistanceMiles) {
+            distanceInfo.textContent = "Distance unavailable";
+            mileageFeeInfo.textContent = "";
+            return;
+        }
+
+        const perDayText =
+            "Estimated return mileage (per day if no accommodation, per course if accommodation): "
+            + lastDistanceMiles + " miles";
+
+        distanceInfo.textContent = perDayText;
+
+        let fee = lastDistanceMiles * mileageRate;
+        fee = Math.round(fee * 100) / 100;
+
+        mileageFeeInfo.textContent =
+            `Mileage fee (@ £${mileageRate.toFixed(2)}/mile): £${fee.toFixed(2)}`;
+    }
+
+    function fetchDistance() {
+        const instructorId = instructorSelect.value;
+        if (!instructorId || !window.locationMap) {
+            distanceInfo.textContent = "Distance unavailable";
+            return;
+        }
+
+        const loc = window.locationMap[id_location.value];
+        const instructorPC = window.instructorPostcodes[instructorId];
+
+        if (!loc || !instructorPC) {
+            distanceInfo.textContent = "Distance unavailable";
+            return;
+        }
+
+        const service = new google.maps.DistanceMatrixService();
+        service.getDistanceMatrix(
+            {
+                origins: [instructorPC],
+                destinations: [loc.postcode],
+                travelMode: google.maps.TravelMode.DRIVING,
+            },
+            function (response, status) {
+                if (status !== "OK") {
+                    distanceInfo.textContent = "Distance unavailable";
+                    return;
+                }
+
+                const element = response.rows[0].elements[0];
+                if (element.status !== "OK") {
+                    distanceInfo.textContent = "Distance unavailable";
+                    return;
+                }
+
+                const miles = element.distance.value / 1609.34;
+                lastDistanceMiles = Math.round(miles * 10) / 10;
+
+                updateUI();
+            }
+        );
+    }
+
+    instructorSelect.addEventListener("change", fetchDistance);
+    allowMileage.addEventListener("change", updateUI);
+    allowAccommodation.addEventListener("change", updateUI);
+
+    fetchDistance();
+});
+
 </script>
 
 
