@@ -671,38 +671,31 @@ def _unique_delegates_for_booking(booking):
 
 def _assessment_context(booking, user):
     # permissions: staff or assigned instructor (match the guard used in the view)
-    instr = getattr(user, "instructor", None)
+    instr = getattr(user, "personnel", None)  # <-- changed from "instructor"
+
     if not (user.is_staff or (instr and booking.instructor_id == instr.id)):
         raise PermissionError("Not your booking.")
-
 
     # --- Delegates: unique by (name + DOB) for the whole booking ---
     delegates = _unique_delegates_for_booking(booking)
 
-
-    # --- Competencies: all for this course type (no is_active filter) ---
+    # --- Competencies: all for this course type ---
     competencies = list(
         CourseCompetency.objects
         .filter(course_type=booking.course_type)
         .order_by("sort_order", "name", "id")
     )
 
-    # --- Existing assessments: (register_id, competency_id) -> object ---
     existing = {}
     if delegates and competencies:
-        try:
-            from .models import CompetencyAssessment  # lazy import
-            qs = (
-                CompetencyAssessment.objects
-                .filter(register__in=delegates, course_competency__in=competencies)
-                .select_related("register", "course_competency")
-            )
-            for a in qs:
-                existing[(a.register_id, a.course_competency_id)] = a
-        except Exception:
-            existing = {}
+        qs = (
+            CompetencyAssessment.objects
+            .filter(register__in=delegates, course_competency__in=competencies)
+            .select_related("register", "course_competency")
+        )
+        for a in qs:
+            existing[(a.register_id, a.course_competency_id)] = a
 
-    # Levels (fallback if enum not present)
     try:
         from .models import AssessmentLevel
         levels = AssessmentLevel.choices
@@ -715,6 +708,7 @@ def _assessment_context(booking, user):
         "existing": existing,
         "levels": levels,
     }
+
 
 def _get_or_create_invoice(booking):
     inv = getattr(booking, "invoice", None)
