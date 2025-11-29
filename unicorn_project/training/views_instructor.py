@@ -814,9 +814,51 @@ def instructor_booking_detail(request, pk):
                 f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}"
             )
 
-        # --- MORE POST LOGIC (unchanged) ---
-        # (I am NOT rewriting all the rest — it stays 100% as your original)
-        # ----------------------------------------------------------------------
+        # ----- SAVE INVOICE DRAFT OR SEND ADMIN -----
+        if action in ("save_draft", "send_admin"):
+
+            # update invoice main fields
+            inv.instructor_ref = request.POST.get("instructor_ref", "") or ""
+            inv.account_name = request.POST.get("account_name", "") or ""
+            inv.sort_code = request.POST.get("sort_code", "") or ""
+            inv.account_number = request.POST.get("account_number", "") or ""
+
+            # Helper: extract extra line items
+            descs = request.POST.getlist("item_desc")
+            amts = request.POST.getlist("item_amount")
+            pairs = list(zip(descs, amts))
+
+            # Remove existing dynamic items
+            inv.items.exclude(description="Mileage").delete()
+
+            # Save new items
+            from decimal import Decimal
+            for desc, amt in pairs:
+                desc = (desc or "").strip()
+                if not desc:
+                    continue
+                try:
+                    amt = Decimal(amt)
+                except:
+                    amt = Decimal("0.00")
+
+                InvoiceItem.objects.create(
+                    invoice=inv,
+                    description=desc,
+                    amount=amt,
+                )
+
+            inv.save()
+
+            # AJAX autosave reply
+            if request.headers.get("x-requested-with") == "XMLHttpRequest":
+                return JsonResponse({"ok": True, "saved_at": now().strftime("%H:%M:%S")})
+
+            # Normal save → reload page on invoicing tab
+            return redirect(
+                f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
+            )
+
 
     # ---------- Days / registers ----------
     days_qs = (

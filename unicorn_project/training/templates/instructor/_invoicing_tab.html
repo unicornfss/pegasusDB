@@ -1,8 +1,11 @@
 {% load static %}
+
 {% with inv_lower=invoice.status|default:"draft"|lower %}
+
+  {# Lock banner if invoice is no longer editable #}
   {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}
-    <div class="alert alert-warning mb-0">
-      Invoice locked — it has already been sent.
+    <div class="alert alert-warning mb-3">
+      Invoice locked — you can no longer edit or send it.
     </div>
   {% endif %}
 
@@ -10,691 +13,717 @@
     {% csrf_token %}
     <input type="hidden" name="confirm_receipts" id="confirm_receipts" value="0">
 
-{% now "Y-m-d" as today_iso %}
-{% now "d/m/Y" as today_human %}
+    {% now "Y-m-d" as today_iso %}
+    {% now "d/m/Y" as today_human %}
 
-  <div class="col-12 col-lg-8">
-    <div class="card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Invoice details</span>
-        <div class="d-flex align-items-center gap-2">
-          <small id="autosave-status" class="text-muted" style="min-width:120px;text-align:right;"></small>
-          <span class="badge text-bg-secondary">
-            {% if invoice and invoice.status %}
-              {{ invoice.status|capfirst }}
-            {% else %}
-              Awaiting completion and sending
-            {% endif %}
-          </span>
-        </div>
-      </div>
-
-      <div class="card-body">
-
-        <div class="row g-3">
-          <div class="col-md-7">
-            <label class="form-label">Instructor reference (optional)</label>
-            <input class="form-control"
-                   name="instructor_ref"
-                   value="{{ invoice.instructor_ref|default_if_none:'' }}"
-                   {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+    {# ================= LEFT COLUMN ================= #}
+    <div class="col-12 col-lg-8">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Invoice details</span>
+          <div class="d-flex align-items-center gap-2">
+            <small id="autosave-status"
+                   class="text-muted"
+                   style="min-width:120px;text-align:right;"></small>
+            <span class="badge text-bg-secondary">
+              {% if invoice and invoice.status %}
+                {{ invoice.status|capfirst }}
+              {% else %}
+                Awaiting completion and sending
+              {% endif %}
+            </span>
           </div>
-
-          <div class="col-md-5">
-            <label class="form-label">Invoice date</label>
-            <input class="form-control"
-                  value="{% if invoice.invoice_date %}{{ invoice.invoice_date|date:'d/m/Y' }}{% else %}{{ today_human }}{% endif %}"
-                  readonly>
-          </div>
-
-
         </div>
 
-        <div class="mt-4">
-          <div class="text-muted small mb-1">Line items</div>
+        <div class="card-body">
 
-          <div class="table-responsive">
-            <table class="table table-sm align-middle mb-2" id="items-table">
-              <thead>
-                <tr>
-                  <th style="width:60%">Description</th>
-                  <th style="width:25%">Amount (£)</th>
-                  <th style="width:15%"></th>
-                </tr>
-              </thead>
+          {# --- Top row: reference + date --- #}
+          <div class="row g-3">
+            <div class="col-md-7">
+              <label class="form-label">Instructor reference (optional)</label>
+              <input class="form-control"
+                     name="instructor_ref"
+                     value="{{ invoice.instructor_ref|default_if_none:'' }}"
+                     {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+            </div>
 
-              <!-- Fixed base fee row (always present, not editable) -->
-              <tbody id="base-fee-body">
-                <tr class="table-light">
-                  <td><span class="fw-semibold">Instructor fee</span></td>
-                  <td>
-                    <input class="form-control text-end"
-                           value="{{ booking.instructor_fee|default_if_none:0|floatformat:2 }}"
-                           readonly>
-                  </td>
-                  <td class="text-end"></td>
-                </tr>
-              </tbody>
+            <div class="col-md-5">
+              <label class="form-label">Invoice date</label>
+              <input class="form-control"
+                     value="{% if invoice.invoice_date %}{{ invoice.invoice_date|date:'d/m/Y' }}{% else %}{{ today_human }}{% endif %}"
+                     readonly>
+            </div>
+          </div>
 
-              <!-- Dynamic extras; grows/shrinks based on items -->
-              <tbody id="extras-body">
-                {% for it in invoice.items.all %}
+          {# --- Line items --- #}
+          <div class="mt-4">
+            <div class="text-muted small mb-1">Line items</div>
+
+            <div class="table-responsive">
+              <table class="table table-sm align-middle mb-2" id="items-table">
+                <thead>
                   <tr>
-                    <td>
-                      <input class="form-control"
-                             name="item_desc"
-                             value="{{ it.description|default_if_none:'' }}"
-                             {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
-                    </td>
+                    <th style="width:60%">Description</th>
+                    <th style="width:25%">Amount (£)</th>
+                    <th style="width:15%"></th>
+                  </tr>
+                </thead>
+
+                {# Fixed base fee row (always present) #}
+                <tbody id="base-fee-body">
+                  <tr class="table-light">
+                    <td><span class="fw-semibold">Instructor fee</span></td>
                     <td>
                       <input class="form-control text-end"
-                             name="item_amount"
-                             type="number" step="0.01"
-                             value="{{ it.amount|default_if_none:0 }}"
-                             {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+                             value="{{ booking.instructor_fee|default_if_none:0|floatformat:2 }}"
+                             readonly>
                     </td>
-                    <td class="text-end">
-                      <button class="btn btn-outline-danger btn-sm remove-row"
-                              type="button"
-                              {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
-                        <i class="bi bi-x"></i>
-                      </button>
-                    </td>
+                    <td class="text-end"></td>
                   </tr>
-                {% empty %}
-                  {# if no extras, start with one empty row #}
-                  <tr>
-                    <td>
-                      <input class="form-control" name="item_desc"
-                             {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
-                    </td>
-                    <td>
-                      <input class="form-control text-end" name="item_amount"
-                             type="number" step="0.01"
-                             {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
-                    </td>
-                    <td class="text-end">
-                      <button class="btn btn-outline-danger btn-sm remove-row"
-                              type="button"
-                              {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
-                        <i class="bi bi-x"></i>
-                      </button>
-                    </td>
-                  </tr>
-                {% endfor %}
-              </tbody>
-            </table>
+                </tbody>
+
+                {# Optional mileage row #}
+                {% if booking.allow_mileage_claim and booking.mileage_fee %}
+                  <tbody id="mileage-body">
+                    <tr class="table-light">
+                      <td><span class="fw-semibold">Mileage</span></td>
+                      <td>
+                        <input class="form-control text-end"
+                               value="{{ booking.mileage_fee|floatformat:2 }}"
+                               readonly>
+                      </td>
+                      <td class="text-end"></td>
+                    </tr>
+                  </tbody>
+                {% endif %}
+
+                {# Dynamic extras #}
+                <tbody id="extras-body">
+                  {% for it in invoice.items.all %}
+                    {% if it.description != "Mileage" %}
+                      <tr>
+                        <td>
+                          <input class="form-control"
+                                 name="item_desc"
+                                 value="{{ it.description|default_if_none:'' }}"
+                                 {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+                        </td>
+                        <td>
+                          <input class="form-control text-end"
+                                 name="item_amount"
+                                 type="number" step="0.01"
+                                 value="{{ it.amount|default_if_none:0 }}"
+                                 {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+                        </td>
+                        <td class="text-end">
+                          <button class="btn btn-outline-danger btn-sm remove-row"
+                                  type="button"
+                                  {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
+                            <i class="bi bi-x"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    {% endif %}
+                  {% empty %}
+                    {# Start with one empty row if no extras #}
+                    <tr>
+                      <td>
+                        <input class="form-control"
+                               name="item_desc"
+                               {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+                      </td>
+                      <td>
+                        <input class="form-control text-end"
+                               name="item_amount"
+                               type="number" step="0.01"
+                               {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+                      </td>
+                      <td class="text-end">
+                        <button class="btn btn-outline-danger btn-sm remove-row"
+                                type="button"
+                                {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
+                          <i class="bi bi-x"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <button class="btn btn-outline-primary btn-sm"
+                    id="btn-add-item"
+                    type="button"
+                    {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
+              <i class="bi bi-plus-circle"></i> Add item
+            </button>
           </div>
 
-          <button class="btn btn-outline-primary btn-sm" id="btn-add-item"
-                  type="button"
-                  {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
-            <i class="bi bi-plus-circle"></i> Add item
-          </button>
-        </div>
-
-        <div class="row g-3 mt-4">
-          <div class="col-md-12">
-            <div class="d-flex justify-content-end align-items-center">
-              <div class="me-2 text-muted">Invoice total:</div>
-              <div class="fw-semibold" id="invoice-total-display">
-                £0.00
+          {# --- Total --- #}
+          <div class="row g-3 mt-4">
+            <div class="col-md-12">
+              <div class="d-flex justify-content-end align-items-center">
+                <div class="me-2 text-muted">Invoice total:</div>
+                <div class="fw-semibold" id="invoice-total-display">
+                  £0.00
+                </div>
               </div>
             </div>
           </div>
+
+          <hr class="my-3">
+
+          {# --- Bank details --- #}
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Account name</label>
+              <input class="form-control"
+                     name="account_name"
+                     value="{{ invoice.account_name|default:booking.instructor.name_on_account }}"
+                     {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Sort code</label>
+              <input class="form-control"
+                     name="sort_code"
+                     value="{{ invoice.sort_code|default:booking.instructor.bank_sort_code }}"
+                     {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Account number</label>
+              <input class="form-control"
+                     name="account_number"
+                     value="{{ invoice.account_number|default:booking.instructor.bank_account_number }}"
+                     {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
+            </div>
+          </div>
+
         </div>
+      </div>
 
-        <hr class="my-3">
+      {# --- ACTION BUTTONS ROW --- #}
+      <div class="mt-3 d-flex flex-wrap gap-2">
 
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label">Account name</label>
-            <input class="form-control"
-                   name="account_name"
-                   value="{{ invoice.account_name|default:booking.instructor.name_on_account }}"
-                   {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Sort code</label>
-            <input class="form-control"
-                   name="sort_code"
-                   value="{{ invoice.sort_code|default:booking.instructor.bank_sort_code }}"
-                   {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label">Account number</label>
-            <input class="form-control"
-                   name="account_number"
-                   value="{{ invoice.account_number|default:booking.instructor.bank_account_number }}"
-                   {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}readonly disabled{% endif %}>
-          </div>
+        {# Save draft when editable #}
+        {% if inv_lower == "draft" or inv_lower == "awaiting_review" %}
+          <button type="submit"
+                  class="btn btn-primary"
+                  name="action"
+                  value="save_draft">
+            <i class="bi bi-check2"></i> Save draft
+          </button>
+        {% endif %}
+
+        {# SEND BUTTON LOGIC (nested ifs, no parentheses) #}
+        {% if booking.status == "completed" %}
+          {% if inv_lower == "draft" or inv_lower == "awaiting_review" %}
+            <button type="submit"
+                    class="btn btn-success"
+                    name="action"
+                    value="send_admin">
+              <i class="bi bi-send"></i> Send invoice to admin
+            </button>
+          {% else %}
+            <span class="d-inline-block"
+                  tabindex="0"
+                  data-bs-toggle="tooltip"
+                  data-bs-title="Invoice must be in Draft or Awaiting review before sending.">
+              <button class="btn btn-success disabled" type="button" aria-disabled="true">
+                <i class="bi bi-send"></i> Send invoice to admin
+              </button>
+            </span>
+          {% endif %}
+        {% else %}
+          <span class="d-inline-block"
+                tabindex="0"
+                data-bs-toggle="tooltip"
+                data-bs-title="Course must be marked as COMPLETED before sending the invoice.">
+            <button class="btn btn-success disabled" type="button" aria-disabled="true">
+              <i class="bi bi-send"></i> Send invoice to admin
+            </button>
+          </span>
+        {% endif %}
+
+        <a class="btn btn-outline-secondary"
+           href="{% url 'instructor_invoice_preview' booking.pk %}">
+          <i class="bi bi-file-earmark-pdf"></i> Download preview (PDF)
+        </a>
+      </div>
+
+    </div>  {# /left col #}
+
+    {# ================= RIGHT COLUMN ================= #}
+    <div class="col-12 col-lg-4">
+      <div class="card">
+        <div class="card-header">Auto-filled summary</div>
+        <div class="card-body">
+          <ul class="list-unstyled mb-0 small">
+            <li><span class="text-muted">Instructor:</span> {{ booking.instructor.name }}</li>
+            <li><span class="text-muted">Address:</span>
+              {% if instructor_address %}
+                {{ instructor_address }}
+              {% else %}
+                {% firstof booking.instructor.address_line "" %}{% if booking.instructor.address_line %},{% endif %}
+                {% firstof booking.instructor.town "" %}{% if booking.instructor.town %},{% endif %}
+                {% firstof booking.instructor.postcode "" %}
+                {% if not booking.instructor.address_line and not booking.instructor.town and not booking.instructor.postcode %}—{% endif %}
+              {% endif %}
+            </li>
+            <li><span class="text-muted">Course ref:</span> {{ booking.course_reference|default:'—' }}</li>
+            <li><span class="text-muted">Course type:</span> {{ booking.course_type.name }}</li>
+            <li><span class="text-muted">Location:</span> {{ booking.training_location.name|default:'—' }}</li>
+            <li><span class="text-muted">Dates:</span>
+              {% if booking.course_date %}
+                {{ booking.course_date|date:"d M Y" }}
+              {% else %}—{% endif %}
+            </li>
+            <li><span class="text-muted">Instructor fee:</span>
+              £{{ booking.instructor_fee|default_if_none:0|floatformat:2 }}</li>
+          </ul>
         </div>
-
       </div>
-    </div>
 
-    <div class="mt-3 d-flex flex-wrap gap-2">
-      {% if inv_lower == "draft" or inv_lower == "awaiting_review" %}
-        <button type="submit" class="btn btn-primary" name="action" value="save_draft">
-          <i class="bi bi-check2"></i> Save draft
-        </button>
-        <button type="submit" class="btn btn-success" name="action" value="send_admin">
-          <i class="bi bi-send"></i> Send invoice to admin
-        </button>
-      {% endif %}
+      {# Receipts card #}
+      <div class="card mt-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>Receipts</span>
+          <small class="text-muted" id="rcpt-status"></small>
+        </div>
+        <div class="card-body">
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <input type="file"
+                   id="rcpt-file"
+                   accept=".pdf,.jpg,.jpeg,.png,.heic,.heif"
+                   {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled{% endif %}>
 
-            <a class="btn btn-outline-secondary" href="{% url 'instructor_invoice_preview' booking.pk %}">
-        <i class="bi bi-file-earmark-pdf"></i> Download preview (PDF)
-      </a>
-    </div>
-    
+            <button type="button"
+                    class="btn btn-outline-primary btn-sm"
+                    id="rcpt-upload"
+                    {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
+              <i class="bi bi-cloud-upload"></i> Upload receipt
+            </button>
+          </div>
 
-  </div> <!-- this closes the col-12 col-lg-8 -->
-
-
-  <div class="col-12 col-lg-4">
-    <div class="card">
-      <div class="card-header">Auto-filled summary</div>
-      <div class="card-body">
-        <ul class="list-unstyled mb-0 small">
-          <li><span class="text-muted">Instructor:</span> {{ booking.instructor.name }}</li>
-          <li><span class="text-muted">Address:</span>
-            {% if instructor_address %}
-              {{ instructor_address }}
-            {% else %}
-              {% firstof booking.instructor.address_line "" %}{% if booking.instructor.address_line %},{% endif %}
-              {% firstof booking.instructor.town "" %}{% if booking.instructor.town %},{% endif %}
-              {% firstof booking.instructor.postcode "" %}
-              {% if not booking.instructor.address_line and not booking.instructor.town and not booking.instructor.postcode %}—{% endif %}
-            {% endif %}
-          </li>
-          <li><span class="text-muted">Course ref:</span> {{ booking.course_reference|default:'—' }}</li>
-          <li><span class="text-muted">Course type:</span> {{ booking.course_type.name }}</li>
-          <li><span class="text-muted">Location:</span> {{ booking.training_location.name|default:'—' }}</li>
-          <li><span class="text-muted">Dates:</span>
-            {% if booking.course_date %}
-              {{ booking.course_date|date:"d M Y" }}
-            {% else %}—{% endif %}
-          </li>
-          <li><span class="text-muted">Instructor fee:</span> £{{ booking.instructor_fee|default_if_none:0|floatformat:2 }}</li>
-        </ul>
+          <ul class="small mt-3 mb-0"
+              id="rcpt-list"
+              data-list-url="{% url 'instructor_list_receipts' booking.pk %}"
+              data-del-url="{% url 'instructor_delete_receipt' booking.pk %}">
+          </ul>
+        </div>
       </div>
-    </div>
-<!-- Receipts card (now in the right column) -->
-  <div class="card mt-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <span>Receipts</span>
-      <small class="text-muted" id="rcpt-status"></small>
-    </div>
-    <div class="card-body">
-      <div class="d-flex align-items-center gap-2 flex-wrap">
-        <input type="file" id="rcpt-file"
-                accept=".pdf,.jpg,.jpeg,.png,.heic,.heif"
-                {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled{% endif %}>
+    </div>  {# /right col #}
 
-        <button type="button" class="btn btn-outline-primary btn-sm" id="rcpt-upload"
-                {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}disabled aria-disabled="true"{% endif %}>
-          <i class="bi bi-cloud-upload"></i> Upload receipt
-        </button>
-      </div>
-      <ul
-      class="small mt-3 mb-0"
-      id="rcpt-list"
-      data-list-url="{% url 'instructor_list_receipts' booking.pk %}"
-      data-del-url="{% url 'instructor_delete_receipt' booking.pk %}"
-    ></ul>
+  </form>
 
-    </div>
-  </div>
-</div>
-
-</form>
-<!-- Confirm Receipts Modal -->
-<div class="modal fade" id="confirmReceiptsModal" tabindex="-1" aria-labelledby="confirmReceiptsLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="confirmReceiptsLabel">Receipts confirmation</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        You’ve added additional charges. Please confirm:
-        <ul class="mt-2">
-          <li>You’ve uploaded all relevant receipts, <em>or</em></li>
-          <li>You’ll send them separately if required.</li>
-        </ul>
-      </div>
-      <div class="modal-footer">
-        <button type="button" id="btn-go-upload" class="btn btn-outline-secondary" data-bs-dismiss="modal">
-          Upload receipts…
-        </button>
-        <button type="button" id="btn-confirm-receipts" class="btn btn-primary">
-          I confirm — continue
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<script>
-(function(){
-  const extrasBody = document.getElementById('extras-body');
-  const addBtn = document.getElementById('btn-add-item');
-  const totalEl = document.getElementById('invoice-total-display');
-
-  // Server-side flag: is the invoice locked (sent)?
-  const INVOICE_SENT = {% if inv_lower == "sent" %}true{% else %}false{% endif %};
-
-
-  function parseAmount(v){
-    const n = parseFloat((v||'').toString().replace(',', ''));
-    return isNaN(n) ? 0 : n;
-  }
-  function currentBase(){
-    const txt = "{{ booking.instructor_fee|default_if_none:0 }}";
-    const n = parseFloat(txt);
-    return isNaN(n) ? 0 : n;
-  }
-  function recalc(){
-    let sum = currentBase();
-    const rows = extrasBody.querySelectorAll('tr');
-    rows.forEach(tr => {
-      const amt = tr.querySelector('input[name="item_amount"]');
-      if (amt) sum += parseAmount(amt.value);
-    });
-    totalEl.textContent = '£' + sum.toFixed(2);
-  }
-
-  function addRow(desc='', amount=''){
-    const ro  = INVOICE_SENT ? 'readonly disabled' : '';
-    const dis = INVOICE_SENT ? 'disabled aria-disabled="true"' : '';
-
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input class="form-control" name="item_desc" value="${desc}" ${ro}></td>
-      <td><input class="form-control text-end" name="item_amount" type="number" step="0.01" value="${amount}" ${ro}></td>
-      <td class="text-end">
-        <button class="btn btn-outline-danger btn-sm remove-row" type="button" ${dis}><i class="bi bi-x"></i></button>
-      </td>
-    `;
-    extrasBody.appendChild(tr);
-
-    // Live total updates
-    tr.addEventListener('input', recalc);
-
-    // Remove row
-    const del = tr.querySelector('.remove-row');
-    if (del) del.addEventListener('click', function(){
-      tr.remove();
-      recalc();
-    });
-  }
-
-  // “Add item” creates a new row (unless locked)
-  if (addBtn){
-    addBtn.addEventListener('click', function(){ if (!INVOICE_SENT) addRow(); });
-  }
-
-  // Hook up existing rows for live total
-  extrasBody.querySelectorAll('tr').forEach(tr => {
-    tr.addEventListener('input', recalc);
-    const del = tr.querySelector('.remove-row');
-    if (del) del.addEventListener('click', function(){
-      tr.remove();
-      recalc();
-    });
-  });
-
-  recalc();
-})();
-</script>
-<script>
-(function(){
-  // Don’t autosave if already sent
-  const INVOICE_SENT = {% if inv_lower == "sent" %}true{% else %}false{% endif %};
-  if (INVOICE_SENT) return;
-
-  const form = document.getElementById('invoice-form');
-  if (!form) return;
-
-  const statusEl = document.getElementById('autosave-status');
-  const csrf = form.querySelector('input[name=csrfmiddlewaretoken]');
-  const endpoint = window.location.href.split('#')[0]; // post back to same URL
-  let timer = null, inflight = false;
-
-  function mark(msg, cls){
-    if (!statusEl) return;
-    statusEl.classList.remove('text-danger','text-success','text-muted');
-    statusEl.classList.add(cls || 'text-muted');
-    statusEl.textContent = msg || '';
-  }
-
-  function schedule(){
-    if (timer) clearTimeout(timer);
-    mark('Saving…','text-muted');
-    timer = setTimeout(save, 600); // debounce
-  }
-
-  async function save(){
-    if (inflight) return;
-    inflight = true;
-    try {
-      const fd = new FormData(form);
-      fd.set('action', 'save_draft');    // force save_draft
-      fd.delete('invoice_date');         // server sets today
-
-      const resp = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': csrf ? csrf.value : ''
-        },
-        body: fd
+  {# ================= TOOLTIP INIT ================ #}
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      var tooltipTriggerList = [].slice.call(
+        document.querySelectorAll('[data-bs-toggle="tooltip"]')
+      );
+      tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        new bootstrap.Tooltip(tooltipTriggerEl);
       });
-      const data = await resp.json().catch(() => ({}));
-      if (resp.ok && data.ok) {
-        mark(`Saved ${data.saved_at || ''}`, 'text-success');
-      } else if (data.locked) {
-        mark('Locked', 'text-danger');
-      } else {
-        mark('Save failed', 'text-danger');
-      }
-    } catch (e) {
-      mark('Save failed', 'text-danger');
-    } finally {
-      inflight = false;
-      setTimeout(() => mark('', 'text-muted'), 3500);
+    });
+  </script>
+
+  {# ================= JS: totals & extras ================ #}
+  <script>
+  (function(){
+    const extrasBody = document.getElementById('extras-body');
+    const addBtn = document.getElementById('btn-add-item');
+    const totalEl = document.getElementById('invoice-total-display');
+
+    const INVOICE_SENT = {% if inv_lower == "sent" %}true{% else %}false{% endif %};
+
+    function parseAmount(v){
+      const n = parseFloat((v || '').toString().replace(',', ''));
+      return isNaN(n) ? 0 : n;
     }
-  }
-
-  // Watch these fields (matches your form names)
-  const names = ['instructor_ref','account_name','sort_code','account_number','item_desc','item_amount'];
-  function watch(el){
-    if (!el) return;
-    ['input','change'].forEach(evt => el.addEventListener(evt, schedule));
-  }
-  names.forEach(nm => form.querySelectorAll(`[name="${nm}"]`).forEach(watch));
-
-  // Also watch for dynamically added extra rows
-  const extrasBody = document.getElementById('extras-body');
-  if (extrasBody && 'MutationObserver' in window) {
-    new MutationObserver(muts => {
-      muts.forEach(m => m.addedNodes.forEach(node => {
-        if (node.nodeType === 1) node.querySelectorAll('input[name="item_desc"],input[name="item_amount"]').forEach(watch);
-      }));
-    }).observe(extrasBody, { childList: true });
-  }
-})();
-</script>
-
-<script>
-(function(){
-  const btn   = document.getElementById('rcpt-upload');
-  const inp   = document.getElementById('rcpt-file');
-  const list  = document.getElementById('rcpt-list');
-  const stat  = document.getElementById('rcpt-status');
-  const form  = document.getElementById('invoice-form');
-  if (!btn || !inp || !form) return;
-
-  // Locked for any status other than draft / awaiting_review
-  const INVOICE_LOCKED = {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}true{% else %}false{% endif %};
-  if (INVOICE_LOCKED) return;
-
-  const csrfInput = form.querySelector('input[name=csrfmiddlewaretoken]');
-
-  function mark(msg, cls){
-    stat.classList.remove('text-danger','text-success','text-muted');
-    stat.classList.add(cls || 'text-muted');
-    stat.textContent = msg || '';
-  }
-
-  btn.addEventListener('click', async function(){
-    if(!inp.files || !inp.files[0]){
-      mark('Choose a file first','text-danger');
-      return;
+    function currentBase(){
+      const txt = "{{ booking.instructor_fee|default_if_none:0 }}";
+      const n = parseFloat(txt);
+      return isNaN(n) ? 0 : n;
+    }
+    function recalc(){
+      let sum = currentBase();
+      const rows = extrasBody.querySelectorAll('tr');
+      rows.forEach(tr => {
+        const amt = tr.querySelector('input[name="item_amount"]');
+        if (amt) sum += parseAmount(amt.value);
+      });
+      totalEl.textContent = '£' + sum.toFixed(2);
     }
 
-    const fd = new FormData();
-    fd.append('file', inp.files[0]);
-    if (csrfInput) fd.append('csrfmiddlewaretoken', csrfInput.value); // body CSRF (belt & braces)
+    function addRow(desc='', amount=''){
+      const ro  = INVOICE_SENT ? 'readonly disabled' : '';
+      const dis = INVOICE_SENT ? 'disabled aria-disabled="true"' : '';
 
-    mark('Uploading…','text-muted');
-
-    try{
-      const url = "{% url 'instructor_upload_receipt' booking.pk %}";
-      const resp = await fetch(url, {
-        method: 'POST',
-        credentials: 'same-origin',                // send session & CSRF cookies
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-        body: fd
-      });
-
-      const ct = resp.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) {
-        const text = await resp.text();
-        throw new Error(`Server returned ${resp.status}. ${text.slice(0,120)}…`);
-      }
-
-      const data = await resp.json();
-      if(!resp.ok || !data.ok) throw new Error((data && data.error) || `HTTP ${resp.status}`);
-
-      const li = document.createElement('li');
-      li.dataset.fileId = data.id; // for delete
-
-      const disabledAttr = {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}
-        "disabled aria-disabled='true'"
-      {% else %}
-        ""
-      {% endif %};
-
-      li.innerHTML = `
-        <a href="${data.webViewLink}" target="_blank" rel="noopener">${data.name}</a>
-        <button type="button"
-                class="btn btn-sm btn-outline-danger ms-2 rcpt-del"
-                title="Remove"
-                ${disabledAttr}>
-          <i class="bi bi-trash"></i>
-        </button>
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input class="form-control" name="item_desc" value="${desc}" ${ro}></td>
+        <td><input class="form-control text-end" name="item_amount" type="number" step="0.01" value="${amount}" ${ro}></td>
+        <td class="text-end">
+          <button class="btn btn-outline-danger btn-sm remove-row" type="button" ${dis}>
+            <i class="bi bi-x"></i>
+          </button>
+        </td>
       `;
+      extrasBody.appendChild(tr);
 
-      list.prepend(li);
+      tr.addEventListener('input', recalc);
 
-      inp.value = '';
-      mark('Uploaded','text-success');
-      setTimeout(()=>mark('', 'text-muted'), 3000);
-
-    }catch(e){
-      mark(e.message || 'Upload failed','text-danger');
+      const del = tr.querySelector('.remove-row');
+      if (del) del.addEventListener('click', function(){
+        tr.remove();
+        recalc();
+      });
     }
-  });
-})();
-</script>
 
+    if (addBtn){
+      addBtn.addEventListener('click', function(){
+        if (!INVOICE_SENT) addRow();
+      });
+    }
 
-
-<script>
-(function(){
-  const form = document.getElementById('invoice-form');
-  if (!form) return;
-
-  const sendBtn      = form.querySelector('button[name="action"][value="send_admin"]');
-  const confirmField = document.getElementById('confirm_receipts');
-  const extrasBody   = document.getElementById('extras-body');
-
-  // Modal bits (may be absent)
-  const modalEl  = document.getElementById('confirmReceiptsModal');
-  const hasModal = !!(modalEl && window.bootstrap && bootstrap.Modal);
-  const modal    = hasModal ? new bootstrap.Modal(modalEl) : null;
-  const goUploadBtn = document.getElementById('btn-go-upload');
-  const confirmBtn  = document.getElementById('btn-confirm-receipts');
-
-  function extraTotal(){
-    if (!extrasBody) return 0;
-    let sum = 0;
-    extrasBody.querySelectorAll('input[name="item_amount"]').forEach(inp => {
-      const n = parseFloat((inp.value || '').toString().replace(',', ''));
-      if (!isNaN(n)) sum += n;
+    extrasBody.querySelectorAll('tr').forEach(tr => {
+      tr.addEventListener('input', recalc);
+      const del = tr.querySelector('.remove-row');
+      if (del) del.addEventListener('click', function(){
+        tr.remove();
+        recalc();
+      });
     });
-    return sum;
-  }
 
-  function doProgrammaticSubmit(){
-    // Ensure we send action=send_admin (because form.submit() won't include the clicked button)
-    const hidden = document.createElement('input');
-    hidden.type  = 'hidden';
-    hidden.name  = 'action';
-    hidden.value = 'send_admin';
-    form.appendChild(hidden);
-    form.submit();
-  }
+    recalc();
+  })();
+  </script>
 
-  if (goUploadBtn){
-    goUploadBtn.addEventListener('click', () => {
-      const rcptFile = document.getElementById('rcpt-file');
-      if (rcptFile){
-        rcptFile.scrollIntoView({behavior:'smooth', block:'center'});
-        setTimeout(() => rcptFile.click(), 300);
-      }
-    });
-  }
+  {# ================= JS: autosave ================= #}
+  <script>
+  (function(){
+    const INVOICE_SENT = {% if inv_lower == "sent" %}true{% else %}false{% endif %};
+    if (INVOICE_SENT) return;
 
-  if (confirmBtn){
-    confirmBtn.addEventListener('click', () => {
-      if (confirmField) confirmField.value = '1';
-      if (hasModal) modal.hide();
-      doProgrammaticSubmit();
-    });
-  }
+    const form = document.getElementById('invoice-form');
+    if (!form) return;
 
-  if (sendBtn){
-    sendBtn.addEventListener('click', function(ev){
-      // If no extras, let the normal submit happen (button's name/value included)
-      if (extraTotal() <= 0) return;
+    const statusEl = document.getElementById('autosave-status');
+    const csrf = form.querySelector('input[name=csrfmiddlewaretoken]');
+    const endpoint = window.location.href.split('#')[0];
+    let timer = null, inflight = false;
 
-      // If already confirmed once, let normal submit happen
-      if (confirmField && confirmField.value === '1') return;
+    function mark(msg, cls){
+      if (!statusEl) return;
+      statusEl.classList.remove('text-danger','text-success','text-muted');
+      statusEl.classList.add(cls || 'text-muted');
+      statusEl.textContent = msg || '';
+    }
 
-      // Intercept to confirm
-      ev.preventDefault();
+    function schedule(){
+      if (timer) clearTimeout(timer);
+      mark('Saving…','text-muted');
+      timer = setTimeout(save, 600);
+    }
 
-      if (hasModal) {
-        modal.show();
-      } else {
-        // Fallback if Bootstrap JS isn't loaded
-        const ok = window.confirm(
-          "You’ve added additional charges.\n\n" +
-          "Please confirm you’ve uploaded all receipts or will send them separately."
-        );
-        if (ok) {
-          if (confirmField) confirmField.value = '1';
-          doProgrammaticSubmit();
+    async function save(){
+      if (inflight) return;
+      inflight = true;
+      try {
+        const fd = new FormData(form);
+        fd.set('action', 'save_draft');
+        fd.delete('invoice_date');
+
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrf ? csrf.value : ''
+          },
+          body: fd
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (resp.ok && data.ok) {
+          mark(`Saved ${data.saved_at || ''}`, 'text-success');
+        } else if (data.locked) {
+          mark('Locked', 'text-danger');
+        } else {
+          mark('Save failed', 'text-danger');
         }
-        // If they cancel, do nothing.
+      } catch (e) {
+        mark('Save failed', 'text-danger');
+      } finally {
+        inflight = false;
+        setTimeout(() => mark('', 'text-muted'), 3500);
+      }
+    }
+
+    const names = ['instructor_ref','account_name','sort_code','account_number','item_desc','item_amount'];
+    function watch(el){
+      if (!el) return;
+      ['input','change'].forEach(evt => el.addEventListener(evt, schedule));
+    }
+    names.forEach(nm => form.querySelectorAll('[name="' + nm + '"]').forEach(watch));
+
+    const extrasBody = document.getElementById('extras-body');
+    if (extrasBody && 'MutationObserver' in window) {
+      new MutationObserver(muts => {
+        muts.forEach(m => m.addedNodes.forEach(node => {
+          if (node.nodeType === 1) {
+            node.querySelectorAll('input[name="item_desc"],input[name="item_amount"]').forEach(watch);
+          }
+        }));
+      }).observe(extrasBody, { childList: true });
+    }
+  })();
+  </script>
+
+  {# ================= JS: receipts upload ================= #}
+  <script>
+  (function(){
+    const btn   = document.getElementById('rcpt-upload');
+    const inp   = document.getElementById('rcpt-file');
+    const list  = document.getElementById('rcpt-list');
+    const stat  = document.getElementById('rcpt-status');
+    const form  = document.getElementById('invoice-form');
+    if (!btn || !inp || !form) return;
+
+    const INVOICE_LOCKED = {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}true{% else %}false{% endif %};
+    if (INVOICE_LOCKED) return;
+
+    const csrfInput = form.querySelector('input[name=csrfmiddlewaretoken]');
+
+    function mark(msg, cls){
+      stat.classList.remove('text-danger','text-success','text-muted');
+      stat.classList.add(cls || 'text-muted');
+      stat.textContent = msg || '';
+    }
+
+    btn.addEventListener('click', async function(){
+      if(!inp.files || !inp.files[0]){
+        mark('Choose a file first','text-danger');
+        return;
+      }
+
+      const fd = new FormData();
+      fd.append('file', inp.files[0]);
+      if (csrfInput) fd.append('csrfmiddlewaretoken', csrfInput.value);
+
+      mark('Uploading…','text-muted');
+
+      try{
+        const url = "{% url 'instructor_upload_receipt' booking.pk %}";
+        const resp = await fetch(url, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          body: fd
+        });
+
+        const ct = resp.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          const text = await resp.text();
+          throw new Error('Server returned ' + resp.status + '. ' + text.slice(0,120) + '…');
+        }
+
+        const data = await resp.json();
+        if(!resp.ok || !data.ok) throw new Error((data && data.error) || ('HTTP ' + resp.status));
+
+        const li = document.createElement('li');
+        li.dataset.fileId = data.id;
+
+        li.innerHTML = `
+          <a href="${data.webViewLink}" target="_blank" rel="noopener">${data.name}</a>
+          <button type="button"
+                  class="btn btn-sm btn-outline-danger ms-2 rcpt-del"
+                  title="Remove">
+            <i class="bi bi-trash"></i>
+          </button>
+        `;
+
+        list.prepend(li);
+
+        inp.value = '';
+        mark('Uploaded','text-success');
+        setTimeout(()=>mark('', 'text-muted'), 3000);
+
+      }catch(e){
+        mark(e.message || 'Upload failed','text-danger');
       }
     });
-  }
-})();
-</script>
+  })();
+  </script>
 
+  {# ================= JS: send confirmation modal ================= #}
+  <script>
+  (function(){
+    const form = document.getElementById('invoice-form');
+    if (!form) return;
 
-<script>
-(function(){
-  const listEl = document.getElementById('rcpt-list');
-  const stat   = document.getElementById('rcpt-status');
-  const form   = document.getElementById('invoice-form');
-  if (!listEl || !form) return;
+    const sendBtn      = form.querySelector('button[name="action"][value="send_admin"]');
+    const confirmField = document.getElementById('confirm_receipts');
+    const extrasBody   = document.getElementById('extras-body');
 
-  const csrfInput = form.querySelector('input[name=csrfmiddlewaretoken]');
-  const listURL = listEl.dataset.listUrl;
-  const delURL  = listEl.dataset.delUrl;
+    const modalEl  = document.getElementById('confirmReceiptsModal');
+    const hasModal = !!(modalEl && window.bootstrap && bootstrap.Modal);
+    const modal    = hasModal ? new bootstrap.Modal(modalEl) : null;
+    const goUploadBtn = document.getElementById('btn-go-upload');
+    const confirmBtn  = document.getElementById('btn-confirm-receipts');
 
-  function mark(msg, cls){
-    stat.classList.remove('text-danger','text-success','text-muted');
-    stat.classList.add(cls || 'text-muted');
-    stat.textContent = msg || '';
-  }
-
-  function render(files){
-    listEl.innerHTML = '';
-    if (!files || !files.length){
-      const li = document.createElement('li');
-      li.textContent = 'No receipts yet.';
-      li.classList.add('text-muted');
-      listEl.appendChild(li);
-      return;
-    }
-    files.forEach(f => {
-      const li = document.createElement('li');
-      li.dataset.fileId = f.id;
-      const isLocked = {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}true{% else %}false{% endif %};
-
-      li.innerHTML = `
-        <a href="${f.webViewLink}" target="_blank" rel="noopener">${f.name}</a>
-        <button type="button"
-                class="btn btn-sm btn-outline-danger ms-2 rcpt-del"
-                title="Remove"
-                ${isLocked ? "disabled aria-disabled='true'" : ""}>
-          <i class="bi bi-trash"></i>
-        </button>
-      `;
-
-      listEl.appendChild(li);
-    });
-  }
-
-  async function loadList(){
-    try{
-      const resp = await fetch(listURL, { credentials: 'same-origin', headers: { 'X-Requested-With':'XMLHttpRequest' }});
-      const data = await resp.json();
-      if (!resp.ok || !data.ok) throw new Error((data && data.error) || `HTTP ${resp.status}`);
-      render(data.files || []);
-    }catch(e){
-      mark(e.message || 'Load failed','text-danger');
-    }
-  }
-
-  async function deleteFile(fileId, li){
-    try{
-      const fd = new FormData();
-      if (csrfInput) fd.append('csrfmiddlewaretoken', csrfInput.value);
-      fd.append('file_id', fileId);
-
-      const resp = await fetch(delURL, {
-        method:'POST',
-        credentials:'same-origin',
-        headers:{ 'X-Requested-With':'XMLHttpRequest' },
-        body: fd
+    function extraTotal(){
+      if (!extrasBody) return 0;
+      let sum = 0;
+      extrasBody.querySelectorAll('input[name="item_amount"]').forEach(inp => {
+        const n = parseFloat((inp.value || '').toString().replace(',', ''));
+        if (!isNaN(n)) sum += n;
       });
-      const data = await resp.json();
-      if (!resp.ok || !data.ok) throw new Error((data && data.error) || `HTTP ${resp.status}`);
-      li.remove();
-      if (!listEl.querySelector('li')) render([]);
-      mark('Removed','text-success');
-      setTimeout(()=>mark('', 'text-muted'), 2000);
-    }catch(e){
-      mark(e.message || 'Remove failed','text-danger');
+      return sum;
     }
-  }
 
-  // Delegate delete clicks
-    const IS_LOCKED = {% if inv_lower != "draft" and inv_lower != "awaiting_review" %}true{% else %}false{% endif %};
+    function doProgrammaticSubmit(){
+      const hidden = document.createElement('input');
+      hidden.type  = 'hidden';
+      hidden.name  = 'action';
+      hidden.value = 'send_admin';
+      form.appendChild(hidden);
+      form.submit();
+    }
 
-  // Delegate delete clicks
-  listEl.addEventListener('click', function(ev){
-    if (IS_LOCKED) return;  // block deletion when invoice locked
+    if (goUploadBtn){
+      goUploadBtn.addEventListener('click', () => {
+        const rcptFile = document.getElementById('rcpt-file');
+        if (rcptFile){
+          rcptFile.scrollIntoView({behavior:'smooth', block:'center'});
+          setTimeout(() => rcptFile.click(), 300);
+        }
+      });
+    }
 
-    const btn = ev.target.closest('.rcpt-del');
-    if (!btn) return;
-    const li = btn.closest('li');
-    const fileId = li && li.dataset.fileId;
-    if (!fileId) return;
-    if (!confirm('Remove this receipt?')) return;
-    deleteFile(fileId, li);
-  });
+    if (confirmBtn){
+      confirmBtn.addEventListener('click', () => {
+        if (confirmField) confirmField.value = '1';
+        if (hasModal) modal.hide();
+        doProgrammaticSubmit();
+      });
+    }
 
+    if (sendBtn){
+      sendBtn.addEventListener('click', function(ev){
+        if (extraTotal() <= 0) return;
+        if (confirmField && confirmField.value === '1') return;
 
-  // load on page ready
-  loadList();
-})();
-</script>
+        ev.preventDefault();
+
+        if (hasModal) {
+          modal.show();
+        } else {
+          const ok = window.confirm(
+            "You’ve added additional charges.\n\n" +
+            "Please confirm you’ve uploaded all receipts or will send them separately."
+          );
+          if (ok) {
+            if (confirmField) confirmField.value = '1';
+            doProgrammaticSubmit();
+          }
+        }
+      });
+    }
+  })();
+  </script>
+
+  {# ================= JS: receipts list & delete ================= #}
+  <script>
+  (function(){
+    const listEl = document.getElementById('rcpt-list');
+    const stat   = document.getElementById('rcpt-status');
+    const form   = document.getElementById('invoice-form');
+    if (!listEl || !form) return;
+
+    const csrfInput = form.querySelector('input[name=csrfmiddlewaretoken]');
+    const listURL = listEl.dataset.listUrl;
+    const delURL  = listEl.dataset.delUrl;
+
+    function mark(msg, cls){
+      stat.classList.remove('text-danger','text-success','text-muted');
+      stat.classList.add(cls || 'text-muted');
+      stat.textContent = msg || '';
+    }
+
+    function render(files){
+      listEl.innerHTML = '';
+      if (!files || !files.length){
+        const li = document.createElement('li');
+        li.textContent = 'No receipts yet.';
+        li.classList.add('text-muted');
+        listEl.appendChild(li);
+        return;
+      }
+      files.forEach(f => {
+        const li = document.createElement('li');
+        li.dataset.fileId = f.id;
+
+        li.innerHTML = `
+          <a href="${f.webViewLink}" target="_blank" rel="noopener">${f.name}</a>
+          <button type="button"
+                  class="btn btn-sm btn-outline-danger ms-2 rcpt-del"
+                  title="Remove">
+            <i class="bi bi-trash"></i>
+          </button>
+        `;
+
+        listEl.appendChild(li);
+      });
+    }
+
+    async function loadList(){
+      try{
+        const resp = await fetch(listURL, {
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With':'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error((data && data.error) || ('HTTP ' + resp.status));
+        render(data.files || []);
+      }catch(e){
+        mark(e.message || 'Load failed','text-danger');
+      }
+    }
+
+    async function deleteFile(fileId, li){
+      try{
+        const fd = new FormData();
+        if (csrfInput) fd.append('csrfmiddlewaretoken', csrfInput.value);
+        fd.append('file_id', fileId);
+
+        const resp = await fetch(delURL, {
+          method:'POST',
+          credentials:'same-origin',
+          headers:{ 'X-Requested-With':'XMLHttpRequest' },
+          body: fd
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error((data && data.error) || ('HTTP ' + resp.status));
+        li.remove();
+        if (!listEl.querySelector('li')) render([]);
+        mark('Removed','text-success');
+        setTimeout(()=>mark('', 'text-muted'), 2000);
+      }catch(e){
+        mark(e.message || 'Remove failed','text-danger');
+      }
+    }
+
+    listEl.addEventListener('click', function(ev){
+      const btn = ev.target.closest('.rcpt-del');
+      if (!btn) return;
+      const li = btn.closest('li');
+      const fileId = li && li.dataset.fileId;
+      if (!fileId) return;
+      if (!confirm('Remove this receipt?')) return;
+      deleteFile(fileId, li);
+    });
+
+    loadList();
+  })();
+  </script>
+
 {% endwith %}
