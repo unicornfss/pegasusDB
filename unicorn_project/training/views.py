@@ -222,24 +222,39 @@ def app_admin_dashboard(request):
 def app_admin_booking_new(request):
     if not (request.user.is_superuser or request.user.groups.filter(name='admin').exists()):
         return HttpResponseForbidden()
+
     form = BookingForm(request.POST or None)
-    if request.method=='POST' and form.is_valid():
+
+    if request.method == 'POST' and form.is_valid():
         b = form.save()
-        n = int(float(b.course_duration_days or b.course_type.duration_days) + 0.999)
+
         from datetime import timedelta
-        for i in range(1,n+1):
-            BookingDay.objects.create(booking=b, day_no=i, day_date=b.course_date+timedelta(days=i-1), start_time=b.start_time)
-        messages.success(request,"Booking created")
+
+        # How many days?  Use course_type.duration_days (Decimal) and round UP
+        duration = float(b.course_type.duration_days or 1.0)
+        n_days = int(duration + 0.999)   # 0.5 -> 1, 1.0 -> 1, 1.5 -> 2, etc.
+
+        for i in range(n_days):
+            BookingDay.objects.create(
+                booking=b,
+                date=b.course_date + timedelta(days=i),   # day 0,1,2,...
+                start_time=b.start_time,
+                instructor=b.instructor,
+            )
+
+        messages.success(request, "Booking created")
         return redirect('app_admin_booking_detail', pk=b.id)
-    return render(request,'admin_app/booking_form.html',{'form':form})
+
+    return render(request, 'admin_app/booking_form.html', {'form': form})
+
 
 @login_required
 def app_admin_booking_detail(request, pk):
     if not (request.user.is_superuser or request.user.groups.filter(name='admin').exists()):
         return HttpResponseForbidden()
     b = get_object_or_404(Booking, pk=pk)
-    days = b.days.order_by('day_no')
-    return render(request,'admin_app/booking_detail.html',{'booking':b,'days':days})
+    days = b.days.order_by('date')   # was 'day_no'
+    return render(request, 'admin_app/booking_detail.html', {'booking': b, 'days': days})
 
 # Instructor app
 @login_required

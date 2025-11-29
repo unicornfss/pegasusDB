@@ -996,6 +996,35 @@ def instructor_booking_detail(request, pk):
         ctx.update(_assessment_context(booking, request.user))
     except:
         pass
+    
+    # -------------------------------------------------------
+    # Build day_rows for template
+    # -------------------------------------------------------
+    days = (
+        BookingDay.objects
+        .filter(booking=booking)
+        .order_by("date")
+    )
+
+    day_rows = []
+    for d in days:
+        n = DelegateRegister.objects.filter(booking_day=d).count()
+
+        warn_count = DelegateRegister.objects.filter(
+            booking_day=d,
+            date_of_birth__isnull=True
+        ).count()
+
+        day_rows.append({
+            "date": d.date,
+            "start_time": d.start_time,
+            "n": n,
+            "warn": warn_count > 0,
+            "warn_count": warn_count,
+            "edit_url": reverse("instructor_day_registers", args=[d.pk]),
+        })
+
+    ctx["day_rows"] = day_rows
 
     return render(request, "instructor/booking_detail.html", ctx)
 
