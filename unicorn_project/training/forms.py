@@ -749,17 +749,26 @@ class PersonnelForm(forms.ModelForm):
 
         # APPLY GROUPS + LOGIN SETTINGS TO USER
         if inst.user:
+            user = inst.user
 
-            # Apply groups
+            # --- 1. Split Personnel.name into first + last ---
+            full_name = self.cleaned_data["name"].strip()
+            parts = full_name.split(" ", 1)
+            user.first_name = parts[0]
+            user.last_name = parts[1] if len(parts) > 1 else ""
+
+            # --- 2. Combine first + last to keep Personnel.name clean ---
+            inst.name = f"{user.first_name} {user.last_name}".strip()
+
+            # --- 3. Apply groups ---
             groups = self.cleaned_data.get("groups", [])
-            inst.user.groups.set(groups)
+            user.groups.set(groups)
 
-            # Activate/deactivate user login
-            inst.user.is_active = inst.can_login and inst.is_active
-            inst.user.save()
+            # --- 4. Activate/deactivate login ---
+            user.is_active = inst.can_login and inst.is_active
+            user.save()
 
         return inst
-    
 
 class MetaSettingForm(forms.ModelForm):
     class Meta:

@@ -31,7 +31,7 @@ urlpatterns = [
 
     # Post-login routers
     # path("app/after-login/", instv.post_login, name="post_login"),
-    path("post-login/", instv.post_login, name="post_login"),
+    path("post-login/", views_instructor.post_login, name="post_login"),
 
     # ---------- Instructor area ----------
     # Landing page -> My bookings

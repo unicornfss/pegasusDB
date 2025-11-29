@@ -80,26 +80,27 @@ def _parse_yyyy_mm_dd(s: str):
 
 # --- home redirect --------------------------------------------
 
+@login_required
 def home(request):
-    if request.user.is_authenticated:
-        if request.user.is_superuser or request.user.groups.filter(name__iexact="admin").exists():
-            return redirect("app_admin_dashboard")
-        if is_instructor_user(request.user):
-            return redirect("instructor_bookings")
-    return render(request, "admin/admin_dashboard.html")
+    user = request.user
 
-def ensure_groups():
-    Group.objects.get_or_create(name='admin')
-    Group.objects.get_or_create(name='instructor')
+    # Admin
+    if user.is_superuser or user.groups.filter(name__iexact="admin").exists():
+        return redirect("app_admin_dashboard")
 
-def roles_for(user):
-    ensure_groups()
-    r=[]
-    if user.is_authenticated:
-        if user.groups.filter(name='admin').exists(): r.append('admin')
-        if user.groups.filter(name='instructor').exists(): r.append('instructor')
-        if user.is_superuser: r.append('superuser')
-    return r
+    # Instructor
+    if user.groups.filter(name__iexact="instructor").exists():
+        return redirect("instructor_dashboard")
+
+    # Engineer
+    if user.groups.filter(name__iexact="engineer").exists():
+        return redirect("engineer_dashboard")
+
+    # Inspector
+    if user.groups.filter(name__iexact="inspector").exists():
+        return redirect("inspector_dashboard")
+
+    return redirect("no_roles")
 
 @require_GET
 def public_delegate_instructors_api(request):
@@ -209,13 +210,6 @@ def switch_role(request, role):
         messages.error(request, "You don't have that role.")
     return redirect('home')
 
-@login_required
-def home(request):
-    if 'current_role' not in request.session:
-        r = roles_for(request.user)
-        if r: request.session['current_role']=r[0]
-    return render(request,'admin/admin_dashboard.html',{})
-
 # Admin app
 @login_required
 def app_admin_dashboard(request):
@@ -284,27 +278,35 @@ def user_profile(request):
 
         if uform.is_valid() and pform.is_valid():
 
+            # --- Update User fields (first/last/email) ---
             user = uform.save(commit=False)
-
             new_email = uform.cleaned_data["email"].strip().lower()
             user.username = new_email
             user.email = new_email
             user.save()
 
-            # 🟢 FIX: sync Personnel.email
+            # --- Sync Personnel.email ---
             personnel.email = new_email
 
-            # 🟢 NEW: update dyslexia mode (checkbox present? → True)
+            # --- Sync profile preferences ---
             personnel.dyslexia_mode = bool(request.POST.get("dyslexia_mode"))
             personnel.pastel_background = request.POST.get("pastel_background", "none")
 
-            pform.save()  # saves other personnel fields
+            # Save Personnel fields
+            pform.save()
+
+            # --- ⭐ NEW: Sync User first/last → Personnel.name ---
+            first = uform.cleaned_data.get("first_name", "").strip()
+            last  = uform.cleaned_data.get("last_name", "").strip()
+            full_name = f"{first} {last}".strip()
+
+            if full_name:
+                personnel.name = full_name
+                personnel.save(update_fields=["name"])
 
             update_session_auth_hash(request, user)
-
             messages.success(request, "Your profile has been updated.")
             return redirect("user_profile")
-
 
     else:
         uform = UserProfileForm(instance=request.user)
@@ -343,15 +345,20 @@ def api_locations_by_business(request):
 @login_required
 def switch_role(request, role):
     role = role.lower()
-    # only allow switching to roles the user actually has
-    if role == "admin" and (request.user.is_superuser or request.user.groups.filter(name__iexact="admin").exists()):
-        request.session["active_role"] = "admin"
-        messages.success(request, "Switched to Admin.")
-    elif role == "instructor" and request.user.groups.filter(name__iexact="instructor").exists():
-        request.session["active_role"] = "instructor"
-        messages.success(request, "Switched to Instructor.")
-    else:
-        messages.error(request, "You don't have that role.")
+
+    valid = {
+        "admin":     request.user.is_superuser or request.user.groups.filter(name__iexact="admin").exists(),
+        "instructor": request.user.groups.filter(name__iexact="instructor").exists(),
+        "engineer":   request.user.groups.filter(name__iexact="engineer").exists(),
+        "inspector":  request.user.groups.filter(name__iexact="inspector").exists(),
+    }
+
+    if role in valid and valid[role]:
+        request.session["active_role"] = role
+        messages.success(request, f"Switched to {role.capitalize()}.")
+        return redirect("home")
+
+    messages.error(request, "You don't have that role.")
     return redirect("home")
 
 # Instructor my bookings view
@@ -410,22 +417,22 @@ def _user_is_instructor(user):
     return hasattr(user, "personnel") and user.personnel.is_active and user.personnel.can_login
 
 
-@login_required
-def post_login_router(request):
-    user = request.user
-
-    if user.is_superuser or user.is_staff:
-        return redirect("app_admin_dashboard")
-
-    if _user_is_instructor(user):
-        return redirect("instructor_dashboard")
-
-    return redirect("home")
-
-
-
+#@login_required
+#def post_login_router(request):
+#    user = request.user
+#
+#    if user.is_superuser or user.is_staff:
+#        return redirect("app_admin_dashboard")
+#
+#    if _user_is_instructor(user):
+#        return redirect("instructor_dashboard")
+#
+#    return redirect("home")
+#
+#
+#
     # Fallback
-    return redirect("app_admin_dashboard")
+#    return redirect("app_admin_dashboard")
 
 
 def _resolve_course_type(value):
