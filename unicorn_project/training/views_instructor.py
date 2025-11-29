@@ -445,14 +445,88 @@ def _closed_guard(request, booking):
 
 @login_required
 def instructor_dashboard(request):
-    instructor = _get_instructor(request.user)
+    user = request.user
+    personnel = getattr(user, "personnel", None)
 
-    # Safety fallback — if something is mislinked
-    if not instructor:
+    if not personnel:
         return redirect("instructor_bookings")
 
+    today = timezone.localdate()
+
+    # ------------------------------------------------------
+    # TODAY'S COURSES (BookingDay)
+    # ------------------------------------------------------
+    todays_days = (
+        BookingDay.objects
+        .filter(instructor=personnel, date=today)
+        .select_related("booking")
+        .order_by("start_time")
+    )
+
+    # ------------------------------------------------------
+    # UPCOMING COURSES (next 14 days)
+    # ------------------------------------------------------
+    upcoming = (
+        BookingDay.objects
+        .filter(
+            instructor=personnel,
+            date__gt=today,
+            date__lte=today + timedelta(days=14)
+        )
+        .select_related("booking")
+        .order_by("date", "start_time")
+    )
+
+    # ------------------------------------------------------
+    # RECENT COURSES (past 30 days)
+    # ------------------------------------------------------
+    recent = (
+        BookingDay.objects
+        .filter(
+            instructor=personnel,
+            date__lt=today,
+            date__gte=today - timedelta(days=30)
+        )
+        .select_related("booking")
+        .order_by("-date")
+    )
+
+    # ------------------------------------------------------
+    # ACTIONS REQUIRED (safe + real model structure)
+    # ------------------------------------------------------
+
+    # 1) Courses awaiting closure
+    awaiting_closure = Booking.objects.filter(
+        instructor=personnel,
+        status="awaiting_closure"
+    )
+
+    # 2) Incomplete registers (DOB always required, so leave empty for now)
+    incomplete_registers = Booking.objects.none()
+
+    # 3) Missing assessments:
+    # A "missing" assessment means: at least one assessment with level='na'
+    missing_assessments = Booking.objects.filter(
+        instructor=personnel,
+        days__registers__assessments__level="na"
+    ).distinct()
+
+    # 4) Missing feedback:
+    # Your FeedbackResponse model has no direct FK to Booking,
+    # so we skip this until we design proper linkage.
+    missing_feedback = Booking.objects.none()
+
     return render(request, "instructor/dashboard.html", {
-        "instructor": instructor
+        "personnel": personnel,
+        "todays_days": todays_days,
+        "upcoming": upcoming,
+        "recent": recent,
+
+        # Actions required
+        "awaiting_closure": awaiting_closure,
+        "missing_assessments": missing_assessments,
+        "missing_feedback": missing_feedback,
+        "incomplete_registers": incomplete_registers,
     })
 
 @login_required
@@ -996,6 +1070,36 @@ def instructor_booking_detail(request, pk):
         ctx.update(_assessment_context(booking, request.user))
     except:
         pass
+    
+    # -------------------------------------------------------
+    # Build day_rows for template
+    # -------------------------------------------------------
+    days = (
+        BookingDay.objects
+        .filter(booking=booking)
+        .order_by("date")
+    )
+
+    day_rows = []
+    for d in days:
+        n = DelegateRegister.objects.filter(booking_day=d).count()
+
+        warn_count = DelegateRegister.objects.filter(
+            booking_day=d,
+            date_of_birth__isnull=True
+        ).count()
+
+        day_rows.append({
+            "date": d.date,
+            "start_time": d.start_time,
+            "n": n,
+            "warn": warn_count > 0,
+            "warn_count": warn_count,
+            "edit_url": reverse("instructor_day_registers", args=[d.pk]),
+        })
+
+    ctx["day_rows"] = day_rows
+
 
     return render(request, "instructor/booking_detail.html", ctx)
 

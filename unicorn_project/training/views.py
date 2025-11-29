@@ -247,13 +247,6 @@ def app_admin_booking_detail(request, pk):
     days = b.days.order_by('day_no')
     return render(request,'admin_app/booking_detail.html',{'booking':b,'days':days})
 
-# Instructor app
-@login_required
-def instructor_dashboard(request):
-    if is_instructor_user(request.user):
-        return redirect("instructor_bookings")
-    return redirect("home")
-
 # helper for human label + bootstrap class
 _STATUS_MAP = {
     "scheduled":        ("Scheduled", "badge bg-info text-dark"),
@@ -402,7 +395,7 @@ def instructor_booking_detail(request, pk):
         "title": "Booking details",
         "booking": booking,
         "status_label": status_label,
-        "days": days,
+        "day_rows": days,
         "today": timezone.localdate(),
     })
 
