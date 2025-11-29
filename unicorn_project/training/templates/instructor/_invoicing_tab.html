@@ -313,6 +313,68 @@
       </div>
     </div>  {# /right col #}
 
+    <!-- ================= CONFIRM SEND TO ADMIN MODAL ================= -->
+    <div class="modal fade" id="confirmReceiptsModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+
+          <div class="modal-header bg-warning-subtle">
+            <h5 class="modal-title">
+              <i class="bi bi-exclamation-triangle text-warning"></i>
+              Confirm submission to admin
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-body">
+            <p class="fw-semibold">
+              Sending this invoice to admin is <u>final</u>.
+            </p>
+
+            <p class="mb-3">
+              Once submitted you will no longer be able to make changes.  
+              If there is a mistake or something needs updating, you must contact the admin team to have the invoice returned.
+            </p>
+
+            <hr>
+
+            <p class="mb-2">
+              <strong>Additional items added to the invoice require receipts.</strong>
+            </p>
+            <ul class="small mb-3">
+              <li>You can upload receipts directly on this page; or</li>
+              <li>You may send receipts separately if needed.</li>
+            </ul>
+
+            {% comment %} Missing receipts warning {% endcomment %}
+            <div id="missing-receipts-warning" class="alert alert-danger d-none">
+              <strong>Receipts missing:</strong> You have added additional items but have not uploaded any receipts.
+              Please upload receipts or send them to admin separately before submitting.
+            </div>
+
+            <p class="text-muted small mb-0">
+              Please confirm you are ready to submit.
+            </p>
+          </div>
+
+          <div class="modal-footer">
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    data-bs-dismiss="modal">
+              Cancel
+            </button>
+
+            <button type="button"
+                    class="btn btn-success"
+                    id="btn-confirm-receipts">
+              <i class="bi bi-send"></i> Submit to admin
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </form>
 
   {# ================= TOOLTIP INIT ================ #}
@@ -609,25 +671,43 @@
 
     if (sendBtn){
       sendBtn.addEventListener('click', function(ev){
-        if (extraTotal() <= 0) return;
-        if (confirmField && confirmField.value === '1') return;
+        const extras = extraTotal();
+        const hasReceipts = document.querySelectorAll('#rcpt-list li[data-file-id]').length > 0;
+        const warnBox = document.getElementById('missing-receipts-warning');
 
-        ev.preventDefault();
+        // Reset warning
+        if (warnBox) warnBox.classList.add('d-none');
 
-        if (hasModal) {
-          modal.show();
-        } else {
-          const ok = window.confirm(
-            "You’ve added additional charges.\n\n" +
-            "Please confirm you’ve uploaded all receipts or will send them separately."
-          );
-          if (ok) {
-            if (confirmField) confirmField.value = '1';
-            doProgrammaticSubmit();
+        // If extras but no confirmation yet
+        if (extras > 0 && (!confirmField || confirmField.value !== '1')) {
+          ev.preventDefault();
+
+          // Show missing receipts warning
+          if (!hasReceipts && warnBox) {
+            warnBox.classList.remove('d-none');
           }
+
+          if (hasModal) {
+            modal.show();
+          } else {
+            const ok = window.confirm(
+              "You’ve added additional charges.\n\n" +
+              (hasReceipts
+                ? ""
+                : "⚠️ No receipts uploaded.\nReceipts are required for additional items.\n\n") +
+              "Please confirm you’ve uploaded all receipts or will send them separately."
+            );
+            if (ok) {
+              if (confirmField) confirmField.value = '1';
+              doProgrammaticSubmit();
+            }
+          }
+
+          return; // Stop normal submit
         }
       });
     }
+
   })();
   </script>
 
