@@ -25,13 +25,36 @@
             <small id="autosave-status"
                    class="text-muted"
                    style="min-width:120px;text-align:right;"></small>
-            <span class="badge text-bg-secondary">
-              {% if invoice and invoice.status %}
-                {{ invoice.status|capfirst }}
+            {# Invoice Status Badge (Instructor View) #}
+            {% with st=invoice.status|default:"draft"|lower %}
+              {% if st == "draft" %}
+                  {% with badge="text-bg-secondary" %}
+                      <span class="badge {{ badge }}">{{ st|capfirst }}</span>
+                  {% endwith %}
+              {% elif st == "sent" or st == "viewed" %}
+                  {% with badge="bg-warning text-dark" %}
+                      <span class="badge {{ badge }}">{{ st|capfirst }}</span>
+                  {% endwith %}
+              {% elif st == "paid" %}
+                  {% with badge="bg-success" %}
+                      <span class="badge {{ badge }}">{{ st|capfirst }}</span>
+                  {% endwith %}
+              {% elif st == "awaiting_review" %}
+                  {% with badge="bg-orange text-dark" %}
+                      <span class="badge {{ badge }}">{{ st|capfirst }}</span>
+                  {% endwith %}
+              {% elif st == "rejected" %}
+                  {% with badge="bg-danger" %}
+                      <span class="badge {{ badge }}">{{ st|capfirst }}</span>
+                  {% endwith %}
               {% else %}
-                Awaiting completion and sending
+                  {% with badge="text-bg-secondary" %}
+                      <span class="badge {{ badge }}">{{ st|capfirst }}</span>
+                  {% endwith %}
               {% endif %}
-            </span>
+          {% endwith %}
+
+
           </div>
         </div>
 
