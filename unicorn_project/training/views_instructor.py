@@ -2379,6 +2379,63 @@ def instructor_course_summary_by_ref_pdf(request, ref):
     # IMPORTANT: do not render here. Call the UUID view so the DEBUG→HTML logic is used.
     return instructor_course_summary_pdf(request, booking.pk)
 
+@login_required
+def download_booking_ics(request, booking_id):
+    import datetime
+    from django.http import HttpResponse
+    from django.utils.timezone import make_aware
+
+    booking = get_object_or_404(Booking, pk=booking_id)
+
+    # Fetch all actual course days
+    days = booking.days.order_by("date").all()
+    if not days:
+        return HttpResponse("No course days found.", status=400)
+
+    # Build ICS text
+    ics_lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Unicorn Training//Course Calendar//EN",
+    ]
+
+    # Event title
+    title = booking.course_type.name
+
+    # Location string
+    loc = f"{booking.training_location.address_line}, " \
+          f"{booking.training_location.town} {booking.training_location.postcode}"
+
+    # Description / notes
+    notes = booking.booking_notes or ""
+
+    for day in days:
+        start_dt = datetime.datetime.combine(day.date, day.start_time or datetime.time(9, 0))
+        end_dt   = datetime.datetime.combine(day.date, day.end_time   or datetime.time(17, 0))
+
+        start_dt = make_aware(start_dt)
+        end_dt   = make_aware(end_dt)
+
+        ics_lines.extend([
+            "BEGIN:VEVENT",
+            f"UID:{day.day_code}@unicorntraining",
+            f"DTSTAMP:{start_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"DTSTART:{start_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"SUMMARY:{title}",
+            f"LOCATION:{loc}",
+            f"DESCRIPTION:{notes.replace('\\n', ' ')}",
+            "END:VEVENT",
+        ])
+
+    ics_lines.append("END:VCALENDAR")
+
+    ics_text = "\r\n".join(ics_lines)
+
+    response = HttpResponse(ics_text, content_type="text/calendar")
+    response["Content-Disposition"] = f'attachment; filename="{booking.course_reference}.ics"'
+    return response
+
 
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
