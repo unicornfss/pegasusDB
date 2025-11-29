@@ -537,6 +537,8 @@ class Invoice(models.Model):
     admin_comment = models.TextField(blank=True, null=True)
     staff_comment = models.TextField(blank=True, null=True)
 
+    date_sent = models.DateTimeField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

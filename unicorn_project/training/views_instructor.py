@@ -844,46 +844,129 @@ def instructor_booking_detail(request, pk):
             if request.headers.get("x-requested-with") == "XMLHttpRequest":
                 return JsonResponse({"ok": True, "saved_at": now().strftime("%H:%M:%S")})
 
-            # ------------------------------------------------------------------
-            # SEND TO ADMIN
-            # ------------------------------------------------------------------
+            # ============= 2) SEND ADMIN =============
             if action == "send_admin":
 
-                if request.POST.get("confirm_receipts") != "1":
+                # Require receipt confirmation
+                confirm = request.POST.get("confirm_receipts")
+                if confirm != "1":
+                    # display modal-required page (this only shows in old fallback flows)
                     return render(
                         request,
                         "instructor/confirm_receipts_required.html",
                         {"booking": booking},
                     )
 
-                # ---- SEND EMAIL ----
+                # --- Persist latest invoice values before sending ---
+                inv.instructor_ref = request.POST.get("instructor_ref", "") or ""
+                inv.account_name   = request.POST.get("account_name", "") or ""
+                inv.sort_code      = request.POST.get("sort_code", "") or ""
+                inv.account_number = request.POST.get("account_number", "") or ""
+                inv.invoice_date   = now().date()   # always today until locked
+                inv.status = "draft"
+
+                # Save extra line items
+                descs = request.POST.getlist("item_desc")
+                amts  = request.POST.getlist("item_amount")
+
+                inv.items.exclude(description="Mileage").delete()
+                from decimal import Decimal
+                for desc, amt in zip(descs, amts):
+                    desc = (desc or "").strip()
+                    if not desc:
+                        continue
+                    try:
+                        amt = Decimal(amt)
+                    except:
+                        amt = Decimal("0.00")
+                    InvoiceItem.objects.create(invoice=inv, description=desc, amount=amt)
+
+                inv.save()
+
+                # ----------------------------------------------------------------------
+                #                BUILD PDF + GATHER RECEIPTS + SEND EMAIL
+                # ----------------------------------------------------------------------
                 try:
-                    from training.utils.emailing import send_admin_email
-                    # Build subject + body (simple example)
-                    subject = f"Invoice for {booking.course_type.name} — {booking.course_reference}"
-                    body = f"Instructor invoice submitted.\n\nBooking: {booking.pk}"
-                    send_admin_email(subject, body)
-                except Exception as e:
-                    messages.error(request, f"Invoice could not be sent: {e}")
-                    return redirect(
-                        f"{reverse('instructor_booking_detail', kwargs={'pk': pk})}?tab=invoicing"
+                    # Generate invoice PDF identical to preview
+                    file_bytes, filename = render_invoice_pdf_via_preview(request, booking)
+
+                    # Gather receipts from Drive
+                    attachments, link_lines = gather_receipt_attachments_and_links(booking)
+
+                    # Subject + body
+                    subj = f"[Unicorn] Instructor invoice — {booking.course_type.name} ({booking.course_reference or booking.pk})"
+                    body = (
+                        f"Invoice for {booking.course_type.name} — {booking.business.name}\n"
+                        f"Date: { (inv.invoice_date or now().date()).strftime('%Y-%m-%d') }\n"
+                        f"Generated: {localtime(now()).strftime('%Y-%m-%d %H:%M')}\n\n"
                     )
 
-                # Update statuses
-                inv.status = "sent"
-                inv.date_sent = now()
-                inv.save(update_fields=["status", "date_sent"])
+                    if link_lines:
+                        body += "Receipts:\n" + "\n".join(f" - {ln}" for ln in link_lines)
+                    else:
+                        body += "Receipts: (none found)"
 
-                try:
-                    inv.admin_status = "pending"
-                    inv.save(update_fields=["admin_status"])
-                except:
-                    pass
+                    # Determine recipients
+                    admin_real = getattr(settings, "ADMIN_INBOX_EMAIL", "")
+                    instr_real = getattr(booking.instructor, "email", "") or ""
+                    catch_all  = getattr(settings, "DEV_CATCH_ALL_EMAIL", "")
 
-                messages.success(request, "Invoice sent to admin successfully.")
+                    if settings.DEBUG:
+                        to_recipients = [catch_all]
+                        effective_subject = f"[DEV] {subj}  (Would send to: {admin_real}, {instr_real})"
+                        cc_recipients = []
+                    else:
+                        to_recipients = [admin_real] if admin_real else []
+                        cc_recipients = [instr_real] if instr_real else []
+                        effective_subject = subj
+
+                    # Build email
+                    email = EmailMessage(
+                        subject=effective_subject,
+                        body=body,
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                        to=to_recipients,
+                        cc=cc_recipients,
+                    )
+
+                    # Attach invoice PDF
+                    email.attach(
+                        filename=filename,
+                        content=file_bytes,
+                        mimetype=mimetypes.guess_type(filename)[0] or "application/pdf"
+                    )
+
+                    # Attach receipts
+                    for fname, content, mime in attachments:
+                        email.attach(filename=fname, content=content, mimetype=mime)
+
+                    # Send email
+                    email.send(fail_silently=False)
+
+                    # Lock invoice
+                    inv.status = "sent"
+                    inv.date_sent = now()
+                    inv.save(update_fields=["status", "date_sent"])
+
+                    # optional admin workflow
+                    try:
+                        inv.admin_status = "pending"
+                        inv.save(update_fields=["admin_status"])
+                    except:
+                        pass
+
+                    messages.success(request, "Invoice emailed to admin successfully.")
+
+                except Exception as e:
+                    messages.error(request, f"Failed to send invoice: {e}")
+                    return redirect(
+                        f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
+                    )
+
                 return redirect(
-                    f"{reverse('instructor_booking_detail', kwargs={'pk': pk})}?tab=invoicing"
+                    f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
                 )
+
 
             # NORMAL SAVE
             return redirect(
