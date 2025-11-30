@@ -1,18 +1,234 @@
 {% extends "base.html" %}
+{% block title %}Instructor Dashboard{% endblock %}
+
 {% block content %}
 
-<h2><i class="bi bi-house-door"></i> Instructor Dashboard</h2>
+<div class="container my-4">
 
-<p>Welcome, {{ instructor.name }}!</p>
+    <!-- PAGE TITLE -->
+    <div class="d-flex align-items-center mb-4">
+        <i class="bi bi-speedometer2 fs-2 me-2"></i>
+        <h2 class="mb-0">Instructor Dashboard</h2>
+    </div>
 
-<p>This is your instructor homepage. Widgets and tools will be added here later.</p>
 
-<hr>
+    <!-- TODAY'S COURSE -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-primary text-white d-flex align-items-center">
+            <i class="bi bi-calendar-day me-2"></i>
+            <strong>Today’s Course</strong>
+        </div>
+        <div class="card-body">
 
-<p><strong>Quick links:</strong></p>
-<ul>
-  <li><a href="{% url 'instructor_bookings' %}">My bookings</a></li>
-  <li><a href="{% url 'user_profile' %}">My profile</a></li>
-</ul>
+            {% if todays_days %}
+                {% for d in todays_days %}
+                <div class="p-3 border rounded mb-3">
+
+                    <h5 class="fw-bold">{{ d.booking.course_text }}</h5>
+
+                    <p class="mb-1">
+                        <i class="bi bi-geo-alt"></i>
+                        <strong>Location:</strong> {{ d.booking.location }}
+                    </p>
+
+                    <p class="mb-1">
+                        <i class="bi bi-clock"></i>
+                        <strong>Start:</strong> {{ d.start_time|default:"N/A" }}
+                    </p>
+
+                    <p class="mb-3">
+                        <i class="bi bi-people"></i>
+                        <strong>Delegates:</strong> {{ d.booking.delegate_count }}
+                    </p>
+
+                    <a href="{% url 'instructor_booking_detail' d.booking.pk %}"
+                       class="btn btn-primary me-2">
+                        <i class="bi bi-journal-text"></i> View booking
+                    </a>
+
+                    <a href="{% url 'instructor_day_registers' d.pk %}"
+                       class="btn btn-outline-secondary">
+                        <i class="bi bi-ui-checks-grid"></i> Open register
+                    </a>
+
+                </div>
+                {% endfor %}
+            {% else %}
+                <p class="text-muted">No course today.</p>
+            {% endif %}
+
+        </div>
+    </div>
+
+
+
+    <!-- UPCOMING COURSES -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-info text-white d-flex align-items-center">
+            <i class="bi bi-calendar-week me-2"></i>
+            <strong>Upcoming Courses (Next 14 days)</strong>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Course</th>
+                        <th>Location</th>
+                        <th>Fee (£)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for d in upcoming %}
+                    <tr>
+                        <td>{{ d.date }}</td>
+
+                        <!-- COURSE NAME -->
+                        <td>{{ d.booking.course_type.name }}</td>
+
+                        <!-- TRAINING LOCATION -->
+                        <td>{{ d.booking.training_location.name }}</td>
+
+                        <!-- INSTRUCTOR FEE -->
+                        <td>
+                            {% if d.booking.instructor_fee %}
+                                £{{ d.booking.instructor_fee|floatformat:2 }}
+                            {% else %}
+                                <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+
+                        <!-- VIEW BUTTON -->
+                        <td>
+                            <a href="{% url 'instructor_booking_detail' d.booking.pk %}"
+                              class="btn btn-sm btn-outline-primary">
+                              View
+                            </a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-muted">No upcoming courses.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+
+
+
+
+    <!-- ACTIONS REQUIRED -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-warning d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Actions Required</strong>
+        </div>
+        <div class="card-body">
+
+            <ul class="list-unstyled mb-0">
+                <li class="mb-2">
+                    <strong>{{ awaiting_closure.count }}</strong> course(s) awaiting instructor closure
+                </li>
+                <li class="mb-2">
+                    <strong>{{ missing_assessments.count }}</strong> course(s) with missing assessments
+                </li>
+                <li class="mb-2">
+                    <strong>{{ missing_feedback.count }}</strong> course(s) missing feedback forms
+                </li>
+                <li>
+                    <strong>{{ incomplete_registers.count }}</strong> course(s) with incomplete registers
+                </li>
+            </ul>
+
+        </div>
+    </div>
+
+
+
+    <!-- QUICK ACCESS BUTTONS -->
+    <div class="row g-3 mb-4">
+
+        <div class="col-md-3 col-6">
+            <a href="{% url 'instructor_bookings' %}"
+               class="btn btn-outline-dark btn-lg w-100 shadow-sm">
+                <i class="bi bi-journal-text"></i><br>
+                My Bookings
+            </a>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <a href="{% url 'user_profile' %}"
+               class="btn btn-outline-dark btn-lg w-100 shadow-sm">
+                <i class="bi bi-person-circle"></i><br>
+                My Profile
+            </a>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <a class="btn btn-outline-dark btn-lg w-100 shadow-sm disabled">
+                <i class="bi bi-collection"></i><br>
+                Resources
+            </a>
+        </div>
+
+        <div class="col-md-3 col-6">
+            <a class="btn btn-outline-dark btn-lg w-100 shadow-sm disabled">
+                <i class="bi bi-tools"></i><br>
+                Tools
+            </a>
+        </div>
+
+    </div>
+
+
+
+    <!-- RECENT COURSES -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-secondary text-white d-flex align-items-center">
+            <i class="bi bi-clock-history me-2"></i>
+            <strong>Recent Courses (Past 30 Days)</strong>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-striped mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Date</th>
+                        <th>Course</th>
+                        <th>Business</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for d in recent %}
+                    <tr>
+                        <td>{{ d.date }}</td>
+                        <td>{{ d.booking.course_text }}</td>
+                        <td>{{ d.booking.business }}</td>
+                        <td>{{ d.booking.status }}</td>
+                        <td>
+                            <a href="{% url 'instructor_booking_detail' d.booking.pk %}"
+                               class="btn btn-sm btn-outline-primary">
+                               View
+                            </a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-muted">No recent courses.</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
 
 {% endblock %}

@@ -39,28 +39,62 @@
 
       {# LEFT COLUMN ------------------------------------------------------- #}
       <div class="col-lg-4">
-        <div class="mb-3">
-          <div class="text-muted small">Business</div>
-          <div>{{ booking.business.name }}</div>
+
+  <div class="mb-3">
+    <div class="text-muted small">Business</div>
+    <div>{{ booking.business.name }}</div>
+  </div>
+
+  <div class="mb-3">
+    <div class="text-muted small">Location</div>
+
+    <div>
+      {{ booking.training_location.name|default:"(TBC)" }}<br>
+
+      {% if booking.training_location %}
+        {{ booking.training_location.address_line }}<br>
+        {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
+
+        {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
+          <a class="small d-block mb-2"
+             target="_blank" rel="noopener"
+             href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
+            View in Google Maps
+          </a>
+        {% endwith %}
+
+        {% if gcal_links %}
+          <div class="mt-2">
+            <strong>Add to Google Calendar:</strong>
+
+            <div class="d-flex flex-wrap gap-2 mt-1">
+              {% for day in gcal_links %}
+                <a href="{{ day.url }}" target="_blank"
+                  class="btn btn-google-cal btn-sm d-flex align-items-center">
+                  <i class="bi bi-calendar-event me-1"></i>
+                  Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
+                </a>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        {# ----- ICS SECTION ----- #}
+        <div class="mt-4">
+          <strong>Download .ics file:</strong><br>
+
+          <a href="{% url 'download_booking_ics' booking.pk %}"
+            class="btn btn-outline-success btn-sm mt-2 d-inline-flex align-items-center">
+            <i class="bi bi-calendar-plus me-1"></i>
+            Download .ics
+          </a>
         </div>
 
-        <div>
-          <div class="text-muted small">Location</div>
-          <div>
-            {{ booking.training_location.name|default:"(TBC)" }}<br>
-            {% if booking.training_location %}
-              {{ booking.training_location.address_line }}<br>
-              {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
-              {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
-                <a class="small" target="_blank" rel="noopener"
-                   href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
-                  View in Google Maps
-                </a>
-              {% endwith %}
-            {% endif %}
-          </div>
-        </div>
-      </div>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
 
       {# MIDDLE COLUMN ----------------------------------------------------- #}
       <div class="col-lg-4">
@@ -84,13 +118,6 @@
           </div>
         </div>
       </div>
-
-      {% if booking.allow_mileage_claim and booking.mileage_fee %}
-        <div class="mb-3">
-          <div class="text-muted small">Mileage allowance</div>
-          <div>£{{ booking.mileage_fee }} per mile</div>
-        </div>
-        {% endif %}
 
         <div class="mb-3">
           <div class="text-muted small">Location contact</div>
@@ -853,5 +880,17 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<style>
+  .btn-google-cal {
+    background-color: #1A73E8;   /* Google blue */
+    color: white;
+    border-color: #1A73E8;
+  }
+  .btn-google-cal:hover {
+    background-color: #1669C1;
+    border-color: #1669C1;
+    color: #fff;
+  }
+</style>
 
 {% endblock %}

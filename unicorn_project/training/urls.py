@@ -107,6 +107,8 @@ urlpatterns = [
     path("app/instructor/booking/<uuid:pk>/invoice/preview/", views_instructor.invoice_preview, name="instructor_invoice_preview"),
     path("accident-reports/", views.accident_report_list, name="accident_report_list"),
     path("app/admin/personnel/<uuid:pk>/resend-password/", app_admin.admin_personnel_resend_password, name="admin_personnel_resend_password"),
+    path("app/instructor/booking/<uuid:booking_id>/ics/", views_instructor.download_booking_ics, name="download_booking_ics"),
+
 
 
     # Bookings (admin)

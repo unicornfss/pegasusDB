@@ -445,14 +445,88 @@ def _closed_guard(request, booking):
 
 @login_required
 def instructor_dashboard(request):
-    instructor = _get_instructor(request.user)
+    user = request.user
+    personnel = getattr(user, "personnel", None)
 
-    # Safety fallback — if something is mislinked
-    if not instructor:
+    if not personnel:
         return redirect("instructor_bookings")
 
+    today = timezone.localdate()
+
+    # ------------------------------------------------------
+    # TODAY'S COURSES (BookingDay)
+    # ------------------------------------------------------
+    todays_days = (
+        BookingDay.objects
+        .filter(instructor=personnel, date=today)
+        .select_related("booking")
+        .order_by("start_time")
+    )
+
+    # ------------------------------------------------------
+    # UPCOMING COURSES (next 14 days)
+    # ------------------------------------------------------
+    upcoming = (
+        BookingDay.objects
+        .filter(
+            instructor=personnel,
+            date__gt=today,
+            date__lte=today + timedelta(days=14)
+        )
+        .select_related("booking")
+        .order_by("date", "start_time")
+    )
+
+    # ------------------------------------------------------
+    # RECENT COURSES (past 30 days)
+    # ------------------------------------------------------
+    recent = (
+        BookingDay.objects
+        .filter(
+            instructor=personnel,
+            date__lt=today,
+            date__gte=today - timedelta(days=30)
+        )
+        .select_related("booking")
+        .order_by("-date")
+    )
+
+    # ------------------------------------------------------
+    # ACTIONS REQUIRED (safe + real model structure)
+    # ------------------------------------------------------
+
+    # 1) Courses awaiting closure
+    awaiting_closure = Booking.objects.filter(
+        instructor=personnel,
+        status="awaiting_closure"
+    )
+
+    # 2) Incomplete registers (DOB always required, so leave empty for now)
+    incomplete_registers = Booking.objects.none()
+
+    # 3) Missing assessments:
+    # A "missing" assessment means: at least one assessment with level='na'
+    missing_assessments = Booking.objects.filter(
+        instructor=personnel,
+        days__registers__assessments__level="na"
+    ).distinct()
+
+    # 4) Missing feedback:
+    # Your FeedbackResponse model has no direct FK to Booking,
+    # so we skip this until we design proper linkage.
+    missing_feedback = Booking.objects.none()
+
     return render(request, "instructor/dashboard.html", {
-        "instructor": instructor
+        "personnel": personnel,
+        "todays_days": todays_days,
+        "upcoming": upcoming,
+        "recent": recent,
+
+        # Actions required
+        "awaiting_closure": awaiting_closure,
+        "missing_assessments": missing_assessments,
+        "missing_feedback": missing_feedback,
+        "incomplete_registers": incomplete_registers,
     })
 
 @login_required
@@ -1025,6 +1099,96 @@ def instructor_booking_detail(request, pk):
         })
 
     ctx["day_rows"] = day_rows
+    ctx["days"] = days
+
+    # -------------------------------------------------------
+    # Build unified event description for Google & ICS
+    # -------------------------------------------------------
+    lines = []
+
+    # Notes
+    if booking.booking_notes:
+        lines.append(f"Notes: {booking.booking_notes}")
+
+    # Location contact details
+    if booking.contact_name or booking.telephone or booking.email:
+        lines.append("Contact details:")
+        if booking.contact_name:
+            lines.append(f"  - Name: {booking.contact_name}")
+        if booking.telephone:
+            lines.append(f"  - Phone: {booking.telephone}")
+        if booking.email:
+            lines.append(f"  - Email: {booking.email}")
+
+    # Instructor fees
+    fee_lines = []
+    if booking.instructor_fee:
+        fee_lines.append(f"Instructor fee: £{booking.instructor_fee}")
+
+    if booking.allow_mileage_claim:
+        if booking.mileage_fee:
+            fee_lines.append(f"Mileage allowance: £{booking.mileage_fee}")
+        else:
+            fee_lines.append("Mileage: allowed")
+
+    if booking.allow_accommodation:
+        fee_lines.append("Accommodation: allowed")
+
+    if fee_lines:
+        lines.append("Instructor claims:")
+        for ln in fee_lines:
+            lines.append(f"  - {ln}")
+
+    event_description = "\n".join(lines).strip()
+
+    ctx["event_description"] = event_description
+
+    # -----------------------------------------
+    # Build Google Calendar links per BookingDay
+    # -----------------------------------------
+    import urllib.parse
+    import datetime
+
+    gcal_links = []
+
+    for d in days:
+        date_str = d.date.strftime("%Y%m%d")
+
+        start_t = d.start_time or datetime.time(9, 0)
+        end_t   = d.end_time   or datetime.time(17, 0)
+
+        start_str = start_t.strftime("%H%M%S")
+        end_str   = end_t.strftime("%H%M%S")
+
+        # Booking title
+        title = f"{booking.course_type.name}"
+
+        # Location
+        if booking.training_location:
+            loc = (
+                f"{booking.training_location.address_line}, "
+                f"{booking.training_location.town} "
+                f"{booking.training_location.postcode}"
+            )
+        else:
+            loc = ""
+
+        # Google Calendar event creation URL
+        gcal_url = (
+            "https://calendar.google.com/calendar/u/0/r/eventedit?"
+            + "text=" + urllib.parse.quote(title)
+            + "&dates=" + date_str + "T" + start_str + "/" + date_str + "T" + end_str
+            + "&details=" + urllib.parse.quote(event_description)
+            + "&location=" + urllib.parse.quote(loc)
+        )
+
+        gcal_links.append({
+            "date": d.date,
+            "url": gcal_url,
+        })
+
+    ctx["gcal_links"] = gcal_links
+    ctx["notes_form"] = BookingNotesForm(instance=booking)
 
     return render(request, "instructor/booking_detail.html", ctx)
 
@@ -2304,6 +2468,112 @@ def instructor_course_summary_by_ref_pdf(request, ref):
     # IMPORTANT: do not render here. Call the UUID view so the DEBUG→HTML logic is used.
     return instructor_course_summary_pdf(request, booking.pk)
 
+@login_required
+def download_booking_ics(request, booking_id):
+    import datetime
+    from django.utils.timezone import now
+
+    booking = get_object_or_404(Booking, pk=booking_id)
+
+    # Collect BookingDay entries
+    days = booking.days.order_by("date")
+
+    if not days:
+        # Fallback: single-day course (rare, but safe)
+        class FakeDay:
+            date = booking.course_date
+            start_time = booking.start_time or datetime.time(9, 0)
+            end_time   = datetime.time(17, 0)
+
+        days = [FakeDay()]
+
+    # -----------------------------------------
+    # Build unified event description (same as view)
+    # -----------------------------------------
+    desc_lines = []
+
+    # Notes
+    if booking.booking_notes:
+        desc_lines.append(f"Notes: {booking.booking_notes}")
+
+    # Contact details
+    if booking.contact_name or booking.telephone or booking.email:
+        desc_lines.append("Contact details:")
+        if booking.contact_name:
+            desc_lines.append(f" - Name: {booking.contact_name}")
+        if booking.telephone:
+            desc_lines.append(f" - Phone: {booking.telephone}")
+        if booking.email:
+            desc_lines.append(f" - Email: {booking.email}")
+
+    # Instructor fee info
+    fee_lines = []
+    if booking.instructor_fee:
+        fee_lines.append(f"Instructor fee: £{booking.instructor_fee}")
+
+    if booking.allow_mileage_claim:
+        if booking.mileage_fee:
+            fee_lines.append(f"Mileage allowance: £{booking.mileage_fee}")
+        else:
+            fee_lines.append("Mileage allowed")
+
+    if booking.allow_accommodation:
+        fee_lines.append("Accommodation allowed")
+
+    if fee_lines:
+        desc_lines.append("Instructor claim info:")
+        for ln in fee_lines:
+            desc_lines.append(f" - {ln}")
+
+    event_description = "\\n".join(desc_lines) or "Training course"
+
+    # -----------------------------------------
+    # Build ICS file
+    # -----------------------------------------
+    ics_lines = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Unicorn Training//Booking Calendar//EN"
+    ]
+
+    for d in days:
+        start_dt = datetime.datetime.combine(
+            d.date,
+            d.start_time or datetime.time(9, 0)
+        )
+
+        end_dt = datetime.datetime.combine(
+            d.date,
+            d.end_time or datetime.time(17, 0)
+        )
+
+        location = (
+            f"{booking.training_location.address_line}, "
+            f"{booking.training_location.town}, "
+            f"{booking.training_location.postcode}"
+        )
+
+        ics_lines += [
+            "BEGIN:VEVENT",
+            f"UID:{booking.pk}-{d.date}",
+            f"DTSTAMP:{now().strftime('%Y%m%dT%H%M%SZ')}",
+            f"DTSTART:{start_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"SUMMARY:{booking.course_type.name}",
+            f"DESCRIPTION:{event_description}",
+            f"LOCATION:{location}",
+            "END:VEVENT"
+        ]
+
+    ics_lines.append("END:VCALENDAR")
+
+    ics_data = "\r\n".join(ics_lines)
+
+    response = HttpResponse(ics_data, content_type="text/calendar")
+    response["Content-Disposition"] = (
+        f'attachment; filename="{booking.course_reference}.ics"'
+    )
+    return response
 
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
