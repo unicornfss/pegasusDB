@@ -63,23 +63,33 @@
           </a>
         {% endwith %}
 
-        <!-- ADD TO GOOGLE CALENDAR -->
-        <a class="btn btn-outline-primary btn-sm me-2"
-           target="_blank"
-           href="https://www.google.com/calendar/render?action=TEMPLATE
-           &text={{ booking.course_type.name|urlencode }}
-           &dates={{ booking.course_date|date:'Ymd' }}T{{ booking.start_time|default:'09:00'|time:'His' }}Z
-           /{{ booking.course_date|date:'Ymd' }}T{{ booking.end_time|default:'17:00'|time:'His' }}Z
-           &details={{ booking.booking_notes|urlencode }}
-           &location={{ booking.training_location.address_line|add:', '|add:booking.training_location.town|add:' '|add:booking.training_location.postcode|urlencode }}">
-          <i class="bi bi-google"></i> Add to Google Calendar
-        </a>
+        {% if gcal_links %}
+          <div class="mt-2">
+            <strong>Add to Google Calendar:</strong>
 
-        <!-- DOWNLOAD .ICS FILE -->
-        <a class="btn btn-outline-success btn-sm"
-           href="{% url 'download_booking_ics' booking.pk %}">
-          <i class="bi bi-calendar-plus"></i> Download .ics
-        </a>
+            <div class="d-flex flex-wrap gap-2 mt-1">
+              {% for day in gcal_links %}
+                <a href="{{ day.url }}" target="_blank"
+                  class="btn btn-google-cal btn-sm d-flex align-items-center">
+                  <i class="bi bi-calendar-event me-1"></i>
+                  Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
+                </a>
+              {% endfor %}
+            </div>
+          </div>
+        {% endif %}
+
+        {# ----- ICS SECTION ----- #}
+        <div class="mt-4">
+          <strong>Download .ics file:</strong><br>
+
+          <a href="{% url 'download_booking_ics' booking.pk %}"
+            class="btn btn-outline-success btn-sm mt-2 d-inline-flex align-items-center">
+            <i class="bi bi-calendar-plus me-1"></i>
+            Download .ics
+          </a>
+        </div>
+
       {% endif %}
     </div>
   </div>
@@ -108,13 +118,6 @@
           </div>
         </div>
       </div>
-
-      {% if booking.allow_mileage_claim and booking.mileage_fee %}
-        <div class="mb-3">
-          <div class="text-muted small">Mileage allowance</div>
-          <div>£{{ booking.mileage_fee }} per mile</div>
-        </div>
-        {% endif %}
 
         <div class="mb-3">
           <div class="text-muted small">Location contact</div>
@@ -879,5 +882,17 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<style>
+  .btn-google-cal {
+    background-color: #1A73E8;   /* Google blue */
+    color: white;
+    border-color: #1A73E8;
+  }
+  .btn-google-cal:hover {
+    background-color: #1669C1;
+    border-color: #1669C1;
+    color: #fff;
+  }
+</style>
 
 {% endblock %}

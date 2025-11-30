@@ -1099,7 +1099,96 @@ def instructor_booking_detail(request, pk):
         })
 
     ctx["day_rows"] = day_rows
+    ctx["days"] = days
 
+    # -------------------------------------------------------
+    # Build unified event description for Google & ICS
+    # -------------------------------------------------------
+    lines = []
+
+    # Notes
+    if booking.booking_notes:
+        lines.append(f"Notes: {booking.booking_notes}")
+
+    # Location contact details
+    if booking.contact_name or booking.telephone or booking.email:
+        lines.append("Contact details:")
+        if booking.contact_name:
+            lines.append(f"  - Name: {booking.contact_name}")
+        if booking.telephone:
+            lines.append(f"  - Phone: {booking.telephone}")
+        if booking.email:
+            lines.append(f"  - Email: {booking.email}")
+
+    # Instructor fees
+    fee_lines = []
+    if booking.instructor_fee:
+        fee_lines.append(f"Instructor fee: £{booking.instructor_fee}")
+
+    if booking.allow_mileage_claim:
+        if booking.mileage_fee:
+            fee_lines.append(f"Mileage allowance: £{booking.mileage_fee}")
+        else:
+            fee_lines.append("Mileage: allowed")
+
+    if booking.allow_accommodation:
+        fee_lines.append("Accommodation: allowed")
+
+    if fee_lines:
+        lines.append("Instructor claims:")
+        for ln in fee_lines:
+            lines.append(f"  - {ln}")
+
+    event_description = "\n".join(lines).strip()
+
+    ctx["event_description"] = event_description
+
+    # -----------------------------------------
+    # Build Google Calendar links per BookingDay
+    # -----------------------------------------
+    import urllib.parse
+    import datetime
+
+    gcal_links = []
+
+    for d in days:
+        date_str = d.date.strftime("%Y%m%d")
+
+        start_t = d.start_time or datetime.time(9, 0)
+        end_t   = d.end_time   or datetime.time(17, 0)
+
+        start_str = start_t.strftime("%H%M%S")
+        end_str   = end_t.strftime("%H%M%S")
+
+        # Booking title
+        title = f"{booking.course_type.name}"
+
+        # Location
+        if booking.training_location:
+            loc = (
+                f"{booking.training_location.address_line}, "
+                f"{booking.training_location.town} "
+                f"{booking.training_location.postcode}"
+            )
+        else:
+            loc = ""
+
+        # Google Calendar event creation URL
+        gcal_url = (
+            "https://calendar.google.com/calendar/u/0/r/eventedit?"
+            + "text=" + urllib.parse.quote(title)
+            + "&dates=" + date_str + "T" + start_str + "/" + date_str + "T" + end_str
+            + "&details=" + urllib.parse.quote(event_description)
+            + "&location=" + urllib.parse.quote(loc)
+        )
+
+        gcal_links.append({
+            "date": d.date,
+            "url": gcal_url,
+        })
+
+    ctx["gcal_links"] = gcal_links
+    ctx["notes_form"] = BookingNotesForm(instance=booking)
 
     return render(request, "instructor/booking_detail.html", ctx)
 
@@ -2382,60 +2471,109 @@ def instructor_course_summary_by_ref_pdf(request, ref):
 @login_required
 def download_booking_ics(request, booking_id):
     import datetime
-    from django.http import HttpResponse
-    from django.utils.timezone import make_aware
+    from django.utils.timezone import now
 
     booking = get_object_or_404(Booking, pk=booking_id)
 
-    # Fetch all actual course days
-    days = booking.days.order_by("date").all()
-    if not days:
-        return HttpResponse("No course days found.", status=400)
+    # Collect BookingDay entries
+    days = booking.days.order_by("date")
 
-    # Build ICS text
+    if not days:
+        # Fallback: single-day course (rare, but safe)
+        class FakeDay:
+            date = booking.course_date
+            start_time = booking.start_time or datetime.time(9, 0)
+            end_time   = datetime.time(17, 0)
+
+        days = [FakeDay()]
+
+    # -----------------------------------------
+    # Build unified event description (same as view)
+    # -----------------------------------------
+    desc_lines = []
+
+    # Notes
+    if booking.booking_notes:
+        desc_lines.append(f"Notes: {booking.booking_notes}")
+
+    # Contact details
+    if booking.contact_name or booking.telephone or booking.email:
+        desc_lines.append("Contact details:")
+        if booking.contact_name:
+            desc_lines.append(f" - Name: {booking.contact_name}")
+        if booking.telephone:
+            desc_lines.append(f" - Phone: {booking.telephone}")
+        if booking.email:
+            desc_lines.append(f" - Email: {booking.email}")
+
+    # Instructor fee info
+    fee_lines = []
+    if booking.instructor_fee:
+        fee_lines.append(f"Instructor fee: £{booking.instructor_fee}")
+
+    if booking.allow_mileage_claim:
+        if booking.mileage_fee:
+            fee_lines.append(f"Mileage allowance: £{booking.mileage_fee}")
+        else:
+            fee_lines.append("Mileage allowed")
+
+    if booking.allow_accommodation:
+        fee_lines.append("Accommodation allowed")
+
+    if fee_lines:
+        desc_lines.append("Instructor claim info:")
+        for ln in fee_lines:
+            desc_lines.append(f" - {ln}")
+
+    event_description = "\\n".join(desc_lines) or "Training course"
+
+    # -----------------------------------------
+    # Build ICS file
+    # -----------------------------------------
     ics_lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//Unicorn Training//Course Calendar//EN",
+        "PRODID:-//Unicorn Training//Booking Calendar//EN"
     ]
 
-    # Event title
-    title = booking.course_type.name
+    for d in days:
+        start_dt = datetime.datetime.combine(
+            d.date,
+            d.start_time or datetime.time(9, 0)
+        )
 
-    # Location string
-    loc = f"{booking.training_location.address_line}, " \
-          f"{booking.training_location.town} {booking.training_location.postcode}"
+        end_dt = datetime.datetime.combine(
+            d.date,
+            d.end_time or datetime.time(17, 0)
+        )
 
-    # Description / notes
-    notes = booking.booking_notes or ""
+        location = (
+            f"{booking.training_location.address_line}, "
+            f"{booking.training_location.town}, "
+            f"{booking.training_location.postcode}"
+        )
 
-    for day in days:
-        start_dt = datetime.datetime.combine(day.date, day.start_time or datetime.time(9, 0))
-        end_dt   = datetime.datetime.combine(day.date, day.end_time   or datetime.time(17, 0))
-
-        start_dt = make_aware(start_dt)
-        end_dt   = make_aware(end_dt)
-
-        ics_lines.extend([
+        ics_lines += [
             "BEGIN:VEVENT",
-            f"UID:{day.day_code}@unicorntraining",
-            f"DTSTAMP:{start_dt.strftime('%Y%m%dT%H%M%S')}",
+            f"UID:{booking.pk}-{d.date}",
+            f"DTSTAMP:{now().strftime('%Y%m%dT%H%M%SZ')}",
             f"DTSTART:{start_dt.strftime('%Y%m%dT%H%M%S')}",
             f"DTEND:{end_dt.strftime('%Y%m%dT%H%M%S')}",
-            f"SUMMARY:{title}",
-            f"LOCATION:{loc}",
-            f"DESCRIPTION:{notes.replace('\\n', ' ')}",
-            "END:VEVENT",
-        ])
+            f"SUMMARY:{booking.course_type.name}",
+            f"DESCRIPTION:{event_description}",
+            f"LOCATION:{location}",
+            "END:VEVENT"
+        ]
 
     ics_lines.append("END:VCALENDAR")
 
-    ics_text = "\r\n".join(ics_lines)
+    ics_data = "\r\n".join(ics_lines)
 
-    response = HttpResponse(ics_text, content_type="text/calendar")
-    response["Content-Disposition"] = f'attachment; filename="{booking.course_reference}.ics"'
+    response = HttpResponse(ics_data, content_type="text/calendar")
+    response["Content-Disposition"] = (
+        f'attachment; filename="{booking.course_reference}.ics"'
+    )
     return response
-
 
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
