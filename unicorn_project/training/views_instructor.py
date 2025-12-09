@@ -1061,6 +1061,18 @@ def instructor_booking_detail(request, pk):
         "active_tab": request.GET.get("tab", ""),
     }
 
+    # -----------------------------------------
+    # FEEDBACK CONTEXT (FIX)
+    # -----------------------------------------
+    from .models import FeedbackResponse
+    from django.db.models import Avg
+
+    fb_qs = FeedbackResponse.objects.filter(booking=booking)
+
+    ctx["fb_qs"] = fb_qs
+    ctx["fb_count"] = fb_qs.count()
+    ctx["fb_avg"] = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
+
     try:
         ctx.update(_invoicing_tab_context(booking))
     except:
@@ -1189,26 +1201,6 @@ def instructor_booking_detail(request, pk):
 
     ctx["gcal_links"] = gcal_links
     ctx["notes_form"] = BookingNotesForm(instance=booking)
-
-    
-    # -------------------------------------------------------
-    # Feedback (FIXED: now uses booking FK directly)
-    # -------------------------------------------------------
-    feedback_responses = FeedbackResponse.objects.filter(booking=booking).order_by("-created_at")
-
-    total_responses = feedback_responses.count()
-    avg_overall = (
-        round(
-            sum([f.overall_rating for f in feedback_responses if f.overall_rating]) / total_responses,
-            1,
-        )
-        if total_responses and any(f.overall_rating for f in feedback_responses)
-        else None
-    )
-
-    ctx["feedback_responses"] = feedback_responses
-    ctx["total_feedback"] = total_responses
-    ctx["average_feedback"] = avg_overall
 
     return render(request, "instructor/booking_detail.html", ctx)
 
