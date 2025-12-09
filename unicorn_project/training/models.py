@@ -464,7 +464,9 @@ class FeedbackResponse(models.Model):
     booking = models.ForeignKey(
         Booking,
         on_delete=models.CASCADE,
-        related_name="feedback_responses"
+        related_name="feedback_responses",
+        null=True,
+        blank=True
     )
 
     course_type = models.ForeignKey(
