@@ -18,7 +18,7 @@ from import_export.admin import ImportExportModelAdmin
 from .models import (
     AccidentReport, Business, TrainingLocation, CourseType,
     Personnel, Booking, BookingDay, Attendance, CourseCompetency,
-    Invoice, InvoiceItem, MetaSetting,
+    FeedbackResponse, Invoice, InvoiceItem, MetaSetting,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
     LogoOverride
 )
@@ -536,3 +536,9 @@ admin.site.register(User, CustomUserAdmin)
 class MetaSettingAdmin(admin.ModelAdmin):
     list_display = ("key", "value")
     search_fields = ("key",)
+
+@admin.register(FeedbackResponse)
+class FeedbackResponseAdmin(admin.ModelAdmin):
+    list_display = ("date", "course_type", "instructor", "overall_rating", "wants_callback")
+    list_filter = ("course_type", "date", "wants_callback")
+    search_fields = ("contact_name", "contact_email", "comments")

@@ -449,21 +449,44 @@ class CompetencyAssessment(models.Model):
         ordering = ["register_id", "course_competency_id"]
 
 # --- Feedback ---------------------------------------------------------------
+import uuid
+from django.db import models
+from django.utils import timezone
+
+# ✅ Make sure these imports exist at the top of the same file
+from .models import Booking, CourseType, Personnel
+
+
 class FeedbackResponse(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    course_type = models.ForeignKey(CourseType, on_delete=models.PROTECT, related_name="feedback")
+
+    # ✅ THIS IS THE MISSING LINK THAT FIXES EVERYTHING
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="feedback_responses"
+    )
+
+    course_type = models.ForeignKey(
+        CourseType,
+        on_delete=models.PROTECT,
+        related_name="feedback"
+    )
+
     date = models.DateField(default=timezone.localdate)  # auto "today"
 
     # still called "instructor" but now links to Personnel
     instructor = models.ForeignKey(
-        "Personnel",
+        Personnel,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="feedback",
     )
 
+    # -------------------------
     # 1–5 ratings
+    # -------------------------
     prior_knowledge = models.PositiveSmallIntegerField(null=True, blank=True)
     post_knowledge  = models.PositiveSmallIntegerField(null=True, blank=True)
 
@@ -487,6 +510,9 @@ class FeedbackResponse(models.Model):
         null=True, blank=True, help_text="Delegate’s overall 1–5 rating"
     )
 
+    # -------------------------
+    # Free text + contact
+    # -------------------------
     comments = models.TextField(blank=True)
 
     wants_callback = models.BooleanField(default=False)
@@ -496,21 +522,27 @@ class FeedbackResponse(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # -------------------------
+    # Helpers
+    # -------------------------
     def overall_average(self):
         vals = [
             v for v in [
                 self.prior_knowledge, self.post_knowledge,
                 self.q_purpose_clear, self.q_personal_needs, self.q_exercises_useful,
-                self.q_structure, self.q_pace, self.q_content_clear, self.q_instructor_knowledge,
-                self.q_materials_quality, self.q_books_quality, self.q_venue_suitable,
+                self.q_structure, self.q_pace, self.q_content_clear,
+                self.q_instructor_knowledge,
+                self.q_materials_quality, self.q_books_quality,
+                self.q_venue_suitable,
                 self.q_benefit_at_work, self.q_benefit_outside
             ] if v is not None
         ]
-        return round(sum(vals)/len(vals), 2) if vals else None
+        return round(sum(vals) / len(vals), 2) if vals else None
 
     def __str__(self):
         ref = self.course_type.code if self.course_type_id else "Course"
         return f"Feedback {ref} {self.date} ({self.id})"
+
 
 
 class Invoice(models.Model):
