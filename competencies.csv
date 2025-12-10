@@ -1,0 +1,45 @@
+id,Name,code,name,description,sort_order,is_active
+20,,EFAaW,Modules 1 & 2,,0,1
+1,,FAAW,Modules 1 & 2,,0,1
+30,,FAAWR,Role of First Aider,,0,1
+21,,EFAaW,DRSABCD,,1,1
+31,,FAAWR,Incident Management,,1,1
+22,,EFAaW,CPR,,2,1
+32,,FAAWR,DRSABCD,,2,1
+23,,EFAaW,AED,,3,1
+33,,FAAWR,CPR,,3,1
+34,,FAAWR,AED,,4,1
+24,,EFAaW,Recovery position,,4,1
+25,,EFAaW,Choking,,5,1
+35,,FAAWR,"History, Secondary Survey and Recovery Position",,5,1
+36,,FAAWR,Choking,,6,1
+26,,EFAaW,Shock,,6,1
+27,,EFAaW,Bleeding,,7,1
+37,,FAAWR,Shock,,7,1
+38,,FAAWR,"Fractures, Sprains, Strains and Spinal Injuries",,8,1
+28,,EFAaW,Seizure,,8,1
+29,,EFAaW,Stroke,,9,1
+39,,FAAWR,Wounds and Bleeding,,9,1
+40,,FAAWR,"Burns, Scalds and Minor Injuries",,10,1
+2,,FAAW,DRSABCD,,10,1
+41,,FAAWR,Other Injuries and Illnesses,,11,1
+3,,FAAW,CPR,,20,1
+4,,FAAW,AED,,30,1
+5,,FAAW,Secondary survey,,40,1
+6,,FAAW,Recovery position,,50,1
+7,,FAAW,Choking,,60,1
+8,,FAAW,Asthma,,70,1
+45,,FAAW,Exam 1,,80,1
+9,,FAAW,Bandaging / wounds,,90,1
+10,,FAAW,Shock,,100,1
+11,,FAAW,Seizure,,110,1
+12,,FAAW,Minor injuries / burns,,120,1
+13,,FAAW,"Fractures, dislocations & head injuries",,130,1
+14,,FAAW,Spinal injuries,,140,1
+46,,FAAW,Exam 2,,150,1
+15,,FAAW,Chest injuries,,160,1
+16,,FAAW,Stroke,,170,1
+17,,FAAW,Diabetic emergencies,,180,1
+18,,FAAW,Poisoning,,190,1
+19,,FAAW,Other injuries,,200,1
+47,,FAAW,Exam 3,,210,1
