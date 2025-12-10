@@ -210,6 +210,12 @@ class Booking(models.Model):
         default="scheduled",
         db_index=True
     )
+    
+    last_notification_type = models.CharField(
+    max_length=32,
+    default="system",
+    blank=True
+)
 
     cancel_reason = models.TextField(blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)

@@ -1089,7 +1089,41 @@ def instructor_booking_detail(request, pk):
 
         action = (request.POST.get("action") or "").strip().lower()
 
+        # ------------------------------------------------------
+        # PRECISE MAP LOCATION UPDATE (Instructor)
+        # ------------------------------------------------------
+        if action == "update_precise_location":
+            if is_locked:
+                return HttpResponseForbidden("Course is locked.")
 
+            lat = request.POST.get("precise_lat")
+            lng = request.POST.get("precise_lng")
+
+            if lat and lng:
+                booking.precise_lat = lat
+                booking.precise_lng = lng
+                booking.save(update_fields=["precise_lat", "precise_lng"])
+                messages.success(request, "Precise location updated.")
+            else:
+                messages.error(request, "Invalid map coordinates received.")
+
+            return redirect("instructor_booking_detail", pk=pk)
+
+        # ------------------------------------------------------
+        # RESET PRECISE LOCATION BACK TO ADMIN VALUE
+        # ------------------------------------------------------
+        if action == "reset_precise_location":
+            if is_locked:
+                return HttpResponseForbidden("Course is locked.")
+
+            loc = booking.training_location
+            booking.precise_lat = loc.precise_lat
+            booking.precise_lng = loc.precise_lng
+            booking.save(update_fields=["precise_lat", "precise_lng"])
+
+            messages.success(request, "Precise location reset to admin-defined point.")
+            return redirect("instructor_booking_detail", pk=pk)
+        
         # NOTES SAVE
         if action == "save_notes":
             form = BookingNotesForm(request.POST, instance=booking)

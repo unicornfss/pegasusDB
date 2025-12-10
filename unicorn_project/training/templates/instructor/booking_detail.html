@@ -62,6 +62,40 @@
             View in Google Maps
           </a>
         {% endwith %}
+      
+      {# === Precise location display === #}
+      {% if booking.precise_lat and booking.precise_lng %}
+        <div class="small text-success mt-2">
+          Precise location set:
+          <strong>{{ booking.precise_lat }}, {{ booking.precise_lng }}</strong>
+        </div>
+      {% else %}
+        <div class="small text-muted mt-2">
+          No precise map location set.
+        </div>
+      {% endif %}
+
+      {% if not is_locked %}
+        <div class="mt-2 d-flex gap-2">
+          <button type="button"
+            class="btn btn-outline-success btn-sm"
+            data-bs-toggle="modal"
+            data-bs-target="#MapPickerModal">
+            <i class="bi bi-geo-alt-fill"></i> Adjust precise location
+          </button>
+
+          {% if booking.precise_lat and booking.precise_lng %}
+            <form method="post" style="display:inline;">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="reset_precise_location">
+              <button class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-arrow-counterclockwise"></i> Reset to admin point
+              </button>
+            </form>
+          {% endif %}
+        </div>
+      {% endif %}
+
 
         {% if gcal_links %}
           <div class="mt-2">
@@ -144,6 +178,11 @@
       {# RIGHT COLUMN (NOTES) ---------------------------------------------- #}
       <div class="col-lg-4">
         <form method="post" class="h-100 d-flex flex-column">
+        <input type="hidden" name="action" id="id_precise_action" value="">
+        <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.precise_lat }}">
+        <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.precise_lng }}">
+
+
           {% csrf_token %}
           <input type="hidden" name="action" value="save_notes">
           <div class="mb-2 text-muted small">Course notes</div>
@@ -501,6 +540,67 @@
 </div>
 
 <a href="{% url 'instructor_bookings' %}" class="btn btn-secondary">Back to My bookings</a>
+
+{# === Map Picker Modal (copied from admin view) === #}
+<div class="modal fade" id="MapPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Select Precise Map Location</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body">
+        <div id="map" style="height: 500px; width: 100%; border: 1px solid #ccc;"></div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <button type="button" id="save-map-location" class="btn btn-primary">Save location</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let map, marker;
+
+function initMapPicker() {
+  const initialLat = parseFloat('{{ booking.precise_lat|default:"" }}') || 52.5;
+  const initialLng = parseFloat('{{ booking.precise_lng|default:"" }}') || -2.1;
+
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: { lat: initialLat, lng: initialLng },
+    zoom: 14,
+  });
+
+  marker = new google.maps.Marker({
+    position: { lat: initialLat, lng: initialLng },
+    map: map,
+    draggable: true,
+  });
+
+  map.addListener("click", (e) => {
+    marker.setPosition(e.latLng);
+  });
+
+  document.getElementById("save-map-location").onclick = function () {
+    const pos = marker.getPosition();
+    document.getElementById("id_precise_lat").value = pos.lat();
+    document.getElementById("id_precise_lng").value = pos.lng();
+    document.getElementById("id_precise_action").value = "update_precise_location";
+    document.getElementById("id_booking_notes").closest("form").submit();
+
+  };
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const modal = document.getElementById("MapPickerModal");
+  modal.addEventListener("shown.bs.modal", initMapPicker);
+});
+</script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}"></script>
 
 
 <!-- END new script -->

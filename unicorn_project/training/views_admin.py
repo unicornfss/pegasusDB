@@ -762,7 +762,14 @@ def booking_form(request, pk=None):
         form = BookingForm(request.POST, instance=obj)
         if form.is_valid():
             was_new = obj is None
-            booking = form.save()
+            booking = form.save(commit=False)
+
+            # SAFETY: ensure DB NOT NULL field is always satisfied
+            if hasattr(booking, "last_notification_type") and not booking.last_notification_type:
+                booking.last_notification_type = "system"
+
+            booking.save()
+
 
             inv_status = (request.POST.get("invoice_status_admin") or "").strip().lower()
             admin_comment = (request.POST.get("invoice_admin_comment") or "").strip()
