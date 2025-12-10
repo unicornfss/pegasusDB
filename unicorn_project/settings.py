@@ -126,8 +126,8 @@ SMTP2GO_API_KEY = os.getenv("SMTP2GO_API_KEY", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Unicorn Admin System <onboarding@resend.dev>")
 
 # Destinations
-DEV_CATCH_ALL_EMAIL = os.getenv("DEV_CATCH_ALL_EMAIL", "you@example.com")
-ADMIN_INBOX_EMAIL = os.getenv("ADMIN_INBOX_EMAIL", "info@adminforge.co.uk")
+DEV_CATCH_ALL_EMAIL = os.getenv("DEV_CATCH_ALL_EMAIL", "unicornfss@gmail.com")
+ADMIN_INBOX_EMAIL = os.getenv("ADMIN_INBOX_EMAIL", "info@unicornsafety.co.uk")
 
 # Email backend selection
 if os.getenv("EMAIL_PROVIDER", "").lower() == "resend":

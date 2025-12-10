@@ -431,108 +431,68 @@
 
 
   <!-- Pane: Course closure -->
-  <div class="tab-pane fade" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0"
-       data-registers-ok="{{ registers_all_days|yesno:'true,false' }}"
-       data-assess-ok="{{ assessments_all_complete|yesno:'true,false' }}">
+<div class="tab-pane fade" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0">
 
-    <!-- Registers status -->
-    <div class="row g-3 align-items-center mb-3">
-      <div class="col-auto">
-        <div class="text-muted small">Register status</div>
-        <span id="closure-register-status"
-              class="badge {% if registers_all_days %}bg-success{% elif registers_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
-          {% if registers_all_days %}OK{% elif registers_manual %}Manual submission(s){% else %}Not complete{% endif %}
-        </span>
-      </div>
-      <div class="col-auto">
-        <div class="form-check mt-3">
-          <input class="form-check-input" type="checkbox" id="closure-register-manual"
-                 {% if registers_all_days %}disabled{% endif %}
-                 {% if registers_manual and not registers_all_days %}checked{% endif %}>
-          <label class="form-check-label" for="closure-register-manual">
-            Manual submission to follow
-          </label>
-        </div>
-      </div>
+  {% if not is_locked %}
+  <form method="post" class="mt-3" id="closure-form">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="autosave_closure">
+
+    <!-- Registers -->
+    <div class="mb-3">
+      <label class="form-label"><strong>Course registers</strong></label>
+      <select class="form-select" name="course_registers_status" required>
+        <option value="">-- Select --</option>
+        <option value="completed" {% if booking.course_registers_status == "completed" %}selected{% endif %}>
+          Complete
+        </option>
+        <option value="send_later" {% if booking.course_registers_status == "send_later" %}selected{% endif %}>
+          Will send separately
+        </option>
+      </select>
     </div>
 
-    <!-- Assessments status -->
-    <div class="row g-3 align-items-center">
-      <div class="col-auto">
-        <div class="text-muted small">Assessments status</div>
-        <span id="closure-assess-status"
-              class="badge {% if assessments_all_complete %}bg-success{% elif assessments_manual %}bg-primary{% else %}bg-warning text-dark{% endif %}">
-          {% if assessments_all_complete %}OK{% elif assessments_manual %}Manual submission(s){% else %}Delegate(s) still &quot;Pending&quot; on matrix{% endif %}
-        </span>
-      </div>
-      <div class="col-auto">
-        <div class="form-check mt-3">
-          <input class="form-check-input" type="checkbox" id="closure-assess-manual"
-                 {% if assessments_all_complete %}disabled{% endif %}
-                 {% if assessments_manual and not assessments_all_complete %}checked{% endif %}>
-          <label class="form-check-label" for="closure-assess-manual">
-            Manual submission to follow
-          </label>
-        </div>
-      </div>
+    <!-- Assessments -->
+    <div class="mb-3">
+      <label class="form-label"><strong>Assessment matrix</strong></label>
+      <select class="form-select" name="assessment_matrix_status" required>
+        <option value="">-- Select --</option>
+        <option value="completed" {% if booking.assessment_matrix_status == "completed" %}selected{% endif %}>
+          Completed
+        </option>
+        <option value="send_later" {% if booking.assessment_matrix_status == "send_later" %}selected{% endif %}>
+          Will send separately
+        </option>
+      </select>
     </div>
 
-        {% if not is_locked %}
-      <form id="close-course-form" method="post" class="mt-3">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="close_course">
-        <!-- Hidden fields capture current checkbox states for persistence -->
-        <input type="hidden" id="hf-reg-manual" name="reg_manual" value="{{ registers_manual|yesno:'1,0' }}">
-        <input type="hidden" id="hf-assess-manual" name="assess_manual" value="{{ assessments_manual|yesno:'1,0' }}">
-
-        <div class="d-flex flex-wrap gap-2">
-          <button type="submit" id="close-course-btn" class="btn btn-danger"
-                  {% if not can_close_course %}style="display:none"{% endif %}>
-            <i class="bi bi-check2-circle"></i> Close course and prepare invoice
+        <!-- Close Button -->
+        {% if can_close_course %}
+          <button type="submit" class="btn btn-danger" onclick="
+            document.querySelector('#closure-form input[name=action]').value = 'final_close_course';">
+            ✅ Close course & send documents
           </button>
+        {% endif %}
 
-          <!-- Certificates preview (always available to instructor) -->
-          <a href="{% url 'instructor_booking_certificates' booking.id %}"
-             class="btn btn-secondary"
-             target="_blank" rel="noopener">
-            <i class="bi bi-filetype-pdf"></i> View certificates PDF
-          </a>
+        <!-- ✅ VIEW CERTIFICATES BUTTON (ALWAYS AVAILABLE) -->
+        <a
+          href="{% url 'instructor_booking_certificates' booking.pk %}"
+          target="_blank"
+          class="btn btn-secondary ms-2"
+        >
+          📄 View Certificates
+        </a>
 
-          <!-- Preview while course can still be closed -->
-          <a href="{% url 'instructor_course_summary_by_ref_pdf' booking.course_reference %}"
-             class="btn btn-outline-danger"
-             target="_blank" rel="noopener">
-            <i class="bi bi-filetype-pdf"></i> Preview Course Summary PDF
-          </a>
-        </div>
-      </form>
-    {% else %}
-      <div class="mt-3 alert alert-info d-flex justify-content-between align-items-center flex-wrap">
-        <span>Course already closed — proceed to the <strong>Invoicing</strong> tab.</span>
+  </form>
 
-        <div class="mt-2 mt-sm-0 d-flex gap-2">
-          <!-- Certificates still viewable after closure -->
-          <a href="{% url 'instructor_booking_certificates' booking.id %}"
-             class="btn btn-secondary btn-sm"
-             target="_blank" rel="noopener">
-            <i class="bi bi-filetype-pdf"></i> View certificates PDF
-          </a>
+  {% else %}
+    <div class="alert alert-success mt-3">
+      ✅ Course has already been closed.
+    </div>
+  {% endif %}
 
-          <!-- Course summary still viewable after closure -->
-          <a href="{% url 'instructor_course_summary_by_ref_pdf' booking.course_reference %}"
-             class="btn btn-outline-danger btn-sm"
-             target="_blank" rel="noopener">
-            <i class="bi bi-filetype-pdf"></i> View Course Summary PDF
-          </a>
-        </div>
-      </div>
-    {% endif %}
+</div>
 
-
-
-
-
-  </div>
 
    <!-- Pane: Invoicing -->
   <div class="tab-pane fade" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
@@ -542,53 +502,34 @@
 
 <a href="{% url 'instructor_bookings' %}" class="btn btn-secondary">Back to My bookings</a>
 
-<!-- NEW live button / manual sync script -->
+
+<!-- END new script -->
 <script>
-document.addEventListener('DOMContentLoaded', function () {
-  const pane        = document.getElementById('closure-pane');
-  const form        = document.getElementById('close-course-form');
-  const btn         = document.getElementById('close-course-btn');
+document.addEventListener("DOMContentLoaded", function () {
+  const regSelect = document.querySelector('select[name="course_registers_status"]');
+  const assessSelect = document.querySelector('select[name="assessment_matrix_status"]');
+  const form = document.getElementById("closure-form");
 
-  const regManual   = document.getElementById('closure-register-manual');
-  const assessManual= document.getElementById('closure-assess-manual');
-
-  const hfReg       = document.getElementById('hf-reg-manual');
-  const hfAssess    = document.getElementById('hf-assess-manual');
-
-  function syncHidden() {
-    if (hfReg && regManual)    hfReg.value    = regManual.checked ? '1' : '0';
-    if (hfAssess && assessManual) hfAssess.value = assessManual.checked ? '1' : '0';
+  function autoSubmit() {
+    const activeTab = document.querySelector(".nav-link.active");
+    if (activeTab) {
+      const target = activeTab.getAttribute("data-bs-target");
+      if (target) {
+        const hidden = document.createElement("input");
+        hidden.type = "hidden";
+        hidden.name = "active_tab";
+        hidden.value = target.replace("#", "");
+        form.appendChild(hidden);
+      }
+    }
+    form.submit();
   }
 
-  function canCloseNow() {
-    if (!pane) return false;
-    const registersOk  = (pane.dataset.registersOk === 'true') || (regManual && regManual.checked);
-    const assessOk     = (pane.dataset.assessOk === 'true')     || (assessManual && assessManual.checked);
-    return registersOk && assessOk;
-  }
-
-  function refreshButton() {
-    if (!btn) return;
-    btn.style.display = canCloseNow() ? '' : 'none';
-  }
-
-  [regManual, assessManual].forEach(el => {
-    if (!el) return;
-    el.addEventListener('change', () => { syncHidden(); refreshButton(); });
-  });
-
-  if (pane && 'MutationObserver' in window) {
-    new MutationObserver(refreshButton).observe(pane, {
-      attributes: true,
-      attributeFilter: ['data-assess-ok','data-registers-ok']
-    });
-  }
-
-  syncHidden();
-  refreshButton();
+  regSelect.addEventListener("change", autoSubmit);
+  assessSelect.addEventListener("change", autoSubmit);
 });
 </script>
-<!-- END new script -->
+
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -891,6 +832,31 @@ document.addEventListener('DOMContentLoaded', function() {
     border-color: #1669C1;
     color: #fff;
   }
+</style>
+<style>
+/* Remove ugly focus outline after auto-submit */
+#closure-form:focus,
+#closure-form *:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+</style>
+
+<style>
+/* ✅ KILL ALL AUTO-SUBMIT FOCUS RINGS & BORDERS */
+#closure-form,
+#closure-form * {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+#closure-form:focus,
+#closure-form *:focus,
+#closure-form *:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: #dee2e6 !important;  /* Bootstrap normal border */
+}
 </style>
 
 {% endblock %}

@@ -870,7 +870,225 @@ def instructor_booking_detail(request, pk):
     #                           POST
     # ------------------------------------------------------------------
     if request.method == "POST":
+
+        # ✅ AUTOSAVE course-closure dropdowns (no locking / no emails yet)
+        if request.POST.get("action") == "autosave_closure":
+
+            booking.course_registers_status = request.POST.get("course_registers_status") or None
+            booking.assessment_matrix_status = request.POST.get("assessment_matrix_status") or None
+
+            booking.save(update_fields=[
+                "course_registers_status",
+                "assessment_matrix_status",
+            ])
+
+            return redirect(f"{request.path}#closure-pane")
+
+
+        # ✅ FINAL CLOSE — STEP 3 + STEP 4 (BUILD PDFs — NO EMAILS YET)
+        if request.POST.get("action") == "final_close_course":
+
+            print("🔥 FINAL CLOSE CLICKED")
+
+            reg = booking.course_registers_status
+            ass = booking.assessment_matrix_status
+
+            print("REGISTER:", reg)
+            print("ASSESSMENT:", ass)
+
+            # ✅ Safety check
+            if not (
+                reg in ["completed", "send_later"]
+                and ass in ["completed", "send_later"]
+                and booking.status != "completed"
+            ):
+                print("⛔ BLOCKED: Closure conditions not met")
+                messages.error(request, "Course cannot be closed yet.")
+                return redirect(f"{request.path}#closure-pane")
+
+            # ✅ STEP 4 — BUILD PDFs IN MEMORY (NO EMAILS, NO SAVING)
+            print("📄 Generating closure PDFs...")
+            pdf_files = []
+
+            # 1️⃣ Assessment Matrix PDF
+            try:
+                from django.test import RequestFactory
+                rf = RequestFactory()
+                fake_request = rf.get("/")
+                fake_request.user = request.user
+
+                assessment_response = instructor_assessment_pdf(
+                    fake_request, booking.id
+                )
+
+                assessment_pdf = b"".join(assessment_response)
+                assessment_filename = f"assessment-matrix-{booking.course_reference}.pdf"
+
+                pdf_files.append((assessment_filename, assessment_pdf))
+                print("✅ Assessment Matrix PDF generated")
+
+            except Exception as e:
+                print("⚠️ Assessment Matrix PDF skipped:", e)
+
+
+            # 2️⃣ Registers PDFs
+            try:
+                for d in BookingDay.objects.filter(booking=booking):
+                    file_bytes, filename = _get_register_pdf_bytes_via_existing_view(request, d.pk)
+                    pdf_files.append((filename, file_bytes))
+                print("✅ Registers PDFs generated")
+            except Exception as e:
+                print("⚠️ Registers PDF skipped:", e)
+
+            # 3️⃣ Certificates PDF ✅ SAFE FOR EMAIL
+            try:
+                cert_result = build_certificates_pdf_for_booking(booking)
+
+                # ✅ FORCE CORRECT ORDER NO MATTER WHAT THE FUNCTION RETURNS
+                if isinstance(cert_result, tuple) and len(cert_result) == 2:
+
+                    # If returned as (bytes, filename)
+                    if isinstance(cert_result[0], (bytes, bytearray)):
+                        cert_bytes = cert_result[0]
+                        cert_filename = cert_result[1]
+
+                    # If returned as (filename, bytes)
+                    else:
+                        cert_filename = cert_result[0]
+                        cert_bytes = cert_result[1]
+
+                else:
+                    raise ValueError("Certificate generator returned invalid format")
+
+                pdf_files.append((cert_filename, cert_bytes))
+                print("✅ Certificates PDF generated")
+
+            except Exception as e:
+                print("⚠️ Certificates PDF skipped:", e)
+
+            # 4️⃣ Feedback Summary PDF (STEP 4B)
+            try:
+                from django.test import RequestFactory
+                rf = RequestFactory()
+                fake_request = rf.get("/")
+                fake_request.user = request.user
+
+                feedback_response = instructor_feedback_pdf_summary(
+                    fake_request, booking.id
+                )
+
+                feedback_pdf = b"".join(feedback_response)
+                feedback_filename = f"feedback-summary-{booking.course_reference}.pdf"
+
+                pdf_files.append((feedback_filename, feedback_pdf))
+                print("✅ Feedback Summary PDF generated")
+
+            except Exception as e:
+                print(f"⚠️ Feedback Summary PDF skipped: {e}")
+
+            # -----------------------------------------------------------
+            # STEP 5 — SEND COURSE CLOSURE EMAIL (NO INVOICE ATTACHMENTS)
+            # -----------------------------------------------------------
+            try:
+                from django.core.mail import EmailMessage
+                import mimetypes
+
+                admin_email = getattr(settings, "ADMIN_INBOX_EMAIL", "")
+                instructor_email = booking.instructor.email or ""
+                catch_all = getattr(settings, "DEV_CATCH_ALL_EMAIL", "")
+
+                subject = f"Course closure documents — {booking.course_type.name} ({booking.course_reference})"
+
+                if settings.DEBUG:
+                    # DEV MODE — send to catch-all only
+                    to_recipients = [catch_all]
+                    effective_subject = (
+                        f"[DEV] {subject}  "
+                        f"(Would send to: {admin_email}, {instructor_email})"
+                    )
+                    cc_recipients = []
+                else:
+                    # PROD MODE — real recipients
+                    to_recipients = [admin_email] if admin_email else []
+                    cc_recipients = [instructor_email] if instructor_email else []
+                    effective_subject = subject
+
+                body = (
+                    "Please find attached to this email documents relating to the below course.\n\n"
+                    f"Course: {booking.course_type.name}\n"
+                    f"Business: {booking.business.name}\n"
+                    f"Reference: {booking.course_reference}\n"
+                    f"Closed on: {booking.date_completed.strftime('%Y-%m-%d %H:%M')}\n\n"
+                    "Attached documents:\n"
+                    " • Assessment Matrix\n"
+                    " • Registers\n"
+                    " • Certificates\n"
+                    " • Feedback Summary\n\n"
+                    "----------------------------------------\n"
+                    f"Instructor: {booking.instructor.name}\n"
+                    f"Email: {booking.instructor.email}\n"
+                )
+
+                # ✅ Force UTF-8 safe subject + body (ONLY if they are strings)
+                if isinstance(effective_subject, str):
+                    effective_subject = effective_subject.encode("utf-8", "ignore").decode("utf-8")
+
+                if isinstance(body, str):
+                    body = body.encode("utf-8", "ignore").decode("utf-8")
+
+                email = EmailMessage(
+                    subject=effective_subject,
+                    body=body,
+                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                    to=to_recipients,
+                    cc=cc_recipients,
+                )
+
+                # ✅ CRITICAL: enforce UTF-8
+                email.encoding = "utf-8"
+
+                # ✅ Attach PDFs safely
+                for filename, content in pdf_files:
+
+                    # ✅ SAFETY: unwrap nested tuples if any PDF helper returned (bytes, filename)
+                    if isinstance(content, tuple):
+                        content = content[0]
+
+                    # ✅ SAFETY: normalize filename to UTF-8 clean string
+                    if isinstance(filename, bytes):
+                        safe_filename = filename.decode("utf-8", "ignore")
+                    else:
+                        safe_filename = str(filename).encode("utf-8", "ignore").decode("utf-8")
+
+                    mime = mimetypes.guess_type(safe_filename)[0] or "application/pdf"
+                    email.attach(safe_filename, content, mime)
+
+
+                email.send(fail_silently=False)
+                print("📧 Closure email sent successfully")
+
+            except Exception as e:
+                print("❌ Closure email failed:", e)
+                messages.error(request, f"Course closed, but email failed: {e}")
+
+            print(f"📎 TOTAL PDFs GENERATED: {len(pdf_files)}")
+
+            # ✅ LOCK THE COURSE
+            booking.status = "completed"
+            booking.date_completed = now()
+            booking.save(update_fields=["status", "date_completed"])
+
+            print("✅ COURSE SUCCESSFULLY CLOSED")
+
+            messages.success(request, "✅ Course closed and documents emailed to admin and instructor.")
+            return redirect(f"{request.path}#closure-pane")
+
+        # -------------------------------
+        # existing logic continues here
+        # -------------------------------
+
         action = (request.POST.get("action") or "").strip().lower()
+
 
         # NOTES SAVE
         if action == "save_notes":
@@ -1058,8 +1276,31 @@ def instructor_booking_detail(request, pk):
         "booking": booking,
         "invoice": inv,
         "is_locked": is_locked,
-        "active_tab": request.GET.get("tab", ""),
+        "active_tab": request.POST.get("active_tab") or request.GET.get("tab", ""),
     }
+
+    # ✅ ENABLE CLOSE BUTTON ONLY WHEN BOTH CONFIRMED
+    reg = booking.course_registers_status
+    ass = booking.assessment_matrix_status
+    status = booking.status
+
+    print("🔎 CLOSURE CHECK:")
+    print("REGISTER:", repr(reg))
+    print("ASSESSMENT:", repr(ass))
+    print("BOOKING STATUS:", repr(status))
+
+    can_close_course = (
+        reg in ["completed", "send_later"]
+        and ass in ["completed", "send_later"]
+        and status != "completed"
+    )
+
+
+    print("✅ CAN CLOSE:", can_close_course)
+
+    ctx["can_close_course"] = can_close_course
+
+
 
     # -----------------------------------------
     # FEEDBACK CONTEXT (FIX)

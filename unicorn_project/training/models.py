@@ -167,7 +167,9 @@ class Booking(models.Model):
     business          = models.ForeignKey(Business,         on_delete=models.CASCADE, related_name="bookings")
     training_location = models.ForeignKey(TrainingLocation, on_delete=models.CASCADE, related_name="bookings")
     course_type       = models.ForeignKey(CourseType,       on_delete=models.PROTECT, related_name="bookings")
-    instructor        = models.ForeignKey("Personnel",      on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings")
+    instructor        = models.ForeignKey(
+        "Personnel", on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings"
+    )
 
     course_date = models.DateField()
     start_time  = models.TimeField(null=True, blank=True, default=None)
@@ -191,7 +193,9 @@ class Booking(models.Model):
     telephone      = models.CharField(max_length=50, blank=True)
     email          = models.EmailField(blank=True)
 
-    # models.py  (inside Booking)
+    # -------------------------------
+    # STATUS
+    # -------------------------------
     STATUS_CHOICES = [
         ("scheduled", "Scheduled"),
         ("in_progress", "In progress"),
@@ -199,20 +203,58 @@ class Booking(models.Model):
         ("completed", "Completed"),
         ("cancelled", "Cancelled"),
     ]
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES,
-                            default="scheduled", db_index=True)
+
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="scheduled",
+        db_index=True
+    )
 
     cancel_reason = models.TextField(blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
 
-    # optional convenience
+    # -------------------------------
+    # ✅ NEW COURSE CLOSURE DROPDOWNS
+    # -------------------------------
+    COURSE_REG_CHOICES = [
+        ("complete", "Complete"),
+        ("separate", "Will send separately"),
+    ]
+
+    MATRIX_CHOICES = [
+        ("completed", "Completed"),
+        ("separate", "Will send separately"),
+    ]
+
+    course_registers_status = models.CharField(
+        max_length=20,
+        choices=COURSE_REG_CHOICES,
+        null=True,
+        blank=True,
+    )
+
+    assessment_matrix_status = models.CharField(
+        max_length=20,
+        choices=MATRIX_CHOICES,
+        null=True,
+        blank=True,
+    )
+
+    # ✅ Final closure timestamp
+    date_completed = models.DateTimeField(null=True, blank=True)
+
+    # -------------------------------
+    # MISC
+    # -------------------------------
+    comments   = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    # -------------------------------
+    # HELPERS
+    # -------------------------------
     def is_cancelled(self):
         return self.status == "cancelled"
-
-    comments      = models.TextField(blank=True)
-    closure_register_manual = models.BooleanField(default=False)
-    closure_assess_manual   = models.BooleanField(default=False)
-    created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return self.course_reference or "(pending)"
