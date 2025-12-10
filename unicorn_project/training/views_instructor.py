@@ -1088,9 +1088,10 @@ def instructor_booking_detail(request, pk):
         # -------------------------------
 
         action = (request.POST.get("action") or "").strip().lower()
+        print("DEBUG ACTION RECEIVED:", action)
 
         # ------------------------------------------------------
-        # PRECISE MAP LOCATION UPDATE (Instructor)
+        # PRECISE MAP LOCATION UPDATE (Instructor) ✅ WITH BASELINE
         # ------------------------------------------------------
         if action == "update_precise_location":
             if is_locked:
@@ -1102,37 +1103,57 @@ def instructor_booking_detail(request, pk):
             if lat and lng:
                 booking.precise_lat = lat
                 booking.precise_lng = lng
-                booking.save(update_fields=["precise_lat", "precise_lng"])
+
+                # ✅ AUTO-STORE ADMIN BASELINE IF IT DOESN'T EXIST YET
+                if not booking.admin_precise_lat and not booking.admin_precise_lng:
+                    booking.admin_precise_lat = lat
+                    booking.admin_precise_lng = lng
+
+                booking.save(update_fields=[
+                    "precise_lat",
+                    "precise_lng",
+                    "admin_precise_lat",
+                    "admin_precise_lng",
+                ])
+
                 messages.success(request, "Precise location updated.")
             else:
                 messages.error(request, "Invalid map coordinates received.")
 
             return redirect("instructor_booking_detail", pk=pk)
 
+
         # ------------------------------------------------------
-        # RESET PRECISE LOCATION BACK TO ADMIN VALUE
+        # RESET PRECISE LOCATION BACK TO ADMIN VALUE ✅ FIXED
         # ------------------------------------------------------
-        if action == "reset_precise_location":
+        elif action == "reset_precise_location":
             if is_locked:
                 return HttpResponseForbidden("Course is locked.")
 
-            loc = booking.training_location
-            booking.precise_lat = loc.precise_lat
-            booking.precise_lng = loc.precise_lng
-            booking.save(update_fields=["precise_lat", "precise_lng"])
+            if booking.admin_precise_lat and booking.admin_precise_lng:
+                booking.precise_lat = booking.admin_precise_lat
+                booking.precise_lng = booking.admin_precise_lng
+                booking.save(update_fields=["precise_lat", "precise_lng"])
+                messages.success(request, "Precise location reset to admin-defined point.")
+            else:
+                messages.warning(request, "No admin baseline location exists to reset to.")
 
-            messages.success(request, "Precise location reset to admin-defined point.")
             return redirect("instructor_booking_detail", pk=pk)
-        
+
+
+        # ------------------------------------------------------
         # NOTES SAVE
-        if action == "save_notes":
+        # ------------------------------------------------------
+        elif action == "save_notes":
             form = BookingNotesForm(request.POST, instance=booking)
             if form.is_valid():
                 form.save()
                 messages.success(request, "Notes saved.")
             else:
                 messages.error(request, "Could not save notes.")
-            return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': pk})}")
+
+            return redirect(reverse("instructor_booking_detail", kwargs={"pk": pk}))
+
 
         # ------------------------------------------------------------------
         # SAVE DRAFT OR SEND ADMIN

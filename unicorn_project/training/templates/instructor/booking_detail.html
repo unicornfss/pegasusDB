@@ -66,10 +66,17 @@
       {# === Precise location display === #}
       {% if booking.precise_lat and booking.precise_lng %}
         <div class="small text-success mt-2">
-          Precise location set:
-          <strong>{{ booking.precise_lat }}, {{ booking.precise_lng }}</strong>
+          <a
+            href="https://www.google.com/maps/dir/?api=1&destination={{ booking.precise_lat }},{{ booking.precise_lng }}"
+            target="_blank"
+            rel="noopener"
+            class="text-success text-decoration-none"
+          >
+            📍 <strong>Precise location:</strong> {{ booking.precise_lat }}, {{ booking.precise_lng }}
+          </a>
         </div>
       {% else %}
+
         <div class="small text-muted mt-2">
           No precise map location set.
         </div>
@@ -81,7 +88,7 @@
             class="btn btn-outline-success btn-sm"
             data-bs-toggle="modal"
             data-bs-target="#MapPickerModal">
-            <i class="bi bi-geo-alt-fill"></i> Adjust precise location
+            <i class="bi bi-geo-alt-fill"></i> View / adjust precise location
           </button>
 
           {% if booking.precise_lat and booking.precise_lng %}
@@ -177,16 +184,14 @@
 
       {# RIGHT COLUMN (NOTES) ---------------------------------------------- #}
       <div class="col-lg-4">
-        <form method="post" class="h-100 d-flex flex-column">
+        <form id="booking-notes-form" method="post" class="h-100 d-flex flex-column">
+        {% csrf_token %}
+
         <input type="hidden" name="action" id="id_precise_action" value="">
         <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.precise_lat }}">
         <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.precise_lng }}">
 
-
-          {% csrf_token %}
-          <input type="hidden" name="action" value="save_notes">
           <div class="mb-2 text-muted small">Course notes</div>
-
           {% if is_locked %}
             {{ notes_form.booking_notes }}
             <script>
@@ -203,9 +208,11 @@
           {% endfor %}
           {% if not is_locked %}
             <div class="mt-2">
-              <button class="btn btn-primary btn-sm">
-                <i class="bi bi-check2"></i> Save notes
-              </button>
+              <button class="btn btn-primary btn-sm"
+                    onclick="document.getElementById('id_precise_action').value='save_notes'">
+              <i class="bi bi-check2"></i> Save notes
+            </button>
+
             </div>
           {% endif %}
         </form>
@@ -588,9 +595,9 @@ function initMapPicker() {
     const pos = marker.getPosition();
     document.getElementById("id_precise_lat").value = pos.lat();
     document.getElementById("id_precise_lng").value = pos.lng();
+    const form = document.getElementById("booking-notes-form");
     document.getElementById("id_precise_action").value = "update_precise_location";
-    document.getElementById("id_booking_notes").closest("form").submit();
-
+    form.submit();
   };
 }
 
