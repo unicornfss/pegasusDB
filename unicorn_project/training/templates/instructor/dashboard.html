@@ -11,56 +11,167 @@
         <h2 class="mb-0">Instructor Dashboard</h2>
     </div>
 
+    <div class="row mb-4">
 
-    <!-- TODAY'S COURSE -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-primary text-white d-flex align-items-center">
-            <i class="bi bi-calendar-day me-2"></i>
-            <strong>Today’s Course</strong>
-        </div>
-        <div class="card-body">
+    <!-- ACTIONS REQUIRED (LEFT) -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-warning d-flex align-items-center">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Actions Required</strong>
+            </div>
+            <div class="card-body">
 
-            {% if todays_days %}
-                {% for d in todays_days %}
-                <div class="p-3 border rounded mb-3">
+                <ul class="list-unstyled mb-0">
 
-                    <h5 class="fw-bold">{{ d.booking.course_text }}</h5>
+                    <!-- INCOMPLETE REGISTERS -->
+                    <li class="mb-2">
+                        <strong>{{ incomplete_registers.count }}</strong>
+                        course(s) with incomplete registers
 
-                    <p class="mb-1">
-                        <i class="bi bi-geo-alt"></i>
-                        <strong>Location:</strong> {{ d.booking.location }}
-                    </p>
+                        {% if incomplete_registers %}
+                            <ul class="mt-2 ps-4 border-start border-3 small">
+                                {% for booking in incomplete_registers %}
+                                    <li class="mb-1">
+                                        <a href="{% url 'instructor_booking_detail' booking.pk %}#registers-tab"
+                                           class="text-decoration-none d-block ps-2">
+                                            {{ booking.course_type.name }}
+                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.business.name }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </li>
 
-                    <p class="mb-1">
-                        <i class="bi bi-clock"></i>
-                        <strong>Start:</strong> {{ d.start_time|default:"N/A" }}
-                    </p>
+                    <!-- MISSING ASSESSMENTS -->
+                    <li class="mb-2">
+                        <strong>{{ missing_assessments.count }}</strong>
+                        course(s) with missing assessments
 
-                    <p class="mb-3">
-                        <i class="bi bi-people"></i>
-                        <strong>Delegates:</strong> {{ d.booking.delegate_count }}
-                    </p>
+                        {% if missing_assessments %}
+                            <ul class="mt-2 ps-4 border-start border-3 small">
+                                {% for booking in missing_assessments %}
+                                    <li class="mb-1">
+                                        <a href="{% url 'instructor_booking_detail' booking.pk %}#assessments-tab"
+                                           class="text-decoration-none d-block ps-2">
+                                            {{ booking.course_type.name }}
+                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.business.name }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </li>
 
-                    <a href="{% url 'instructor_booking_detail' d.booking.pk %}"
-                       class="btn btn-primary me-2">
-                        <i class="bi bi-journal-text"></i> View booking
-                    </a>
+                    <!-- MISSING FEEDBACK -->
+                    <li class="mb-2">
+                        <strong>{{ missing_feedback.count }}</strong>
+                        course(s) missing feedback forms
 
-                    <a href="{% url 'instructor_day_registers' d.pk %}"
-                       class="btn btn-outline-secondary">
-                        <i class="bi bi-ui-checks-grid"></i> Open register
-                    </a>
+                        {% if missing_feedback %}
+                            <ul class="mt-2 ps-4 border-start border-3 small">
+                                {% for booking in missing_feedback %}
+                                    <li class="mb-1">
+                                        <a href="{% url 'instructor_booking_detail' booking.pk %}#feedback-tab"
+                                           class="text-decoration-none d-block ps-2">
+                                            {{ booking.course_type.name }}
+                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.business.name }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </li>
 
-                </div>
-                {% endfor %}
-            {% else %}
-                <p class="text-muted">No course today.</p>
-            {% endif %}
+                    <!-- AWAITING CLOSURE -->
+                    <li class="mb-2">
+                        <strong>{{ awaiting_closure.count }}</strong>
+                        course(s) awaiting instructor closure
 
+                        {% if awaiting_closure %}
+                            <ul class="mt-2 ps-4 border-start border-3 small">
+                                {% for booking in awaiting_closure %}
+                                    <li class="mb-1">
+                                        <a href="{% url 'instructor_booking_detail' booking.pk %}#closure-pane"
+                                           class="text-decoration-none d-block ps-2">
+                                            {{ booking.course_type.name }}
+                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.business.name }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </li>
+
+                    <!-- INVOICES -->
+                    <li class="mb-2">
+                        <strong>{{ invoice_attention.count }}</strong>
+                        completed course(s) with invoice awaiting admin action
+
+                        {% if invoice_attention %}
+                            <ul class="mt-2 ps-4 border-start border-3 small">
+                                {% for booking in invoice_attention %}
+                                    <li class="mb-1">
+                                        <a href="{% url 'instructor_booking_detail' booking.pk %}?tab=invoicing#invoicing-pane"
+                                           class="text-decoration-none d-block ps-2">
+                                            {{ booking.course_type.name }}
+                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.business.name }}
+                                        </a>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </li>
+
+                </ul>
+            </div>
         </div>
     </div>
 
+    <!-- TODAY'S COURSE (RIGHT) -->
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-primary text-white d-flex align-items-center">
+                <i class="bi bi-calendar-day me-2"></i>
+                <strong>Today’s Course</strong>
+            </div>
+            <div class="card-body">
 
+                {% if todays_days %}
+                    {% for d in todays_days %}
+                        <div class="p-3 border rounded mb-3">
+                            <h5 class="fw-bold">{{ d.booking.course_text }}</h5>
+
+                            <p class="mb-1"><strong>Location:</strong> {{ d.booking.location }}</p>
+                            <p class="mb-1"><strong>Start:</strong> {{ d.start_time|default:"N/A" }}</p>
+                            <p class="mb-3"><strong>Delegates:</strong> {{ d.booking.delegate_count }}</p>
+
+                            <a href="{% url 'instructor_booking_detail' d.booking.pk %}"
+                               class="btn btn-primary me-2">
+                                View booking
+                            </a>
+
+                            <a href="{% url 'instructor_day_registers' d.pk %}"
+                               class="btn btn-outline-secondary">
+                                Open register
+                            </a>
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">No course today.</p>
+                {% endif %}
+
+            </div>
+        </div>
+    </div>
+
+</div>
 
     <!-- UPCOMING COURSES -->
     <div class="card shadow-sm mb-4">
@@ -117,38 +228,6 @@
             </table>
         </div>
     </div>
-
-
-
-
-
-    <!-- ACTIONS REQUIRED -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-warning d-flex align-items-center">
-            <i class="bi bi-exclamation-triangle me-2"></i>
-            <strong>Actions Required</strong>
-        </div>
-        <div class="card-body">
-
-            <ul class="list-unstyled mb-0">
-                <li class="mb-2">
-                    <strong>{{ awaiting_closure.count }}</strong> course(s) awaiting instructor closure
-                </li>
-                <li class="mb-2">
-                    <strong>{{ missing_assessments.count }}</strong> course(s) with missing assessments
-                </li>
-                <li class="mb-2">
-                    <strong>{{ missing_feedback.count }}</strong> course(s) missing feedback forms
-                </li>
-                <li>
-                    <strong>{{ incomplete_registers.count }}</strong> course(s) with incomplete registers
-                </li>
-            </ul>
-
-        </div>
-    </div>
-
-
 
     <!-- QUICK ACCESS BUTTONS -->
     <div class="row g-3 mb-4">

@@ -501,6 +501,13 @@ def instructor_dashboard(request):
         status="awaiting_closure"
     )
 
+    # 1b) Completed courses with invoice still Draft / Awaiting review
+    invoice_attention = Booking.objects.filter(
+        instructor=personnel,
+        status="completed",
+        invoice__status__in=["draft", "awaiting_review"],
+    )
+
     # 2) Incomplete registers (DOB always required, so leave empty for now)
     incomplete_registers = Booking.objects.none()
 
@@ -524,6 +531,7 @@ def instructor_dashboard(request):
 
         # Actions required
         "awaiting_closure": awaiting_closure,
+        "invoice_attention": invoice_attention,
         "missing_assessments": missing_assessments,
         "missing_feedback": missing_feedback,
         "incomplete_registers": incomplete_registers,
@@ -989,6 +997,11 @@ def instructor_booking_detail(request, pk):
             # -----------------------------------------------------------
             # STEP 5 — SEND COURSE CLOSURE EMAIL (NO INVOICE ATTACHMENTS)
             # -----------------------------------------------------------
+            # ✅ ENSURE COMPLETION TIMESTAMP EXISTS BEFORE EMAIL
+            if not booking.date_completed:
+                booking.date_completed = now()
+                booking.save(update_fields=["date_completed"])
+           
             try:
                 from django.core.mail import EmailMessage
                 import mimetypes
@@ -1075,8 +1088,7 @@ def instructor_booking_detail(request, pk):
 
             # ✅ LOCK THE COURSE
             booking.status = "completed"
-            booking.date_completed = now()
-            booking.save(update_fields=["status", "date_completed"])
+            booking.save(update_fields=["status"])
 
             print("✅ COURSE SUCCESSFULLY CLOSED")
 
@@ -1195,14 +1207,14 @@ def instructor_booking_detail(request, pk):
             if action == "send_admin":
 
                 # Require receipt confirmation
-                confirm = request.POST.get("confirm_receipts")
-                if confirm != "1":
+                # confirm = request.POST.get("confirm_receipts")
+                # if confirm != "1":
                     # display modal-required page (this only shows in old fallback flows)
-                    return render(
-                        request,
-                        "instructor/confirm_receipts_required.html",
-                        {"booking": booking},
-                    )
+                    # return render(
+                        # request,
+                        # "instructor/confirm_receipts_required.html",
+                        # {"booking": booking},
+                    # )
 
                 # --- Persist latest invoice values before sending ---
                 inv.instructor_ref = request.POST.get("instructor_ref", "") or ""
@@ -1234,6 +1246,9 @@ def instructor_booking_detail(request, pk):
                 #                BUILD PDF + GATHER RECEIPTS + SEND EMAIL
                 # ----------------------------------------------------------------------
                 try:
+                    from django.core.mail import EmailMessage
+                    import mimetypes
+
                     # Generate invoice PDF identical to preview
                     file_bytes, filename = render_invoice_pdf_via_preview(request, booking)
 
@@ -1243,9 +1258,13 @@ def instructor_booking_detail(request, pk):
                     # Subject + body
                     subj = f"[Unicorn] Instructor invoice — {booking.course_type.name} ({booking.course_reference or booking.pk})"
                     body = (
-                        f"Invoice for {booking.course_type.name} — {booking.business.name}\n"
-                        f"Date: { (inv.invoice_date or now().date()).strftime('%Y-%m-%d') }\n"
-                        f"Generated: {localtime(now()).strftime('%Y-%m-%d %H:%M')}\n\n"
+                        f"{_time_greeting()},\n\n"
+                        f"Please find attached invoice for the {booking.course_type.name} course "
+                        f"completed by {booking.instructor.name} for {booking.business.name}.\n\n"
+                        "You can login to the portal to view this receipt and update its status.\n\n"
+                        "Many thanks\n\n"
+                        "Unicorn Admin System\n\n"
+                        "https://unicorn.adminforge.co.uk"
                     )
 
                     if link_lines:
@@ -2319,279 +2338,190 @@ def instructor_assessment_save(request, pk):
     messages.success(request, f"Saved {created} new and {updated} updated assessment entr{'y' if (created+updated)==1 else 'ies'}.")
     return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
 
+def _chunked(iterable, size):
+    for i in range(0, len(iterable), size):
+        yield iterable[i:i + size]
+
 @login_required
 def instructor_assessment_pdf(request, pk):
     """
     Export the assessment matrix (landscape PDF) with:
-    - Business name, course reference, instructor, full set of course dates
-    - Dynamic header height / font size so rotated names are readable
-    - Darker zebra striping for rows
-    - Footer on every page with Unicorn contact details
-    Blocks export if any delegate outcome is 'pending'.
+    - Max 12 delegates per page
+    - Repeated competencies on each page
+    - Rotated delegate names
+    - Zebra striping
+    - Footer on every page
     """
-    instr = getattr(request.user, "personnel", None)
-    booking = get_object_or_404(
-        Booking.objects.select_related("course_type", "business", "instructor", "training_location"),
-        pk=pk
-    )
-
-    # Allow: the assigned instructor OR any staff user (admin)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
-        messages.error(request, "You do not have access to this booking.")
-        return redirect("instructor_bookings")
-
-
-    # Delegates & competencies
-    # Unique delegates (one per person across the booking)
-    delegates = _unique_delegates_for_booking(booking)
-
-    competencies = list(
-        CourseCompetency.objects
-        .filter(course_type=booking.course_type, is_active=True)
-        .order_by("sort_order", "name", "id")
-        .only("id", "name", "code", "sort_order")
-    )
-
-    # Guard: no export if any Pending
-    any_pending = any((d.outcome or "pending") == "pending" for d in delegates)
-    if any_pending:
-        messages.error(request, "Cannot export PDF while any delegate is Pending. Please set each delegate to Pass, Fail, or DNF first.")
-        return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
-
-    # Assessment map
-    from .models import CompetencyAssessment, BookingDay
-    assess_map = {}
-    if delegates and competencies:
-        for rid, cid, lvl in (
-            CompetencyAssessment.objects
-            .filter(register__in=delegates, course_competency__in=competencies)
-            .values_list("register_id", "course_competency_id", "level")
-        ):
-            assess_map[(rid, cid)] = lvl
-
-    # Course dates (all days)
-    day_dates = list(
-        BookingDay.objects.filter(booking=booking).order_by("date").values_list("date", flat=True)
-    )
-
-    # Windows-safe date formatting
-    def format_course_dates(dates):
-        if not dates:
-            return "—"
-        ds = list(dates)
-        def d_full(d): return f"{d.day} {d.strftime('%b %Y')}"
-        def d_mon(d):  return f"{d.day} {d.strftime('%b')}"
-        def d_day(d):  return f"{d.day}"
-        consecutive = len(ds) <= 1 or all((ds[i+1] - ds[i]).days in (0, 1) for i in range(len(ds)-1))
-        if len(ds) >= 2 and consecutive:
-            first, last = ds[0], ds[-1]
-            if first.year == last.year:
-                if first.month == last.month:
-                    return f"{d_day(first)}–{d_full(last)}"
-                return f"{d_mon(first)}–{d_full(last)}"
-            return f"{d_full(first)}–{d_full(last)}"
-        parts = [d_full(d) for d in ds[:6]]
-        if len(ds) > 6:
-            parts.append("…")
-        return ", ".join(parts)
-
-    # --- PDF ---
+    from datetime import date
     import io
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
 
+    instr = getattr(request.user, "personnel", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "business", "instructor"),
+        pk=pk
+    )
+
+    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+        messages.error(request, "You do not have access to this booking.")
+        return redirect("instructor_bookings")
+
+    delegates = _unique_delegates_for_booking(booking)
+
+    # ❌ Block if any pending
+    if any((d.outcome or "pending") == "pending" for d in delegates):
+        messages.error(request, "All delegates must have an outcome before exporting.")
+        return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
+
+    competencies = list(
+        CourseCompetency.objects
+        .filter(course_type=booking.course_type, is_active=True)
+        .order_by("sort_order", "name")
+    )
+
+    assess_map = {
+        (rid, cid): lvl
+        for rid, cid, lvl in CompetencyAssessment.objects
+        .filter(register__in=delegates, course_competency__in=competencies)
+        .values_list("register_id", "course_competency_id", "level")
+    }
+
+    from .models import BookingDay
+    day_dates = list(
+        BookingDay.objects.filter(booking=booking)
+        .order_by("date")
+        .values_list("date", flat=True)
+    )
+
+    def chunked(seq, size):
+        for i in range(0, len(seq), size):
+            yield seq[i:i + size]
+
     buf = io.BytesIO()
-    pagesize = landscape(A4)
-    c = canvas.Canvas(buf, pagesize=pagesize)
-    W, H = pagesize
+    c = canvas.Canvas(buf, pagesize=landscape(A4))
+    W, H = landscape(A4)
 
-    left   = 15*mm
-    right  = W - 15*mm
-    top    = H - 15*mm
-    bottom = 15*mm
+    left = 15 * mm
+    right = W - 15 * mm
+    top = H - 15 * mm
+    bottom = 15 * mm
 
-    # Footer helper (draw on the current page)
-    FOOTER_TEXT = "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ: info@unicornsafety.co.uk: 01743 360211"
-    def draw_footer():
-        c.saveState()
-        try:
-            c.setFont("Helvetica", 8)
-            c.setFillGray(0.35)
-            c.drawString(left, bottom - 6*mm, FOOTER_TEXT)
-            c.setFillGray(0)
-        finally:
-            c.restoreState()
+    FOOTER = "Unicorn Fire & Safety Solutions, Unicorn House, 6 Salendine, Shrewsbury, SY1 3XJ | info@unicornsafety.co.uk | 01743 360211"
 
-    # Base sizing
-    comp_w = 85*mm
-    ncols  = max(1, len(delegates))
+    def footer():
+        c.setFont("Helvetica", 8)
+        c.setFillGray(0.4)
+        c.drawString(left, bottom - 6 * mm, FOOTER)
+        c.setFillGray(0)
 
-    # Dynamic header height + font for readability
-    if ncols <= 8:
-        header_h = 20*mm
-        name_fs  = 8
-        del_w_min, del_w_max = 18*mm, 28*mm
-    elif ncols <= 12:
-        header_h = 18*mm
-        name_fs  = 7
-        del_w_min, del_w_max = 16*mm, 26*mm
-    else:
-        header_h = 16*mm
-        name_fs  = 6
-        del_w_min, del_w_max = 14*mm, 24*mm
+    def draw_page_header():
+        y = top
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(left, y, f"{booking.course_type.name} — Assessment Matrix")
+        y -= 6 * mm
+        c.setFont("Helvetica", 10)
+        c.drawString(left, y, f"Business: {booking.business.name}")
+        y -= 5 * mm
+        c.drawString(left, y, f"Course reference: {booking.course_reference}")
+        y -= 5 * mm
+        c.drawString(left, y, f"Instructor: {booking.instructor.name}")
+        y -= 5 * mm
+        if day_dates:
+            d1, d2 = day_dates[0], day_dates[-1]
+            c.drawString(left, y, f"Course dates: {d1.strftime('%d %b %Y')} – {d2.strftime('%d %b %Y')}")
+        return y - 7 * mm
 
-    del_w   = max(del_w_min, (right - left - comp_w) / ncols)
-    del_w   = min(del_w, del_w_max)
-    table_w = comp_w + del_w * ncols
-    row_h   = 7*mm
-    name_max = 18  # chars per line in header (simple trim)
+    for page_no, page_delegates in enumerate(chunked(delegates, 12), start=1):
 
-    # Header block (business name above course reference)
-    y = top
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(left, y, f"{booking.course_type.name} — Assessment Matrix")
-    y -= 6*mm
-    c.setFont("Helvetica", 10)
-    c.drawString(left, y, f"Business: {booking.business.name}")
-    y -= 5*mm
-    c.drawString(left, y, f"Course reference: {booking.course_reference or '—'}")
-    y -= 5*mm
-    c.drawString(left, y, f"Instructor: {booking.instructor.name if booking.instructor else '—'}")
-    y -= 5*mm
-    c.drawString(left, y, f"Course dates: {format_course_dates(day_dates)}")
-    y -= 7*mm
+        if page_no > 1:
+            footer()
+            c.showPage()
 
-    def draw_header_row():
-        """Draw the competency/delegate header row at current y."""
-        nonlocal y
-        # Light fill for entire header band
+        y = draw_page_header()
+
+        comp_w = 85 * mm
+        ncols = len(page_delegates)
+        del_w = min(26 * mm, max(16 * mm, (right - left - comp_w) / ncols))
+        header_h = 18 * mm
+        row_h = 7 * mm
+
+        # Header row
         c.setFillGray(0.95)
-        c.rect(left, y - header_h, table_w, header_h, stroke=0, fill=1)
+        c.rect(left, y - header_h, comp_w + del_w * ncols, header_h, stroke=0, fill=1)
         c.setFillGray(0)
 
         c.setFont("Helvetica-Bold", 9)
-        # Competency header cell
-        c.rect(left, y - header_h, comp_w, header_h, stroke=1, fill=0)
-        c.drawCentredString(left + comp_w/2, y - header_h + 4.5*mm, "Competency")
+        c.rect(left, y - header_h, comp_w, header_h)
+        c.drawCentredString(left + comp_w / 2, y - header_h + 4 * mm, "Competency")
 
-        # Delegate header cells (rotated names)
         x = left + comp_w
-        for d in delegates:
-            c.rect(x, y - header_h, del_w, header_h, stroke=1, fill=0)
+        for d in page_delegates:
+            c.rect(x, y - header_h, del_w, header_h)
             c.saveState()
-            try:
-                c.translate(x + del_w/2, y - header_h/2)
-                c.rotate(90)
-                c.setFont("Helvetica-Bold", name_fs)  # bold helps legibility
-                parts = (d.name or "").split()
-                first = (parts[0] if parts else "")[:name_max]
-                last  = (" ".join(parts[1:]) if len(parts) > 1 else "")[:name_max]
-                c.drawCentredString(0, -3.2*mm, first)
-                if last:
-                    c.drawCentredString(0, +3.2*mm, last)
-            finally:
-                c.restoreState()
+            c.translate(x + del_w / 2, y - header_h / 2)
+            c.rotate(90)
+            c.setFont("Helvetica-Bold", 7)
+            parts = d.name.split()
+            c.drawCentredString(0, -3 * mm, parts[0][:18])
+            if len(parts) > 1:
+                c.drawCentredString(0, 3 * mm, " ".join(parts[1:])[:18])
+            c.restoreState()
             x += del_w
 
         y -= header_h
-        c.setFont("Helvetica", 9)
 
-    def new_page(continued=False):
-        """End current page with footer, start a new page, redraw header row."""
-        nonlocal y
-        # Finish previous page with footer
-        draw_footer()
-        c.showPage()
-        # New page header
-        y = H - 15*mm
-        c.setFont("Helvetica-Bold", 14)
-        title = f"{booking.course_type.name} — Assessment Matrix"
-        if continued:
-            title += " (cont.)"
-        c.drawString(left, y, title)
-        y -= 6*mm
-        c.setFont("Helvetica", 10)
-        c.drawString(left, y, f"Business: {booking.business.name}")
-        y -= 5*mm
-        c.drawString(left, y, f"Course reference: {booking.course_reference or '—'}")
-        y -= 5*mm
-        c.drawString(left, y, f"Instructor: {booking.instructor.name if booking.instructor else '—'}")
-        y -= 5*mm
-        c.drawString(left, y, f"Course dates: {format_course_dates(day_dates)}")
-        y -= 7*mm
-        draw_header_row()
+        for idx, comp in enumerate(competencies):
+            if y - row_h < bottom + 20 * mm:
+                footer()
+                c.showPage()
+                y = draw_page_header()
 
-    # First header
-    draw_header_row()
+            if idx % 2 == 0:
+                c.setFillGray(0.86)
+                c.rect(left, y - row_h, comp_w + del_w * ncols, row_h, stroke=0, fill=1)
+                c.setFillGray(0)
 
-    # Body with darker zebra striping
-    check_mark = "✔"
-    cross_mark = "—"
+            c.setFont("Helvetica", 9)
+            c.rect(left, y - row_h, comp_w, row_h)
+            c.drawString(left + 2 * mm, y - row_h + 2 * mm, comp.name[:80])
 
-    for idx, comp in enumerate(competencies, start=1):
-        if y - row_h < bottom + 25*mm:
-            new_page(continued=True)
+            x = left + comp_w
+            for d in page_delegates:
+                c.rect(x, y - row_h, del_w, row_h)
+                lvl = assess_map.get((d.id, comp.id))
+                c.setFont("Helvetica-Bold", 10 if lvl in ("c", "e") else 9)
+                c.drawCentredString(x + del_w / 2, y - row_h + 2 * mm, "✔" if lvl in ("c", "e") else "—")
+                x += del_w
 
-        # darker zebra band (behind grid)
-        if idx % 2 == 0:
-            c.setFillGray(0.86)
-            c.rect(left, y - row_h, table_w, row_h, stroke=0, fill=1)
-            c.setFillGray(0)
+            y -= row_h
 
-        # competency name cell
-        c.rect(left, y - row_h, comp_w, row_h, stroke=1, fill=0)
-        c.setFont("Helvetica", 9)
-        c.drawString(left + 2*mm, y - row_h + 2.2*mm, (comp.name or "")[:80])
+        # Outcome row
+        c.setFillGray(0.94)
+        c.rect(left, y - 9 * mm, comp_w + del_w * ncols, 9 * mm, stroke=0, fill=1)
+        c.setFillGray(0)
 
-        # per-delegate cells
+        c.setFont("Helvetica-Bold", 9)
+        c.rect(left, y - 9 * mm, comp_w, 9 * mm)
+        c.drawString(left + 2 * mm, y - 7 * mm, "Outcome")
+
         x = left + comp_w
-        for d in delegates:
-            c.rect(x, y - row_h, del_w, row_h, stroke=1, fill=0)
-            lvl = assess_map.get((d.id, comp.id))
-            ok = (lvl in ("c", "e"))
-            c.setFont("Helvetica-Bold", 10 if ok else 9)
-            c.drawCentredString(x + del_w/2, y - row_h + 2*mm, check_mark if ok else cross_mark)
+        for d in page_delegates:
+            c.rect(x, y - 9 * mm, del_w, 9 * mm)
+            status = (d.outcome or "").upper()
+            c.drawCentredString(x + del_w / 2, y - 7 * mm, status)
             x += del_w
 
-        y -= row_h
-
-    # Outcome row
-    if y - 9*mm < bottom + 15*mm:
-        new_page(continued=True)
-    c.setFont("Helvetica-Bold", 9)
-    c.setFillGray(0.94)
-    c.rect(left, y - 9*mm, table_w, 9*mm, stroke=0, fill=1)
-    c.setFillGray(0)
-    c.rect(left, y - 9*mm, comp_w, 9*mm, stroke=1, fill=0)
-    c.drawString(left + 2*mm, y - 7*mm, "Outcome")
-    x = left + comp_w
-    for d in delegates:
-        c.rect(x, y - 9*mm, del_w, 9*mm, stroke=1, fill=0)
-        status = (d.outcome or "").upper()
-        colour = {
-            "PASS": (0, 130/255, 84/255),
-            "FAIL": (180/255, 0, 0),
-            "DNF":  (170/255, 120/255, 0),
-        }.get(status, (0, 0, 0))
-        c.setFillColorRGB(*colour)
-        c.drawCentredString(x + del_w/2, y - 7*mm, status or "—")
-        c.setFillColorRGB(0, 0, 0)
-        x += del_w
-    y -= 12*mm
-
-    # Legend / footer (last page)
-    c.setFont("Helvetica", 8)
-    c.drawString(left, y, f"Legend: {check_mark} competent / — competency not demonstrated; Outcome colours: Pass (green), Fail (red), DNF (amber).")
-    y -= 6*mm
-    c.drawString(left, y, f"Business: {booking.business.name}")
-
-    # Footer on last page, save
-    draw_footer()
+    footer()
     c.save()
     buf.seek(0)
-    filename = f"assessments_{booking.course_reference or booking.pk}.pdf"
-    return FileResponse(buf, as_attachment=True, filename=filename)
+
+    return FileResponse(
+        buf,
+        as_attachment=True,
+        filename=f"assessment-matrix-{booking.course_reference}.pdf",
+    )
 
 # views_instructor.py
 from django.db.models import Avg, Count
