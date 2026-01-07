@@ -1924,7 +1924,7 @@ def instructor_delegate_delete(request, pk: int):
 def instructor_day_registers_pdf(request, pk: int):
     """
     PDF: Delegate register (A4 landscape).
-    Main row: Full name | Date of birth | Job title | Emp. ID | Health declaration
+    Main row: Full name | Job title | Emp. ID | Health declaration
     If a delegate has notes, a second sub-row is drawn immediately underneath:
         [ Notes ] | <wrapped notes spanning remaining width>
     """
@@ -1948,19 +1948,22 @@ def instructor_day_registers_pdf(request, pk: int):
         pk=pk,
     )
     booking = day.booking
-    regs = list(DelegateRegister.objects.filter(booking_day=day).order_by("name", "id"))
+    regs = list(
+        DelegateRegister.objects
+        .filter(booking_day=day)
+        .order_by("name", "id")
+    )
 
     # --- Page geometry ---
     page_w, page_h = landscape(A4)
     left, right = 12 * mm, page_w - 12 * mm
     top, bottom = page_h - 12 * mm, 12 * mm
 
-    # Main table columns (no dedicated notes column)
-    col_name   = 62 * mm
-    col_dob    = 24 * mm
-    col_job    = 46 * mm
-    col_emp    = 22 * mm
-    col_health = (right - left) - (col_name + col_dob + col_job + col_emp)
+    # Main table columns (DOB removed)
+    col_name   = 70 * mm
+    col_job    = 50 * mm
+    col_emp    = 24 * mm
+    col_health = (right - left) - (col_name + col_job + col_emp)
 
     # Notes sub-row widths
     notes_label_w   = 20 * mm
@@ -2068,10 +2071,9 @@ def instructor_day_registers_pdf(request, pk: int):
             c.setFont("Helvetica-Bold", 9)
             x = left
             headers = [
-                ("Full name", col_name),
-                ("Date of birth", col_dob),
-                ("Job title", col_job),
-                ("Emp. ID", col_emp),
+                ("Full name",          col_name),
+                ("Job title",          col_job),
+                ("Emp. ID",            col_emp),
                 ("Health declaration", col_health),
             ]
             for title, w in headers:
@@ -2087,7 +2089,6 @@ def instructor_day_registers_pdf(request, pk: int):
         Returns new y (next row top) or None if a page break is needed.
         """
         name  = (getattr(r, "name", "") or "").strip()
-        dob   = r.date_of_birth.strftime("%d/%m/%Y") if getattr(r, "date_of_birth", None) else ""
         job   = (getattr(r, "job_title", "") or "").strip()
         emp   = (getattr(r, "employee_id", "") or "").strip()
         notes = (getattr(r, "notes", "") or "").strip()
@@ -2117,12 +2118,6 @@ def instructor_day_registers_pdf(request, pk: int):
             if yy < y_top - base_h + pad_y:
                 break
         x += col_name
-
-        # DOB
-        c.rect(x, y_top - base_h, col_dob, base_h, stroke=1, fill=0)
-        if dob:
-            c.drawString(x + pad_x, y_top - base_h + pad_y, dob)
-        x += col_dob
 
         # Job
         c.rect(x, y_top - base_h, col_job, base_h, stroke=1, fill=0)
@@ -2210,9 +2205,9 @@ def instructor_day_registers_pdf(request, pk: int):
     # Day number within this booking (robust to related_name differences)
     ordered_ids = list(
         BookingDay.objects
-            .filter(booking=day.booking)
-            .order_by("date", "id")
-            .values_list("id", flat=True)
+        .filter(booking=day.booking)
+        .order_by("date", "id")
+        .values_list("id", flat=True)
     )
     try:
         day_number = ordered_ids.index(day.id) + 1
@@ -2226,8 +2221,7 @@ def instructor_day_registers_pdf(request, pk: int):
     filename += ".pdf"
 
     resp = HttpResponse(content_type="application/pdf")
-    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
-
+    resp["Content-Disposition"] = f'attachment; filename=\"{filename}\"'
 
     c = canvas.Canvas(resp, pagesize=landscape(A4))
     c.setTitle(f"Delegate Register — {booking.course_reference if booking else day.pk}")
@@ -2264,7 +2258,6 @@ def instructor_day_registers_pdf(request, pk: int):
     c.showPage()
     c.save()
     return resp
-
 
 @login_required
 @transaction.atomic
