@@ -551,54 +551,78 @@ def public_feedback_form(request):
     """
     Public course feedback form. Supports optional prefill via:
       ?course=<code or UUID>&date=YYYY-MM-DD&instructor=<UUID>
+    and automatically links the feedback to the matching Booking
+    (by course_type + course_date + instructor) where possible.
     """
+    # --- 1) Resolve course from query (?course=code or UUID) ---
     course_q = request.GET.get("course") or ""
     prefilled_course = _resolve_course_type(course_q)
 
-    # Initials: date (today unless provided) and instructor (optional)
+    # --- 2) Initial values: date + (optional) instructor from query ---
     init = {
         "date": _parse_flexible_date(request.GET.get("date") or "") or timezone.localdate()
     }
+
     inst_q = request.GET.get("instructor") or ""
     if inst_q:
         try:
             init["instructor"] = Personnel.objects.get(pk=inst_q)
-        except Instructor.DoesNotExist:
+        except Personnel.DoesNotExist:
+            # If the UUID doesn't match a Personnel row, just skip prefill
             pass
 
     form = FeedbackForm(request.POST or None, initial=init)
 
-    # If course isn’t prefilled, user must choose it; otherwise set hidden initial
+    # If course isn’t prefilled, user must choose it; otherwise keep field but pre-set it
     form.fields["course_type"].required = not bool(prefilled_course)
     if prefilled_course:
         form.fields["course_type"].initial = prefilled_course.id
 
+    # --- 3) Handle submission ---
     if request.method == "POST" and form.is_valid():
         cd = form.cleaned_data
-        course = prefilled_course or cd.get("course_type")
 
-        # Create the feedback row
+        course = prefilled_course or cd.get("course_type")
+        the_date = cd.get("date")
+        inst = cd.get("instructor")
+
+        # --- 3a) Try to find the matching Booking for linking ---
+        booking = None
+        if course and the_date and inst:
+            booking = (
+                Booking.objects
+                .filter(
+                    course_type=course,
+                    instructor=inst,
+                    course_date=the_date,
+                )
+                .order_by("created_at")
+                .first()
+            )
+
+        # --- 3b) Create the feedback row (now linked to Booking if found) ---
         FeedbackResponse.objects.create(
+            booking     = booking,
             course_type = course,
-            date        = cd.get("date"),
-            instructor  = cd.get("instructor"),
+            date        = the_date,
+            instructor  = inst,
 
             # ratings
-            overall_rating       = cd.get("overall_rating"),
-            prior_knowledge      = cd.get("prior_knowledge"),
-            post_knowledge       = cd.get("post_knowledge"),
-            q_purpose_clear      = cd.get("q_purpose_clear"),
-            q_personal_needs     = cd.get("q_personal_needs"),
-            q_exercises_useful   = cd.get("q_exercises_useful"),
-            q_structure          = cd.get("q_structure"),
-            q_pace               = cd.get("q_pace"),
-            q_content_clear      = cd.get("q_content_clear"),
+            overall_rating         = cd.get("overall_rating"),
+            prior_knowledge        = cd.get("prior_knowledge"),
+            post_knowledge         = cd.get("post_knowledge"),
+            q_purpose_clear        = cd.get("q_purpose_clear"),
+            q_personal_needs       = cd.get("q_personal_needs"),
+            q_exercises_useful     = cd.get("q_exercises_useful"),
+            q_structure            = cd.get("q_structure"),
+            q_pace                 = cd.get("q_pace"),
+            q_content_clear        = cd.get("q_content_clear"),
             q_instructor_knowledge = cd.get("q_instructor_knowledge"),
-            q_materials_quality  = cd.get("q_materials_quality"),
-            q_books_quality      = cd.get("q_books_quality"),
-            q_venue_suitable     = cd.get("q_venue_suitable"),
-            q_benefit_at_work    = cd.get("q_benefit_at_work"),
-            q_benefit_outside    = cd.get("q_benefit_outside"),
+            q_materials_quality    = cd.get("q_materials_quality"),
+            q_books_quality        = cd.get("q_books_quality"),
+            q_venue_suitable       = cd.get("q_venue_suitable"),
+            q_benefit_at_work      = cd.get("q_benefit_at_work"),
+            q_benefit_outside      = cd.get("q_benefit_outside"),
 
             # free text + contact
             comments       = cd.get("comments") or "",
@@ -611,6 +635,7 @@ def public_feedback_form(request):
         messages.success(request, "Thanks for your feedback!")
         return redirect("public_feedback_thanks")
 
+    # --- 4) Render form on GET or invalid POST ---
     return render(
         request,
         "public/feedback_form.html",
