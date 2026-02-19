@@ -512,11 +512,26 @@ def instructor_dashboard(request):
     incomplete_registers = Booking.objects.none()
 
     # 3) Missing assessments:
-    # A "missing" assessment means: at least one assessment with level='na'
-    missing_assessments = Booking.objects.filter(
-        instructor=personnel,
-        days__registers__assessments__level="na"
-    ).distinct()
+    # A "missing" assessment means: at least one delegate with Pending / blank / null outcome
+    missing_assessments = (
+        Booking.objects
+        .filter(instructor=personnel)
+        .annotate(
+            total_regs=Count("days__registers", distinct=True),
+            pending_regs=Count(
+                "days__registers",
+                filter=(
+                    Q(days__registers__outcome__isnull=True) |
+                    Q(days__registers__outcome__exact="") |
+                    Q(days__registers__outcome__iexact="pending")
+                ),
+                distinct=True
+            )
+        )
+        # Flag if there are delegates with pending outcome, or if there are no delegates at all
+        .filter(Q(total_regs=0) | Q(pending_regs__gt=0))
+        .distinct()
+    )
 
     # 4) Missing feedback:
     # Your FeedbackResponse model has no direct FK to Booking,
