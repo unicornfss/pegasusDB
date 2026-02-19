@@ -175,6 +175,14 @@ class Booking(models.Model):
     start_time  = models.TimeField(null=True, blank=True, default=None)
     booking_notes = models.TextField(blank=True)
 
+    # Optional modules selected for this specific booking (choose 2)
+    optional_modules = models.ManyToManyField(
+        "CourseCompetency",
+        blank=True,
+        related_name="bookings_as_optional_modules",
+        limit_choices_to={"is_optional": True},
+    )
+
     # generated reference
     course_reference = models.CharField(max_length=40, unique=True, blank=True)
 
@@ -457,6 +465,7 @@ class CourseCompetency(models.Model):
     description = models.TextField(blank=True)
     sort_order = models.PositiveIntegerField(default=0, help_text="Controls display order.")
     is_active = models.BooleanField(default=True)
+    is_optional = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["sort_order", "name"]
