@@ -515,9 +515,11 @@ def instructor_dashboard(request):
     # A "missing" assessment means: at least one delegate with Pending / blank / null outcome
     missing_assessments = (
         Booking.objects
-        .filter(instructor=personnel)
+        .filter(
+            instructor=personnel,
+            status__in=["in_progress", "awaiting_closure", "completed"],  # prevents future bookings flagging
+        )
         .annotate(
-            total_regs=Count("days__registers", distinct=True),
             pending_regs=Count(
                 "days__registers",
                 filter=(
@@ -528,8 +530,7 @@ def instructor_dashboard(request):
                 distinct=True
             )
         )
-        # Flag if there are delegates with pending outcome, or if there are no delegates at all
-        .filter(Q(total_regs=0) | Q(pending_regs__gt=0))
+        .filter(pending_regs__gt=0)
         .distinct()
     )
 
