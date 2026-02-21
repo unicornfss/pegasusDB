@@ -40,186 +40,250 @@
       {# LEFT COLUMN ------------------------------------------------------- #}
       <div class="col-lg-4">
 
-  <div class="mb-3">
-    <div class="text-muted small">Business</div>
-    <div>{{ booking.business.name }}</div>
-  </div>
+        {# Location / business card #}
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-light d-flex align-items-center">
+            <i class="bi bi-geo-alt me-2"></i>
+            <strong>Course location</strong>
+          </div>
+          <div class="card-body">
 
-  <div class="mb-3">
-    <div class="text-muted small">Location</div>
+            <div class="mb-3">
+              <div class="text-muted small">Business</div>
+              <div>{{ booking.business.name }}</div>
+            </div>
 
-    <div>
-      {{ booking.training_location.name|default:"(TBC)" }}<br>
+            <div class="mb-0">
+              <div class="text-muted small">Location</div>
 
-      {% if booking.training_location %}
-        {{ booking.training_location.address_line }}<br>
-        {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
+              <div>
+                {{ booking.training_location.name|default:"(TBC)" }}<br>
 
-        {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
-          <a class="small d-block mb-2"
-             target="_blank" rel="noopener"
-             href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
-            View in Google Maps
-          </a>
-        {% endwith %}
-      
-      {# === Precise location display === #}
-      {% if booking.precise_lat and booking.precise_lng %}
-        <div class="small text-success mt-2">
-          <a
-            href="https://www.google.com/maps/dir/?api=1&destination={{ booking.precise_lat }},{{ booking.precise_lng }}"
-            target="_blank"
-            rel="noopener"
-            class="text-success text-decoration-none"
-          >
-            📍 <strong>Precise location:</strong> {{ booking.precise_lat }}, {{ booking.precise_lng }}
-          </a>
-        </div>
-      {% else %}
+                {% if booking.training_location %}
+                  {{ booking.training_location.address_line }}<br>
+                  {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
 
-        <div class="small text-muted mt-2">
-          No precise map location set.
-        </div>
-      {% endif %}
+                  {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
+                    <a class="small d-block mb-2"
+                      target="_blank" rel="noopener"
+                      href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
+                      View in Google Maps
+                    </a>
+                  {% endwith %}
 
-      {% if not is_locked %}
-        <div class="mt-2 d-flex gap-2">
-          <button type="button"
-            class="btn btn-outline-success btn-sm"
-            data-bs-toggle="modal"
-            data-bs-target="#MapPickerModal">
-            <i class="bi bi-geo-alt-fill"></i> View / adjust precise location
-          </button>
+                  {# === Precise location display === #}
+                  {% if booking.precise_lat and booking.precise_lng %}
+                    <div class="small text-success mt-2">
+                      <a
+                        href="https://www.google.com/maps/dir/?api=1&destination={{ booking.precise_lat }},{{ booking.precise_lng }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="text-success text-decoration-none"
+                      >
+                        <i class="bi bi-crosshair2 me-1"></i>
+                        <strong>Precise location:</strong> {{ booking.precise_lat }}, {{ booking.precise_lng }}
+                      </a>
+                    </div>
+                  {% else %}
+                    <div class="small text-muted mt-2">
+                      No precise map location set.
+                    </div>
+                  {% endif %}
 
-          {% if booking.precise_lat and booking.precise_lng %}
-            <form method="post" style="display:inline;">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="reset_precise_location">
-              <button class="btn btn-outline-danger btn-sm">
-                <i class="bi bi-arrow-counterclockwise"></i> Reset to admin point
-              </button>
-            </form>
-          {% endif %}
-        </div>
-      {% endif %}
+                  {% if not is_locked %}
+                    <div class="mt-3 d-flex flex-wrap gap-2">
+                      <button type="button"
+                        class="btn btn-outline-success btn-sm"
+                        data-bs-toggle="modal"
+                        data-bs-target="#MapPickerModal">
+                        <i class="bi bi-geo-alt-fill me-1"></i> View / adjust precise location
+                      </button>
 
+                      {% if booking.precise_lat and booking.precise_lng %}
+                        <form method="post" style="display:inline;">
+                          {% csrf_token %}
+                          <input type="hidden" name="action" value="reset_precise_location">
+                          <button class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to admin point
+                          </button>
+                        </form>
+                      {% endif %}
+                    </div>
+                  {% endif %}
 
-        {% if gcal_links %}
-          <div class="mt-2">
-            <strong>Add to Google Calendar:</strong>
+                {% endif %}
+              </div>
 
-            <div class="d-flex flex-wrap gap-2 mt-1">
-              {% for day in gcal_links %}
-                <a href="{{ day.url }}" target="_blank"
-                  class="btn btn-google-cal btn-sm d-flex align-items-center">
-                  <i class="bi bi-calendar-event me-1"></i>
-                  Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
-                </a>
-              {% endfor %}
             </div>
           </div>
-        {% endif %}
-
-        {# ----- ICS SECTION ----- #}
-        <div class="mt-4">
-          <strong>Download .ics file:</strong><br>
-
-          <a href="{% url 'download_booking_ics' booking.pk %}"
-            class="btn btn-outline-success btn-sm mt-2 d-inline-flex align-items-center">
-            <i class="bi bi-calendar-plus me-1"></i>
-            Download .ics
-          </a>
         </div>
 
-      {% endif %}
-    </div>
-  </div>
+        {# Calendar card #}
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex align-items-center">
+            <i class="bi bi-calendar3 me-2"></i>
+            <strong>Calendar</strong>
+          </div>
+          <div class="card-body">
 
-</div>
+            {% if gcal_links %}
+              <div>
+                <div class="text-muted small mb-2">Add to Google Calendar</div>
+
+                <div class="d-flex flex-wrap gap-2">
+                  {% for day in gcal_links %}
+                    <a href="{{ day.url }}" target="_blank"
+                      class="btn btn-google-cal btn-sm d-inline-flex align-items-center">
+                      <i class="bi bi-calendar-event me-1"></i>
+                      Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
+                    </a>
+                  {% endfor %}
+                </div>
+              </div>
+              <hr class="my-3">
+            {% endif %}
+
+            <div>
+              <div class="text-muted small">Download .ics file</div>
+
+              <a href="{% url 'download_booking_ics' booking.pk %}"
+                class="btn btn-outline-success btn-sm mt-2 d-inline-flex align-items-center">
+                <i class="bi bi-calendar-plus me-1"></i>
+                Download .ics
+              </a>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
 
       {# MIDDLE COLUMN ----------------------------------------------------- #}
       <div class="col-lg-4">
-        <div class="mb-3">
-          <div class="text-muted small">Instructor</div>
-          <div>{{ booking.instructor.name }}</div>
-        </div>
 
-      <!-- Hidden instructor fee reveal -->
-      <div class="mb-3">
-        <div class="fee-reveal-wrap">
-          <button id="reveal-fee-btn"
-                  type="button"
-                  class="btn btn-outline-dark btn-sm"
-                  data-fee-url="{% url 'booking-fee' booking.pk %}">
-            Tap to reveal your fee
-          </button>
+        <div class="card shadow-sm mb-3">
+          <div class="card-header bg-light d-flex align-items-center">
+            <i class="bi bi-person-badge me-2"></i>
+            <strong>Instructor</strong>
+          </div>
+          <div class="card-body">
 
-          <div id="fee-popover" class="fee-popover mt-2" role="status" aria-live="polite">
-            <span id="fee-text"></span>
+            <div class="mb-3">
+              <div class="text-muted small">Instructor</div>
+              <div>{{ booking.instructor.name }}</div>
+            </div>
+
+            {# Hidden instructor fee reveal #}
+            <div class="mb-0">
+              <div class="text-muted small mb-2">Fee</div>
+
+              <div class="fee-reveal-wrap">
+                <button id="reveal-fee-btn"
+                        type="button"
+                        class="btn btn-outline-dark btn-sm"
+                        data-fee-url="{% url 'booking-fee' booking.pk %}">
+                  Tap to reveal your fee
+                </button>
+
+                <div id="fee-popover" class="fee-popover mt-2" role="status" aria-live="polite">
+                  <span id="fee-text"></span>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
-      </div>
 
-        <div class="mb-3">
-          <div class="text-muted small">Location contact</div>
-          {% if booking.training_location %}
-            <div>
-              {{ booking.training_location.contact_name|default:"—" }}<br>
-              {% if booking.training_location.telephone %}
-                <a href="tel:{{ booking.training_location.telephone }}">
-                  {{ booking.training_location.telephone }}
-                </a><br>
-              {% endif %}
-              {% if booking.training_location.email %}
-                <a href="mailto:{{ booking.training_location.email }}">
-                  {{ booking.training_location.email }}
-                </a>
-              {% endif %}
-            </div>
-          {% else %}
-            <div>—</div>
-          {% endif %}
-        </div>      
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex align-items-center">
+            <i class="bi bi-telephone me-2"></i>
+            <strong>Location contact</strong>
+          </div>
+          <div class="card-body">
+
+            {% if booking.training_location %}
+              <div>
+                {{ booking.training_location.contact_name|default:"—" }}<br>
+                {% if booking.training_location.telephone %}
+                  <a href="tel:{{ booking.training_location.telephone }}">
+                    {{ booking.training_location.telephone }}
+                  </a><br>
+                {% endif %}
+                {% if booking.training_location.email %}
+                  <a href="mailto:{{ booking.training_location.email }}">
+                    {{ booking.training_location.email }}
+                  </a>
+                {% endif %}
+              </div>
+            {% else %}
+              <div>—</div>
+            {% endif %}
+
+          </div>
+        </div>
+
       </div>
 
       {# RIGHT COLUMN (NOTES) ---------------------------------------------- #}
       <div class="col-lg-4">
-        <form id="booking-notes-form" method="post" class="h-100 d-flex flex-column">
-        {% csrf_token %}
 
-        <input type="hidden" name="action" id="id_precise_action" value="">
-        <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.precise_lat }}">
-        <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.precise_lng }}">
-
-          <div class="mb-2 text-muted small">Course notes</div>
-          {% if is_locked %}
-            {{ notes_form.booking_notes }}
-            <script>
-              document.addEventListener('DOMContentLoaded', function(){
-                var ta = document.getElementById('id_booking_notes');
-                if (ta){ ta.setAttribute('readonly','readonly'); ta.classList.add('bg-light'); }
-              });
-            </script>
-          {% else %}
-            {{ notes_form.booking_notes }}
-          {% endif %}
-          {% for err in notes_form.booking_notes.errors %}
-            <div class="text-danger small">{{ err }}</div>
-          {% endfor %}
-          {% if not is_locked %}
-            <div class="mt-2">
-              <button class="btn btn-primary btn-sm"
-                    onclick="document.getElementById('id_precise_action').value='save_notes'">
-              <i class="bi bi-check2"></i> Save notes
-            </button>
-
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-light d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-journal-text me-2"></i>
+              <strong>Notes</strong>
             </div>
-          {% endif %}
-        </form>
-      </div>
 
-    </div>
-  </div>
+            {% if booking.course_type.onedrive_folder_link %}
+              <a href="{{ booking.course_type.onedrive_folder_link }}"
+                target="_blank"
+                rel="noopener"
+                class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-cloud"></i> Materials
+                <i class="bi bi-box-arrow-up-right ms-1"></i>
+              </a>
+            {% endif %}
+          </div>
+
+          <div class="card-body">
+            <form id="booking-notes-form" method="post" class="h-100 d-flex flex-column">
+              {% csrf_token %}
+
+              <input type="hidden" name="action" id="id_precise_action" value="">
+              <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.precise_lat }}">
+              <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.precise_lng }}">
+
+              <div class="text-muted small mb-2">Course notes</div>
+
+              {% if is_locked %}
+                {{ notes_form.booking_notes }}
+                <script>
+                  document.addEventListener('DOMContentLoaded', function(){
+                    var ta = document.getElementById('id_booking_notes');
+                    if (ta){ ta.setAttribute('readonly','readonly'); ta.classList.add('bg-light'); }
+                  });
+                </script>
+              {% else %}
+                {{ notes_form.booking_notes }}
+              {% endif %}
+
+              {% for err in notes_form.booking_notes.errors %}
+                <div class="text-danger small">{{ err }}</div>
+              {% endfor %}
+
+              {% if not is_locked %}
+                <div class="mt-3">
+                  <button class="btn btn-primary btn-sm"
+                          onclick="document.getElementById('id_precise_action').value='save_notes'">
+                    <i class="bi bi-check2"></i> Save notes
+                  </button>
+                </div>
+              {% endif %}
+            </form>
+          </div>
+        </div>
+
+      </div>
 </div>
 
 <ul class="nav nav-tabs mt-3" id="bookingTabs" role="tablist">
