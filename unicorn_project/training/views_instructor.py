@@ -1413,6 +1413,53 @@ def instructor_booking_detail(request, pk):
         ctx.update(_assessment_context(booking, request.user))
     except:
         pass
+
+    # ---------------------------------------------------------
+    # EXAMS TAB CONTEXT (match the admin booking logic)
+    # ---------------------------------------------------------
+    course_exams = []
+    attempts_by_exam = {}
+    has_exam = False
+
+    # All exams for this course type
+    course_exams = list(
+        Exam.objects.filter(course_type=booking.course_type).order_by("sequence", "id")
+    )
+
+    # Course "has exams" if the flag is set OR there are Exam rows
+    has_exam = bool(course_exams) or getattr(booking.course_type, "has_exam", False)
+
+    if course_exams:
+        booking_dates = list(
+            BookingDay.objects.filter(booking=booking).values_list("date", flat=True)
+        )
+
+        if booking_dates:
+            tmp = defaultdict(list)
+            attempts_qs = (
+                ExamAttempt.objects
+                .select_related("exam")
+                .filter(
+                    exam__course_type=booking.course_type,
+                    instructor=booking.instructor,
+                    exam_date__in=booking_dates,
+                )
+                .order_by("exam_date", "id")
+            )
+
+            for att in attempts_qs:
+                seq = getattr(att.exam, "sequence", None) or getattr(att.exam, "id")
+                tmp[seq].append(att)
+
+            attempts_by_exam = dict(tmp)
+
+    ctx["course_exams"] = course_exams
+    ctx["attempts_by_exam"] = attempts_by_exam
+    ctx["has_exam"] = has_exam
+
+    # If someone manually uses ?tab=exams for a course with no exams, force tab back
+    if ctx.get("active_tab") == "exams" and not has_exam:
+        ctx["active_tab"] = ""
     
     # -------------------------------------------------------
     # Build day_rows for template
