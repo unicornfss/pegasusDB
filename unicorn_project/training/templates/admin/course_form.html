@@ -30,71 +30,120 @@
 
   <!-- Course details -->
   <div class="card mb-3">
-  <div class="card-header">Course details</div>
-  <div class="card-body">
-    <div class="row g-4">
-      <!-- Column 1: core course info -->
-      <div class="col-md-4">
-        <h6 class="text-muted text-uppercase small mb-2">Course info</h6>
-        <div class="mb-3">
-          <label class="form-label">Name</label>
-          {{ form.name }}
-          {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Code</label>
-          {{ form.code }}
-          {% for e in form.code.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Duration (days)</label>
-          {{ form.duration_days }}
-          {% for e in form.duration_days.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-        </div>
-        <div class="mb-0">
-          <label class="form-label">Certificate duration (years)</label>
-          {{ form.certificate_duration }}
-          {% for e in form.certificate_duration.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-        </div>
-      </div>
+    <div class="card-header">Course details</div>
+    <div class="card-body">
+      <div class="row g-4">
 
-      <!-- Column 2: exams -->
-      <div class="col-md-4">
-        <h6 class="text-muted text-uppercase small mb-2">Exams</h6>
-        <div class="mb-3">
-          <label class="form-label d-block">Has exam?</label>
-          <div class="form-check">
-            {{ form.has_exam }}
+        <!-- Column 1: core course info -->
+        <div class="col-md-4">
+          <h6 class="text-muted text-uppercase small mb-2">Course info</h6>
+
+          <div class="mb-3">
+            <label class="form-label">Name</label>
+            {{ form.name }}
+            {% for e in form.name.errors %}
+                <div class="text-danger small">{{ e }}</div>
+            {% endfor %}
           </div>
-          {% for e in form.has_exam.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+
+          <div class="mb-3">
+            <label class="form-label">Code</label>
+            {{ form.code }}
+            {% for e in form.code.errors %}
+                <div class="text-danger small">{{ e }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Duration (days)</label>
+            {{ form.duration_days }}
+            {% for e in form.duration_days.errors %}
+                <div class="text-danger small">{{ e }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Certificate duration (years)</label>
+            {{ form.certificate_duration }}
+            {% for e in form.certificate_duration.errors %}
+                <div class="text-danger small">{{ e }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label">OneDrive folder view link</label>
+
+            <div class="input-group">
+              <span class="input-group-text" title="OneDrive">
+                <i class="bi bi-cloud"></i>
+              </span>
+
+              {{ form.onedrive_folder_link }}
+
+              {% if form.onedrive_folder_link.value %}
+                <a class="btn btn-outline-primary"
+                  href="{{ form.onedrive_folder_link.value }}"
+                  target="_blank"
+                  rel="noopener">
+                  <i class="bi bi-box-arrow-up-right"></i> Open
+                </a>
+              {% else %}
+                <button class="btn btn-outline-primary" type="button" disabled>
+                  <i class="bi bi-box-arrow-up-right"></i> Open
+                </button>
+              {% endif %}
+            </div>
+
+            {% for e in form.onedrive_folder_link.errors %}
+              <div class="text-danger small">{{ e }}</div>
+            {% endfor %}
+
+            <div class="form-text">
+              Paste a OneDrive “share” link to the course materials folder.
+            </div>
+          </div>
         </div>
 
-        <div class="mb-0" id="number-of-exams-wrapper"
-             {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
-          <label class="form-label">Number of exams</label>
-          {{ form.number_of_exams }}
-          {% for e in form.number_of_exams.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-          <div class="form-text">Required when “Has exam?” is ticked.</div>
-        </div>
-      </div>
+        <!-- Column 2: exams -->
+        <div class="col-md-4">
+          <h6 class="text-muted text-uppercase small mb-2">Exams</h6>
 
-      <!-- Column 3: fees -->
-      <div class="col-md-4">
-        <h6 class="text-muted text-uppercase small mb-2">Fees</h6>
-        <div class="mb-3">
-          <label class="form-label">Default course fee</label>
-          {{ form.default_course_fee }}
-          {% for e in form.default_course_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          <div class="mb-3">
+            <label class="form-label d-block">Has exam?</label>
+            <div class="form-check">
+              {{ form.has_exam }}
+            </div>
+            {% for e in form.has_exam.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-0" id="number-of-exams-wrapper"
+              {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
+            <label class="form-label">Number of exams</label>
+            {{ form.number_of_exams }}
+            {% for e in form.number_of_exams.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            <div class="form-text">Required when “Has exam?” is ticked.</div>
+          </div>
         </div>
-        <div class="mb-0">
-          <label class="form-label">Default instructor fee</label>
-          {{ form.default_instructor_fee }}
-          {% for e in form.default_instructor_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-        </div>
+
+        <!-- Column 3: fees + OneDrive -->
+        <div class="col-md-4">
+          <h6 class="text-muted text-uppercase small mb-2">Fees</h6>
+
+          <div class="mb-3">
+            <label class="form-label">Default course fee</label>
+            {{ form.default_course_fee }}
+            {% for e in form.default_course_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Default instructor fee</label>
+            {{ form.default_instructor_fee }}
+            {% for e in form.default_instructor_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+
       </div>
     </div>
   </div>
-</div>
 
 
   <!-- Collapsible sections in columns -->

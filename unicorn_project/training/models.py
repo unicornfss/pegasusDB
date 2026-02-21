@@ -85,6 +85,11 @@ class CourseType(models.Model):
         validators=[MinValueValidator(1)],
     )
 
+    onedrive_folder_link = models.URLField(
+    blank=True,
+    help_text="Optional OneDrive folder link for instructors"
+)
+
     def clean(self):
         # Enforce conditional requirement
         if self.has_exam and not self.number_of_exams:
@@ -952,3 +957,42 @@ class MetaSetting(models.Model):
 
     def __str__(self):
         return f"{self.key}: {self.value}"
+
+class Resource(models.Model):
+
+    CATEGORY_CHOICES = [
+        ("slides", "Slides / Presentations"),
+        ("handout", "Handouts"),
+        ("document", "Documents"),
+        ("policy", "Policies"),
+        ("template", "Templates"),
+        ("other", "Other"),
+    ]
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    course_type = models.ForeignKey(
+        CourseType,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="resources"
+    )
+
+    category = models.CharField(
+        max_length=20,
+        choices=CATEGORY_CHOICES,
+        default="document"
+    )
+
+    url = models.URLField(help_text="OneDrive share link")
+
+    sort_order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort_order", "title"]
+
+    def __str__(self):
+        return self.title

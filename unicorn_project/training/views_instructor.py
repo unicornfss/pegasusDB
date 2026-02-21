@@ -37,7 +37,7 @@ from reportlab.lib import colors
 from statistics import mean
 from django.template.loader import render_to_string
 import subprocess, tempfile, os
-from .models import Personnel, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome
+from .models import Personnel, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseType, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome, Resource
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm
 from .utils.invoice import (
     get_invoice_template_path,
@@ -4028,3 +4028,18 @@ def instructor_booking_certificates_pdf(request, pk):
     resp = HttpResponse(pdf_bytes, content_type="application/pdf")
     resp["Content-Disposition"] = f'inline; filename="{filename}"'
     return resp
+
+@login_required
+def instructor_resources(request):
+    resources = Resource.objects.filter(is_active=True)
+
+    course_folders = (
+        CourseType.objects
+        .filter(~Q(onedrive_folder_link=""), onedrive_folder_link__isnull=False)
+        .order_by("name")
+    )
+
+    return render(request, "instructor/resources.html", {
+        "resources": resources,
+        "course_folders": course_folders,
+    })

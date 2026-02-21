@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Resources{% endblock %}
+
+{% block content %}
+
+<h2 class="mb-3">Resources</h2>
+
+<div class="card">
+    <div class="card-body">
+
+        <!-- ✅ NEW: Course folders -->
+        {% if course_folders %}
+            <h5 class="mb-2">Course folders</h5>
+
+            <div class="list-group mb-4">
+                {% for ct in course_folders %}
+                    <a href="{{ ct.onedrive_folder_link }}"
+                       target="_blank"
+                       rel="noopener"
+                       class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+
+                        <div>
+                            <strong>{{ ct.name }}</strong>
+                            <div class="small text-muted">
+                                OneDrive materials folder
+                            </div>
+                        </div>
+
+                        <span class="text-muted small">
+                            <i class="bi bi-box-arrow-up-right"></i>
+                        </span>
+                    </a>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <!-- ✅ Existing resources -->
+        {% if resources %}
+            <h5 class="mb-2">Documents & resources</h5>
+
+            <div class="list-group">
+
+                {% for r in resources %}
+                    <a href="{{ r.url }}"
+                       target="_blank"
+                       class="list-group-item list-group-item-action">
+
+                        <div class="d-flex justify-content-between">
+                            <strong>{{ r.title }}</strong>
+                            <span class="text-muted small">{{ r.get_category_display }}</span>
+                        </div>
+
+                        {% if r.description %}
+                            <div class="small text-muted">{{ r.description }}</div>
+                        {% endif %}
+
+                        {% if r.course_type %}
+                            <div class="small text-muted">
+                                {{ r.course_type.name }}
+                            </div>
+                        {% endif %}
+
+                    </a>
+                {% endfor %}
+
+            </div>
+        {% else %}
+            <div class="text-muted">No resources available.</div>
+        {% endif %}
+
+    </div>
+</div>
+
+{% endblock %}

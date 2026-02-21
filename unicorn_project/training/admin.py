@@ -16,7 +16,7 @@ from import_export.widgets import ForeignKeyWidget
 from import_export.admin import ImportExportModelAdmin
 
 from .models import (
-    AccidentReport, Business, TrainingLocation, CourseType,
+    AccidentReport, Business, Resource, TrainingLocation, CourseType,
     Personnel, Booking, BookingDay, Attendance, CourseCompetency,
     FeedbackResponse, Invoice, InvoiceItem, MetaSetting,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
@@ -542,3 +542,9 @@ class FeedbackResponseAdmin(admin.ModelAdmin):
     list_display = ("date", "course_type", "instructor", "overall_rating", "wants_callback")
     list_filter = ("course_type", "date", "wants_callback")
     search_fields = ("contact_name", "contact_email", "comments")
+
+@admin.register(Resource)
+class ResourceAdmin(admin.ModelAdmin):
+    list_display = ("title", "course_type", "category", "is_active")
+    list_filter = ("course_type", "category", "is_active")
+    search_fields = ("title", "description")

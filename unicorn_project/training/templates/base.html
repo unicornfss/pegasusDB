@@ -163,6 +163,11 @@
                 <i class="bi bi-clipboard2"></i> Accident reports
             </a>
 
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_resources' %}active{% endif %}"
+              href="{% url 'instructor_resources' %}">
+                <i class="bi bi-collection"></i> Resources
+            </a>
+
             <a class="leaf {% if request.resolver_match.url_name == 'user_profile' %}active{% endif %}"
                href="{% url 'user_profile' %}">
                 <i class="bi bi-person-gear"></i> My Profile

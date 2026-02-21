@@ -256,7 +256,7 @@ class CourseTypeForm(forms.ModelForm):
         model = CourseType
         fields = [
             "name", "code", "duration_days",
-            "certificate_duration",
+            "certificate_duration", "onedrive_folder_link",
             "default_course_fee", "default_instructor_fee",
             "has_exam", "number_of_exams",
         ]
