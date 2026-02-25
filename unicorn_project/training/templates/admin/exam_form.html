@@ -17,11 +17,7 @@
     </div>
   </div>
 
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags }}">{{ message }}</div>
-    {% endfor %}
-  {% endif %}
+
 
   {% if exam_form.non_field_errors %}
     <div class="alert alert-danger">{{ exam_form.non_field_errors }}</div>
@@ -125,13 +121,22 @@
                 {{ qform.order }}
                 {% for e in qform.order.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
               </div>
-              <div class="col-md-10">
+
+              <div class="col-md-2">
+                <label class="form-label d-block">Active</label>
+                <div class="form-check">
+                  {{ qform.is_active }}
+                  <label class="form-check-label" for="{{ qform.is_active.id_for_label }}">Use in exam</label>
+                </div>
+                {% for e in qform.is_active.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+              </div>
+
+              <div class="col-md-8">
                 <label class="form-label">Question</label>
                 {{ qform.text }}
                 {% for e in qform.text.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
               </div>
-            </div>
-
+            
             {% if aformset.non_form_errors %}
               <div class="alert alert-danger py-2 mt-3">{{ aformset.non_form_errors }}</div>
             {% endif %}
@@ -215,10 +220,22 @@
             <div class="col-md-2">
               <label class="form-label">Order</label>
               {{ q_formset.empty_form.order.as_widget }}
+              {% for e in qform.order.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
-            <div class="col-md-10">
+
+            <div class="col-md-2">
+              <label class="form-label d-block">Active</label>
+              <div class="form-check">
+                {{ q_formset.empty_form.is_active.as_widget }}
+                <label class="form-check-label" for="{{ qform.is_active.id_for_label }}">Use in exam</label>
+              </div>
+              {% for e in qform.is_active.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+
+            <div class="col-md-8">
               <label class="form-label">Question</label>
               {{ q_formset.empty_form.text.as_widget }}
+              {% for e in qform.text.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
           </div>
           {{ q_formset.empty_form.id.as_widget }}

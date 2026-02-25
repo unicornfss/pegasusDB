@@ -1,4 +1,5 @@
 from datetime import timedelta, datetime, date
+from threading import active_count
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Prefetch
@@ -17,7 +18,7 @@ from django.views.decorators.http import require_http_methods
 from math import ceil
 from urllib.parse import urlencode, unquote_plus
 
-import re, math
+import re, math, random
 
 def _norm_name(s: str) -> str:
     """Name normalisation used everywhere (case/space-insensitive)."""
@@ -161,7 +162,8 @@ def delegate_exam_rules(request):
     exam_date   = request.GET.get("exam_date") or ""
 
     # Timer: 90 seconds per question
-    num_questions   = exam.questions.count()
+    active_count = exam.questions.filter(is_active=True).count()
+    num_questions = min(active_count or exam.questions.count(), 15)
     total_seconds   = num_questions * 90
     minutes, seconds = divmod(total_seconds, 60)
 
@@ -307,13 +309,13 @@ def _get_or_create_attempt(request, exam: Exam):
     """
     # Extract details from querystring / form (you already do this earlier in the view)
     exam_code   = getattr(exam, "exam_code", None)
-    name_input = _normalize_name(request.GET.get("name") or request.POST.get("name") or "")
+    name_input = _normalise_name(request.GET.get("name") or request.POST.get("name") or "")
     dob_str     = request.GET.get("date_of_birth") or request.POST.get("date_of_birth") or ""
     instructor_id = request.GET.get("instructor") or request.POST.get("instructor") or ""
     exam_date_str = request.GET.get("exam_date") or request.POST.get("exam_date") or ""
 
     # Parse / normalise
-    delegate_name = _normalize_name(name_input)
+    delegate_name = _normalise_name(name_input)
     try:
         from datetime import datetime
         date_of_birth = datetime.strptime(dob_str, "%Y-%m-%d").date()
@@ -535,8 +537,16 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
         if latest and not latest.finished_at:
             attempt = latest
         else:
-            q_total = exam.questions.count()
-            seconds_total = q_total * 90  # your rule: 90 seconds per question
+            # ✅ pick active questions, random order, max 15, and store it on the attempt
+            active_ids = list(exam.questions.filter(is_active=True).values_list("id", flat=True))
+            if not active_ids:
+                active_ids = list(exam.questions.values_list("id", flat=True))  # fallback
+
+            random.shuffle(active_ids)
+            question_ids = active_ids[:15]  # ✅ cap
+
+            q_total = len(question_ids)
+            seconds_total = q_total * 90  # 90 seconds per question
 
             started = now()
             expires = started + timedelta(seconds=seconds_total)
@@ -548,9 +558,11 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
                 delegate_name=delegate_name,
                 date_of_birth=dob,
                 total_questions=q_total,
+                question_order=question_ids,   # ✅ NEW
                 started_at=started,
                 expires_at=expires,
             )
+
             # consume retake authorisation if it existed
             if latest and latest.retake_authorised:
                 latest.retake_authorised = False
@@ -575,8 +587,16 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
         if answer_id:
             try:
                 answer = ExamAnswer.objects.select_related("question").get(pk=answer_id)
+
+                # ✅ Guard: prevent saving answers for questions not in this attempt’s set
+                if attempt.question_order and answer.question_id not in attempt.question_order:
+                    return redirect(
+                        f"{reverse('delegate_exam_run')}?examcode={exam.exam_code}&attempt={attempt.pk}&q={q_index}"
+                    )
+
                 ExamAttemptAnswer.objects.update_or_create(
-                    attempt=attempt, question=answer.question,
+                    attempt=attempt,
+                    question=answer.question,
                     defaults={"answer": answer, "is_correct": bool(answer.is_correct)},
                 )
             except ExamAnswer.DoesNotExist:
@@ -587,11 +607,24 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
         if "next" in request.POST and q_index < q_total:
             return redirect(f"{reverse('delegate_exam_run')}?examcode={exam.exam_code}&attempt={attempt.pk}&q={q_index+1}")
         if "finish" in request.POST:
-            # Go to REVIEW screen first; that page posts to finish.
             return redirect(f"{reverse('delegate_exam_review')}?examcode={exam.exam_code}&attempt={attempt.pk}")
 
     # Fetch question + answers for the current index
-    question = exam.questions.order_by("order", "id")[q_index - 1]
+    ids = attempt.question_order or list(
+        exam.questions.filter(is_active=True)
+        .order_by("order", "id")
+        .values_list("id", flat=True)[:15]
+    )
+
+    if not ids:
+        messages.error(request, "This exam has no available questions. Please ask the instructor/admin.")
+        return redirect(f"{reverse('delegate_exam_start')}?examcode={exam.exam_code}")
+
+    q_total = len(ids)
+    q_index = max(1, min(q_index, q_total))
+
+    question_id = ids[q_index - 1]
+    question = ExamQuestion.objects.prefetch_related("answers").get(pk=question_id)
     answers = question.answers.order_by("order", "id")
 
     prev = ExamAttemptAnswer.objects.filter(attempt=attempt, question=question).first()
@@ -621,10 +654,16 @@ def delegate_exam_review(request):
     if _remaining_seconds(attempt) <= 0:
         return redirect(f'{reverse("delegate_exam_finish")}?examcode={exam.exam_code}&attempt={attempt.pk}')
 
-    # Pull all questions with answers, and any selected answers for this attempt
-    questions = list(
-        exam.questions.order_by("order", "id").prefetch_related("answers")
+    # ✅ Only show the questions used in this attempt (max 15), in the same order
+    ids = attempt.question_order or list(
+        exam.questions.filter(is_active=True)
+        .order_by("order", "id")
+        .values_list("id", flat=True)[:15]
     )
+
+    questions_qs = ExamQuestion.objects.filter(id__in=ids).prefetch_related("answers")
+    q_by_id = {q.id: q for q in questions_qs}
+    questions = [q_by_id[i] for i in ids if i in q_by_id]
     chosen = {
         aa.question_id: aa for aa in attempt.answers.select_related("answer", "question")
     }
@@ -645,11 +684,13 @@ def delegate_exam_review(request):
 
 
 def _score_attempt(attempt: ExamAttempt):
-    # Score and apply pass/viva
-    # Count correct answers
-    correct = attempt.answers.filter(is_correct=True).count()
+    ans = attempt.answers.filter(is_correct=True)
+    if attempt.question_order:
+        ans = ans.filter(question_id__in=attempt.question_order)
+    correct = ans.count()
+
     attempt.score_correct = correct
-    attempt.total_questions = attempt.exam.questions.count()
+    attempt.total_questions = len(attempt.question_order) if attempt.question_order else attempt.exam.questions.count()
 
     pct = attempt.exam.pass_mark_percent or 80
     required = ceil(attempt.total_questions * pct / 100.0)

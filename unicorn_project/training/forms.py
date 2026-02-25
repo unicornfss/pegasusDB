@@ -638,7 +638,7 @@ AnswerFormSet = inlineformset_factory(
 QuestionFormSet = inlineformset_factory(
     parent_model=Exam,
     model=ExamQuestion,
-    fields=["order", "text"],
+    fields=["order", "is_active", "text"],
     extra=0,              # add via “Add question” button (empty_form)
     can_delete=True,
 )

@@ -756,6 +756,7 @@ class Exam(models.Model):
 class ExamQuestion(models.Model):
     exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name="questions")
     order = models.PositiveIntegerField(default=1)
+    is_active = models.BooleanField(default=True)
     text = models.TextField()
 
     class Meta:
@@ -802,6 +803,7 @@ class ExamAttempt(models.Model):
     # Scoring
     score_correct = models.PositiveIntegerField(default=0)
     total_questions = models.PositiveIntegerField(default=0)
+    question_order = models.JSONField(default=list, blank=True)
     passed = models.BooleanField(default=False)
     viva_eligible = models.BooleanField(default=False)
 
