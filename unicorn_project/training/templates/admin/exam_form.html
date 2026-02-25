@@ -136,6 +136,7 @@
                 {{ qform.text }}
                 {% for e in qform.text.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
               </div>
+            </div>
             
             {% if aformset.non_form_errors %}
               <div class="alert alert-danger py-2 mt-3">{{ aformset.non_form_errors }}</div>
