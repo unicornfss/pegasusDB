@@ -758,6 +758,12 @@ class ExamQuestion(models.Model):
     order = models.PositiveIntegerField(default=1)
     is_active = models.BooleanField(default=True)
     text = models.TextField()
+    image_url = models.URLField(
+        blank=True,
+        null=True,
+        max_length=500,
+        help_text="Optional image URL for this question",
+    )
 
     class Meta:
         ordering = ["order", "id"]

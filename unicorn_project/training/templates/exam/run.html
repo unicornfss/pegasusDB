@@ -27,6 +27,20 @@
     <div class="card-body">
       <p class="lead mb-3">{{ question.text }}</p>
 
+      {% if question.image_url %}
+        <div class="mb-3">
+          <img
+            src="{{ question.image_url }}"
+            alt="Question image"
+            class="img-fluid rounded border"
+            style="max-height: 360px; width: auto;"
+            loading="lazy"
+            referrerpolicy="no-referrer"
+            onerror="this.style.display='none';"
+          >
+        </div>
+      {% endif %}
+
       <div class="list-group">
         {% for a in answers %}
           <label class="list-group-item list-group-item-action d-flex align-items-center gap-2">

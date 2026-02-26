@@ -26,7 +26,23 @@
     {% with sel=chosen|get_item:q.id %}
     <div class="card mb-3">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <div><strong>Q{{ forloop.counter }}.</strong> {{ q.text }}</div>
+        <div>
+          <strong>Q{{ forloop.counter }}.</strong> {{ q.text }}
+
+          {% if q.image_url %}
+            <div class="mt-2">
+              <img
+                src="{{ q.image_url }}"
+                alt="Question image"
+                class="img-fluid rounded border"
+                style="max-height: 240px; width: auto;"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+                onerror="this.style.display='none';"
+              >
+            </div>
+          {% endif %}
+        </div>
         <div>
           <a class="btn btn-sm btn-outline-secondary"
              href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q={{ forloop.counter }}">
