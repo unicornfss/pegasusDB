@@ -4,8 +4,29 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-<form method="post" novalidate>
+<form method="post" novalidate class="exam-editor">
   {% csrf_token %}
+
+<style>
+  /* --- Exam editor tidy-up --- */
+  .exam-editor .accordion-item.q-item {
+    background: #fff;
+    border: 1px solid rgba(0,0,0,.08) !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    border-radius: .5rem;
+    overflow: hidden;
+  }
+  .exam-editor .accordion-item.q-item + .accordion-item.q-item { margin-top: .75rem; }
+  .exam-editor .accordion-item.q-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+  .exam-editor .accordion-button { background: rgba(0,0,0,.03); }
+  .exam-editor .accordion-button:focus { box-shadow: 0 0 0 .2rem rgba(13,110,253,.15); }
+  .exam-editor .q-title { color: rgba(0,0,0,.72); }
+  .exam-editor textarea.form-control { resize: vertical; }
+  .exam-editor .table td, .exam-editor .table th { vertical-align: middle; }
+  .exam-editor .correct-col { width: 7rem; text-align: center; }
+  .exam-editor .order-col { width: 7rem; }
+</style>
+
 
   {# ===== Top action bar ===== #}
   <div class="d-flex justify-content-between align-items-center mb-3">
@@ -100,22 +121,34 @@
         <div class="alert alert-danger py-2">{{ q_formset.non_form_errors }}</div>
       {% endif %}
 
-      <div id="questions">
+      <div class="accordion" id="questionsAccordion">
         {% for pair in qa_pairs %}
           {% with qform=pair.qform aformset=pair.aformset idx=forloop.counter0 %}
 
-          <div class="border rounded p-3 mb-3 q-item" data-q-idx="{{ idx }}">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-              <strong class="mb-0">Question {{ forloop.counter }}</strong>
-              <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-sm btn-primary">Save</button>
-                {% if q_formset.can_delete and qform.DELETE %}
-                  <label class="btn btn-sm btn-outline-danger mb-0">{{ qform.DELETE }} Delete question</label>
-                {% endif %}
-              </div>
-            </div>
+          <div class="accordion-item q-item" data-q-idx="{{ idx }}">
+            <h2 class="accordion-header" id="q-head-{{ idx }}">
+              <button class="accordion-button {% if not forloop.first %}collapsed{% endif %}" type="button"
+                      data-bs-toggle="collapse" data-bs-target="#q-collapse-{{ idx }}"
+                      aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                      aria-controls="q-collapse-{{ idx }}">
+                <span class="me-2 fw-semibold">Question {{ forloop.counter }}</span>
+                <span class="q-title text-truncate">
+                  {% if qform.text.value %}{{ qform.text.value|truncatechars:70 }}{% else %}(No question text yet){% endif %}
+                </span>
+              </button>
+            </h2>
 
-            <div class="row g-3 align-items-end">
+            <div id="q-collapse-{{ idx }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}"
+                 aria-labelledby="q-head-{{ idx }}" data-bs-parent="#questionsAccordion">
+              <div class="accordion-body">
+                <div class="d-flex justify-content-end gap-2 mb-3">
+                  <button type="submit" class="btn btn-sm btn-primary">Save</button>
+                  {% if q_formset.can_delete and qform.DELETE %}
+                    <label class="btn btn-sm btn-outline-danger mb-0">{{ qform.DELETE }} Delete question</label>
+                  {% endif %}
+                </div>
+
+                <div class="row g-3 align-items-end">
               <div class="col-md-2">
                 <label class="form-label">Order</label>
                 {{ qform.order }}
@@ -136,7 +169,26 @@
                 {{ qform.text }}
                 {% for e in qform.text.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
               </div>
-            
+            </div>
+
+            <div class="row g-3 mt-1">
+              <div class="col-md-8">
+                <label class="form-label">Image URL (optional)</label>
+                {{ qform.image_url }}
+                {% if qform.image_url.errors %}
+                  {% for e in qform.image_url.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                {% endif %}
+                <div class="form-text">Paste a full URL to an image (e.g. https://...jpg / png / webp).</div>
+              </div>
+
+              {% if qform.instance.image_url %}
+                <div class="col-md-4">
+                  <img src="{{ qform.instance.image_url }}" alt="Question image"
+                      class="img-fluid rounded border mt-2" style="max-height: 220px;">
+                </div>
+              {% endif %}
+            </div>
+
             {% if aformset.non_form_errors %}
               <div class="alert alert-danger py-2 mt-3">{{ aformset.non_form_errors }}</div>
             {% endif %}
@@ -156,9 +208,9 @@
               <table class="table table-sm align-middle">
                 <thead>
                   <tr>
-                    <th style="width:8rem">Order</th>
+                    <th class="order-col">Order</th>
                     <th>Answer text</th>
-                    <th style="width:8rem">Correct?</th>
+                    <th class="correct-col">Correct</th>
                     <th style="width:8rem" class="text-end">Actions</th>
                   </tr>
                 </thead>
@@ -167,7 +219,15 @@
                     <tr>
                       <td>{{ af.order }}</td>
                       <td>{{ af.text }}</td>
-                      <td>{{ af.is_correct }}</td>
+                      <td class="text-center">
+  <div class="form-check m-0 d-inline-block">
+    <input class="form-check-input"
+           type="radio"
+           name="a-{{ idx }}-correct"
+           value="{{ forloop.counter0 }}"
+           {% if af.instance.is_correct %}checked{% endif %}>
+  </div>
+</td>
                       <td class="text-end">
                         {% if aformset.can_delete and af.DELETE %}
                           <label class="btn btn-outline-danger btn-sm mb-0">{{ af.DELETE }} Delete</label>
@@ -188,7 +248,12 @@
               <tr>
                 <td>{{ aformset.empty_form.order.as_widget }}</td>
                 <td>{{ aformset.empty_form.text.as_widget }}</td>
-                <td>{{ aformset.empty_form.is_correct.as_widget }}</td>
+                <td><div class="form-check m-0 d-inline-block">
+  <input class="form-check-input"
+         type="radio"
+         name="a-{{ idx }}-correct"
+         value="__prefix__">
+</div></td>
                 <td class="text-end">
                   {% if aformset.can_delete and aformset.empty_form.DELETE %}
                     <label class="btn btn-outline-danger btn-sm mb-0">{{ aformset.empty_form.DELETE.as_widget }} Delete</label>
@@ -197,6 +262,8 @@
                 </td>
               </tr>
             </template>
+              </div>
+            </div>
           </div>
           {% endwith %}
         {% empty %}
@@ -211,35 +278,49 @@
 
       {# Empty question template for “Add question” #}
       <template id="q-empty">
-        <div class="border rounded p-3 mb-3 q-item">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <strong class="mb-0">New question</strong>
-            <button type="submit" class="btn btn-sm btn-primary">Save</button>
-          </div>
-          <div class="row g-3 align-items-end">
+        <div class="accordion-item q-item" data-q-idx="__prefix__">
+          <h2 class="accordion-header" id="q-head-__prefix__">
+            <button class="accordion-button" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#q-collapse-__prefix__"
+                    aria-expanded="true" aria-controls="q-collapse-__prefix__">
+              <span class="me-2 fw-semibold">New question</span>
+              <span class="q-title text-truncate">(No question text yet)</span>
+            </button>
+          </h2>
+          <div id="q-collapse-__prefix__" class="accordion-collapse collapse show"
+               aria-labelledby="q-head-__prefix__" data-bs-parent="#questionsAccordion">
+            <div class="accordion-body">
+              <div class="d-flex justify-content-end gap-2 mb-3">
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+              </div>
+              <div class="row g-3 align-items-end">
             <div class="col-md-2">
               <label class="form-label">Order</label>
               {{ q_formset.empty_form.order.as_widget }}
-              {% for e in qform.order.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
 
             <div class="col-md-2">
               <label class="form-label d-block">Active</label>
               <div class="form-check">
                 {{ q_formset.empty_form.is_active.as_widget }}
-                <label class="form-check-label" for="{{ qform.is_active.id_for_label }}">Use in exam</label>
+                <label class="form-check-label">Use in exam</label>
               </div>
-              {% for e in qform.is_active.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
 
             <div class="col-md-8">
               <label class="form-label">Question</label>
               {{ q_formset.empty_form.text.as_widget }}
-              {% for e in qform.text.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
           </div>
-          {{ q_formset.empty_form.id.as_widget }}
-          <div class="text-muted small mt-2">Save this page, then add answers for the new question.</div>
+              <div class="col-md-12">
+                <label class="form-label">Image URL (optional)</label>
+                {{ q_formset.empty_form.image_url.as_widget }}
+                <div class="form-text">Paste a full URL to an image.</div>
+              </div>
+            </div>
+            {{ q_formset.empty_form.id.as_widget }}
+            <div class="text-muted small mt-2">Save this page, then add answers for the new question.</div>
+          </div>
         </div>
       </template>
     </div>
@@ -261,7 +342,7 @@
   document.addEventListener('DOMContentLoaded', function () {
 
     // ---------- QUESTIONS ----------
-    const qList  = document.getElementById('questions');
+    const qList  = document.getElementById('questionsAccordion');
     const qTpl   = document.getElementById('q-empty');
     const qTotal = document.querySelector('input[name="q-TOTAL_FORMS"]');
 
@@ -285,6 +366,33 @@
       setQuestionOrder(node, idx + 1);
       qList.appendChild(node);
       qTotal.value = (idx + 1).toString();
+
+      // Open the newly-added accordion item
+      const collapseEl = node.querySelector('.accordion-collapse');
+      if (collapseEl && window.bootstrap && window.bootstrap.Collapse) {
+        try {
+          const bs = new window.bootstrap.Collapse(collapseEl, { toggle: true });
+        } catch (_) {
+          collapseEl.classList.add('show');
+        }
+      } else if (collapseEl) {
+        collapseEl.classList.add('show');
+      }
+
+      // Scroll into view for a nicer workflow
+      node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+
+    // Keep the accordion header preview in sync with question text
+    document.addEventListener('input', function (e) {
+      const ta = e.target.closest('textarea[name$="-text"]');
+      if (!ta) return;
+      const item = ta.closest('.accordion-item');
+      if (!item) return;
+      const title = item.querySelector('.q-title');
+      if (!title) return;
+      const raw = (ta.value || '').trim();
+      title.textContent = raw ? (raw.length > 70 ? raw.slice(0, 67) + '…' : raw) : '(No question text yet)';
     });
 
     // ---------- ANSWERS ----------
@@ -305,6 +413,12 @@
       if (orderInput) orderInput.value = i + 1;
 
       tbody.appendChild(row);
+      // If no correct answer selected yet for this question, default the first answer to correct.
+      const groupName = prefix + '-correct';
+      const anyChecked = document.querySelector('input[type="radio"][name="' + groupName + '"]:checked');
+      const thisRadio = row.querySelector('input[type="radio"][name="' + groupName + '"]');
+      if (!anyChecked && thisRadio) thisRadio.checked = true;
+
       total.value = (i + 1).toString();
     }
 

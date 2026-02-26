@@ -604,8 +604,35 @@ class ExamForm(forms.ModelForm):
     class Meta:
         model = Exam
         fields = ["sequence", "title"]
+        widgets = {
+            "sequence": forms.NumberInput(attrs={"class": "form-control form-control-sm", "style": "max-width:6rem"}),
+            "title": forms.TextInput(attrs={"class": "form-control"}),
+        }
 
 # ...imports above...
+
+
+class ExamQuestionForm(forms.ModelForm):
+    class Meta:
+        model = ExamQuestion
+        fields = ["order", "is_active", "text", "image_url"]
+        widgets = {
+            "order": forms.NumberInput(attrs={"class": "form-control form-control-sm", "style": "max-width:6rem"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "text": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+            "image_url": forms.URLInput(attrs={"class": "form-control"}),
+        }
+
+class ExamAnswerForm(forms.ModelForm):
+    class Meta:
+        model = ExamAnswer
+        fields = ["order", "text", "is_correct"]
+        widgets = {
+            "order": forms.NumberInput(attrs={"class": "form-control form-control-sm", "style": "max-width:6rem"}),
+            "text": forms.TextInput(attrs={"class": "form-control form-control-sm"}),
+            # is_correct rendered as radios in template; keep widget for fallback
+            "is_correct": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
 
 class BaseAnswerFormSet(BaseInlineFormSet):
     def clean(self):
@@ -628,6 +655,7 @@ class BaseAnswerFormSet(BaseInlineFormSet):
 AnswerFormSet = inlineformset_factory(
     parent_model=ExamQuestion,
     model=ExamAnswer,
+    form=ExamAnswerForm,
     fields=["order", "text", "is_correct"],
     extra=0,           # <<< important: JS adds the rows
     can_delete=True,
@@ -638,7 +666,8 @@ AnswerFormSet = inlineformset_factory(
 QuestionFormSet = inlineformset_factory(
     parent_model=Exam,
     model=ExamQuestion,
-    fields=["order", "is_active", "text"],
+    form=ExamQuestionForm,
+    fields=["order", "is_active", "text", "image_url"],
     extra=0,              # add via “Add question” button (empty_form)
     can_delete=True,
 )

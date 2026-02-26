@@ -178,7 +178,7 @@ def business_form(request, pk=None):
         if form.is_valid():
             obj = form.save()
             messages.success(request, "Changes saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_business_list")
             return redirect("admin_business_edit", pk=obj.id)
         else:
@@ -288,7 +288,7 @@ def location_new(request, business_id):
             loc.business = biz
             loc.save()  # duplicates allowed
             messages.success(request, "Location saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_business_edit", pk=biz.id)
             return redirect("admin_location_edit", pk=loc.id)
         else:
@@ -319,7 +319,7 @@ def location_edit(request, pk):
             obj.business = biz
             obj.save()
             messages.success(request, "Location saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_business_edit", pk=biz.id)
             return redirect("admin_location_edit", pk=obj.id)
         else:
@@ -437,7 +437,7 @@ def course_form(request, pk=None):
 
             messages.success(request, "Course type saved.")
 
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_course_list")
             return redirect("admin_course_edit", pk=ct.pk)
         else:
@@ -836,7 +836,7 @@ def booking_form(request, pk=None):
                             request,
                             "Cannot change course days or times because delegates are already registered."
                         )
-                        if "save_return" in request.POST:
+                        if "save_return" in post:
                             return redirect("admin_booking_list")
                         return redirect("admin_booking_edit", pk=booking.pk)
 
@@ -896,7 +896,7 @@ def booking_form(request, pk=None):
                         )
 
             messages.success(request, "Booking saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_booking_list")
             return redirect("admin_booking_edit", pk=booking.pk)
         else:
@@ -1369,7 +1369,7 @@ def admin_user_new(request):
             profile.save()
 
             messages.success(request, "User created.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_user_list")
             return redirect("admin_user_edit", pk=u.pk)
         else:
@@ -1410,7 +1410,7 @@ def admin_user_edit(request, pk: int):
             profile.save()
 
             messages.success(request, "Changes saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_user_list")
             return redirect("admin_user_edit", pk=user.pk)
         else:
@@ -1565,7 +1565,7 @@ def admin_personnel_new(request):
                 inst.user.groups.set(groups)
                 inst.user.save()
 
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_personnel_list")
             return redirect("admin_personnel_edit", pk=inst.pk)
 
@@ -1657,7 +1657,7 @@ def admin_personnel_edit(request, pk):
 
             messages.success(request, "Changes saved.")
 
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_personnel_list")
 
             return redirect("admin_personnel_edit", pk=inst.pk)
@@ -1831,7 +1831,7 @@ def booking_day_registers(request, pk):
                 obj.delete()
 
             messages.success(request, "Registers saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_booking_edit", pk=day.booking_id)
             return redirect("admin_booking_day_registers", pk=day.pk)
         else:
@@ -1937,15 +1937,44 @@ def exam_form(request, pk):
     course = exam.course_type
 
     if request.method == "POST":
-        eform = ExamForm(request.POST, instance=exam)
-        qset  = QuestionFormSet(request.POST, instance=exam, prefix="q")
+        # We render "correct answer" as a radio group per question (more obvious that only one can be selected).
+        # Convert that radio selection back into the boolean is_correct fields expected by the AnswerFormSet.
+        post = request.POST.copy()
+
+        # For each posted answer formset prefix (a-0, a-1, ...), map prefix-correct -> prefix-<n>-is_correct
+        # Radio input name is "{prefix}-correct" with value being the answer form index.
+        for key in list(post.keys()):
+            if key.endswith("-correct") and key.startswith("a-"):
+                prefix = key[:-len("-correct")]
+                selected = post.get(key)
+                try:
+                    selected_i = int(selected)
+                except (TypeError, ValueError):
+                    selected_i = None
+
+                try:
+                    total = int(post.get(f"{prefix}-TOTAL_FORMS") or 0)
+                except (TypeError, ValueError):
+                    total = 0
+
+                for j in range(total):
+                    field_name = f"{prefix}-{j}-is_correct"
+                    if selected_i is not None and j == selected_i:
+                        post[field_name] = "on"
+                    else:
+                        # ensure unchecked boxes aren't lingering in POST
+                        if field_name in post:
+                            del post[field_name]
+
+        eform = ExamForm(post, instance=exam)
+        qset  = QuestionFormSet(post, instance=exam, prefix="q")
 
         # Build answer formsets; bind only if management keys exist for that prefix
         answer_sets = []
         for i, qf in enumerate(qset.forms):
             prefix = f"a-{i}"
-            if f"{prefix}-TOTAL_FORMS" in request.POST:
-                afs = AnswerFormSet(request.POST, instance=qf.instance, prefix=prefix)
+            if f"{prefix}-TOTAL_FORMS" in post:
+                afs = AnswerFormSet(post, instance=qf.instance, prefix=prefix)
             else:
                 afs = AnswerFormSet(instance=qf.instance, prefix=prefix)  # unbound (no answers posted)
             answer_sets.append(afs)
@@ -1962,14 +1991,14 @@ def exam_form(request, pk):
 
             # NEW: collect pass/viva inputs regardless of whether ExamForm has them
             try:
-                exam_obj.pass_mark_percent = int(request.POST.get("pass_mark_percent") or 80)
+                exam_obj.pass_mark_percent = int(post.get("pass_mark_percent") or 80)
             except (TypeError, ValueError):
                 exam_obj.pass_mark_percent = 80
 
-            allow_viva = (request.POST.get("allow_viva") in ("on", "true", "1", "True"))
+            allow_viva = (post.get("allow_viva") in ("on", "true", "1", "True"))
             exam_obj.allow_viva = allow_viva
 
-            v_raw = request.POST.get("viva_pass_percent")
+            v_raw = post.get("viva_pass_percent")
             if allow_viva and v_raw not in (None, "",):
                 try:
                     exam_obj.viva_pass_percent = int(v_raw)
@@ -1988,15 +2017,15 @@ def exam_form(request, pk):
             # Save answers for any indices that were posted
             for i, qf in enumerate(qset.forms):
                 prefix = f"a-{i}"
-                if f"{prefix}-TOTAL_FORMS" in request.POST:
+                if f"{prefix}-TOTAL_FORMS" in post:
                     if qf.instance.pk:
                         qf.instance.refresh_from_db()
-                    afs = AnswerFormSet(request.POST, instance=qf.instance, prefix=prefix)
+                    afs = AnswerFormSet(post, instance=qf.instance, prefix=prefix)
                     if afs.is_valid():
                         afs.save()
 
             messages.success(request, "Exam updated.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_course_edit", pk=course.pk)
             return redirect("admin_exam_edit", pk=exam_obj.pk)
         else:
