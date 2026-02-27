@@ -184,6 +184,7 @@ urlpatterns = [
 
     # ---------- Instructor: Feedback tab + detail + exports ----------
     path("app/instructor/booking/<uuid:booking_id>/feedback/", instv.instructor_feedback_tab, name="instructor_feedback_tab"),
+    path("app/instructor/booking/<uuid:booking_id>/feedback/poll/", instv.instructor_feedback_poll, name="instructor_feedback_poll"),
     path("app/instructor/feedback/<uuid:pk>/", instv.instructor_feedback_view, name="instructor_feedback_view"),
     path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/all/", instv.instructor_feedback_pdf_all, name="instructor_feedback_pdf_all"),
     path("app/instructor/booking/<uuid:booking_id>/feedback/pdf/summary/", instv.instructor_feedback_pdf_summary, name="instructor_feedback_pdf_summary"),

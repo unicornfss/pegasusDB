@@ -338,6 +338,7 @@
 <div class="tab-content border border-top-0 rounded-bottom p-3" id="bookingTabsContent">
   <!-- Pane: Course days / registers -->
   <div class="tab-pane fade show active" id="days-pane" role="tabpanel" aria-labelledby="days-tab" tabindex="0">
+    <div id="days-refresh-indicator" class="text-end small text-muted" style="opacity:0; transition:opacity .25s;">Updating…</div>
     <div class="table-responsive">
       <table class="table table-sm align-middle">
         <thead>
@@ -378,6 +379,78 @@
       </table>
     </div>
   </div>
+
+  <script>
+  // Live refresh for "Course days / registers" tab (keeps delegate counts up to date)
+  document.addEventListener('DOMContentLoaded', function () {
+    var daysTabBtn = document.getElementById('days-tab');
+    var daysPane   = document.getElementById('days-pane');
+    var indicator  = document.getElementById('days-refresh-indicator');
+    if (!daysPane) return;
+
+    var timer = null;
+
+    function isPaneActive() {
+      return daysPane.classList.contains('active') && daysPane.classList.contains('show');
+    }
+    function isUserInteracting() {
+      if (daysPane.matches(':hover')) return true;
+      var ae = document.activeElement;
+      return !!(ae && daysPane.contains(ae));
+    }
+    function showIndicator(on) {
+      if (indicator) indicator.style.opacity = on ? '1' : '0';
+    }
+
+    async function refreshDays() {
+      if (!isPaneActive()) return;
+      if (isUserInteracting()) return;
+
+      showIndicator(true);
+      try {
+        var url = window.location.href.split('#')[0];
+        var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
+          cache: 'no-store',
+          headers: { 'X-Requested-With': 'fetch' }
+        });
+        if (!res.ok) return;
+
+        var html = await res.text();
+        var tmp = document.createElement('div');
+        tmp.innerHTML = html;
+        var freshPane = tmp.querySelector('#days-pane');
+        if (!freshPane) return;
+
+        var freshTbody = freshPane.querySelector('table tbody');
+        var currTbody  = daysPane.querySelector('table tbody');
+        if (!freshTbody || !currTbody) return;
+
+        var freshHTML = freshTbody.innerHTML.trim();
+        if (currTbody.innerHTML.trim() !== freshHTML) {
+          currTbody.innerHTML = freshHTML;
+        }
+      } catch (e) {
+        // swallow errors silently
+      } finally {
+        setTimeout(function(){ showIndicator(false); }, 300);
+      }
+    }
+
+    function start() {
+      if (!timer) timer = setInterval(refreshDays, 5000);
+    }
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null; }
+    }
+
+    start();
+    if (daysTabBtn) daysTabBtn.addEventListener('shown.bs.tab', refreshDays);
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) stop();
+      else start();
+    });
+  });
+  </script>
 
   <!-- Pane: Assessments -->
   <div class="tab-pane fade" id="assessments-pane" role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">

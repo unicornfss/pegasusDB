@@ -1,0 +1,17 @@
+{# templates/instructor/_booking_feedback_rows.html #}
+{% for r in fb_qs %}
+  <tr>
+    <td>{{ r.date|date:"j M Y" }}</td>
+    <td>{{ r.instructor.name|default:"—" }}</td>
+    <td class="text-center">
+      {{ r.overall_rating }}/5
+      <span aria-hidden="true">🙂</span>
+    </td>
+    <td class="text-end position-relative" style="z-index: 3;">
+      <a class="btn btn-outline-primary btn-sm"
+         href="{% url 'instructor_feedback_view' r.id %}">
+        View
+      </a>
+    </td>
+  </tr>
+{% endfor %}

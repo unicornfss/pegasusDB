@@ -1661,15 +1661,43 @@ def instructor_assessment_autosave(request, pk):
 @login_required
 def instructor_day_registers_poll(request, pk: int):
     """
-    Lightweight GET endpoint used by client-side code to check how many
-    register rows exist for a given day. Extend as needed.
+    Lightweight GET endpoint used by client-side code to refresh the register
+    rows for a given day without a full page reload.
     """
     if request.method != "GET":
         return JsonResponse({"ok": False, "error": "GET only"}, status=405)
 
-    day = get_object_or_404(BookingDay, pk=pk)
-    rows = DelegateRegister.objects.filter(booking_day=day).count()
-    return JsonResponse({"ok": True, "day_id": pk, "rows": rows})
+    instr = getattr(request.user, "personnel", None)
+    day = get_object_or_404(
+        BookingDay.objects.select_related(
+            "booking__course_type", "booking__business", "booking__instructor"
+        ),
+        pk=pk,
+    )
+    if not instr or day.booking.instructor_id != getattr(instr, "id", None):
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    qs = (
+        DelegateRegister.objects.filter(booking_day=day)
+        .order_by("name")
+        .only("name", "date_of_birth", "job_title", "employee_id", "health_status", "notes")
+    )
+
+    rows = []
+    for r in qs:
+        symbol, cls, title = _health_badge_tuple(r.health_status)
+        rows.append({
+            "obj": r,
+            "health_symbol": symbol,
+            "health_class": cls,
+            "health_title": title,
+            # Optional DOB-mismatch UI (safe defaults)
+            "dob_mismatch": False,
+            "dob_expected": None,
+        })
+
+    html = render_to_string("instructor/_day_register_rows.html", {"rows": rows}, request=request)
+    return JsonResponse({"ok": True, "day_id": pk, "html": html, "rows": len(rows)})
 
 @login_required
 @require_POST
@@ -2621,6 +2649,43 @@ def instructor_feedback_tab(request, booking_id):
     }
     return render(request, "instructor/booking_feedback.html", context)
 
+
+@login_required
+def instructor_feedback_poll(request, booking_id):
+    """
+    Lightweight GET endpoint used by client-side code to refresh the feedback
+    rows for a given booking without a full page reload.
+    Returns JSON: { ok: true, html: "<tr>...</tr>..." }
+    """
+    if request.method != "GET":
+        return JsonResponse({"ok": False, "error": "GET only"}, status=405)
+
+    booking = get_object_or_404(Booking, pk=booking_id)
+
+    # Ensure instructor can only see their own booking feedback
+    instr = getattr(request.user, "personnel", None)
+    if not instr or booking.instructor_id != getattr(instr, "id", None):
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    # Full date range for this booking (min..max across all days)
+    day_qs = booking.days.order_by("date").values_list("date", flat=True)
+    if day_qs:
+        start_date = day_qs.first()
+        end_date   = day_qs.last()
+        date_filter = {"date__range": (start_date, end_date)}
+    else:
+        start_date = end_date = booking.course_date
+        date_filter = {"date": booking.course_date}
+
+    fb_qs = (
+        FeedbackResponse.objects
+        .filter(course_type=booking.course_type, **date_filter)
+        .select_related("instructor")
+        .order_by("-date", "-created_at")
+    )
+
+    html = render_to_string("instructor/_booking_feedback_rows.html", {"fb_qs": fb_qs}, request=request)
+    return JsonResponse({"ok": True, "booking_id": str(booking_id), "html": html, "rows": fb_qs.count()})
 
 
 def instructor_feedback_view(request, pk):

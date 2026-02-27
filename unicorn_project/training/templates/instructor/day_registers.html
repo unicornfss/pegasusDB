@@ -25,8 +25,19 @@
 </div>
 {% endif %}
 
+<div class="alert alert-info py-2 mb-2 small d-flex justify-content-between align-items-center">
+  <div>
+    <i class="bi bi-arrow-repeat"></i>
+    This page auto-refreshes every 5 seconds. Updates pause while your mouse is over the list.
+    <span id="last-updated-time" class="ms-2"></span>
+  </div>
+  <div id="auto-refresh-status" class="d-none">
+    Updating…
+  </div>
+</div>
+
 <div class="table-responsive mb-3">
-  <table class="table table-sm align-middle">
+  <table class="table table-sm align-middle table-striped table-hover">
     <thead>
       <tr>
         <th style="width:22%">Name</th>
@@ -38,36 +49,78 @@
         <th style="width:10%" class="text-end">Actions</th>
       </tr>
     </thead>
-    <tbody id="reg-body"
-       data-poll-url="{% url 'instructor_day_registers_poll' day.id %}">
-      {% for r in rows %}
-        <tr>
-          <td>{{ r.obj.name }}</td>
 
-          <td>
+    <tbody id="reg-body"
+           data-poll-url="{% url 'instructor_day_registers_poll' day.id %}">
+      {% for r in rows %}
+        <tr class="js-row-link">
+          <td class="position-relative">
+            {{ r.obj.name }}
+            <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
+              class="stretched-link"
+              aria-label="Edit {{ r.obj.name }}">
+              <span class="visually-hidden">Edit</span>
+            </a>
+          </td>
+
+          <td class="position-relative">
             {{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}
             {% if r.dob_mismatch %}
               <span class="badge bg-danger ms-1" title="Does not match previous day{% if r.dob_expected %} (expected {{ r.dob_expected|date:'d/m/Y' }}){% endif %}">
                 DOB?
               </span>
             {% endif %}
+            <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
+              class="stretched-link"
+              aria-label="Edit {{ r.obj.name }}">
+              <span class="visually-hidden">Edit</span>
+            </a>
           </td>
-          
-          <td>{{ r.obj.job_title|default:"—" }}</td>
-          <td class="text-muted">
+
+          <td class="position-relative">
+            {{ r.obj.job_title|default:"—" }}
+            <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
+              class="stretched-link"
+              aria-label="Edit {{ r.obj.name }}">
+              <span class="visually-hidden">Edit</span>
+            </a>
+          </td>
+
+          <td class="text-muted position-relative">
             {% if r.obj.notes %}
               {{ r.obj.notes|truncatechars:140 }}
             {% else %}
               —
             {% endif %}
+            <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
+              class="stretched-link"
+              aria-label="Edit {{ r.obj.name }}">
+              <span class="visually-hidden">Edit</span>
+            </a>
           </td>
-          <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
-          <td class="text-center">
+
+          <td class="d-none d-lg-table-cell position-relative">
+            {{ r.obj.employee_id|default:"—" }}
+            <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
+              class="stretched-link"
+              aria-label="Edit {{ r.obj.name }}">
+              <span class="visually-hidden">Edit</span>
+            </a>
+          </td>
+
+          <td class="text-center position-relative">
             <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">
               {{ r.health_symbol }}
             </span>
+            <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
+              class="stretched-link"
+              aria-label="Edit {{ r.obj.name }}">
+              <span class="visually-hidden">Edit</span>
+            </a>
           </td>
-          <td class="text-end">
+
+          {# Keep actions above the stretched links so buttons still work #}
+          <td class="text-end position-relative" style="z-index: 3;">
             <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_edit' r.obj.pk %}">
               Edit
             </a>
@@ -244,21 +297,39 @@
   (function(){
     const tbody = document.getElementById('reg-body');
     if (!tbody) return;
+
     const pollUrl = tbody.dataset.pollUrl;
     const INTERVAL = 5000;
+
+    const lastUpdatedEl = document.getElementById('last-updated-time');
+    const statusEl = document.getElementById('auto-refresh-status');
+
+    let isHovering = false;
+    tbody.addEventListener('mouseenter', () => { isHovering = true; });
+    tbody.addEventListener('mouseleave', () => { isHovering = false; });
+
+    function formatTime(d) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
+    function setLastUpdatedNow() {
+      if (lastUpdatedEl) lastUpdatedEl.textContent = `Last updated: ${formatTime(new Date())}`;
+    }
+    // set an initial value
+    setLastUpdatedNow();
 
     // Don't refresh while user is interacting with table inputs or delete forms
     function isBusy() {
       const a = document.activeElement;
       if (!a) return false;
       const isField = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(a.tagName);
-      // also avoid while a delete confirm is open — crude but safe
       return isField && tbody.contains(a);
     }
 
     async function tick() {
       try {
-        if (!document.hidden && !isBusy()) {
+        if (!document.hidden && !isBusy() && !isHovering) {
+          if (statusEl) statusEl.classList.remove('d-none');
+
           const resp = await fetch(pollUrl, {headers: {"X-Requested-With": "XMLHttpRequest"}});
           if (resp.ok) {
             const data = await resp.json();
@@ -267,17 +338,39 @@
               if (tbody.getAttribute('data-last') !== data.html) {
                 tbody.innerHTML = data.html;
                 tbody.setAttribute('data-last', data.html);
+                setLastUpdatedNow();
               }
             }
           }
         }
       } catch (e) { /* swallow errors silently */ }
+      finally {
+        if (statusEl) statusEl.classList.add('d-none');
+      }
       setTimeout(tick, INTERVAL);
     }
+
     setTimeout(tick, INTERVAL);
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) setTimeout(tick, 200);
     });
   })();
 </script>
+
+<style>
+  /* Make whole row feel clickable */
+  tr.js-row-link { cursor: pointer; }
+
+  /* Stronger hover highlight than default Bootstrap */
+  tr.js-row-link:hover > * {
+    box-shadow: inset 0 0 0 9999px rgba(13, 110, 253, 0.10); /* subtle blue wash */
+  }
+
+  /* Keyboard focus outline (accessibility) */
+  tr.js-row-link:focus-within > * {
+    box-shadow: inset 0 0 0 9999px rgba(13, 110, 253, 0.14);
+    outline: 2px solid rgba(13, 110, 253, 0.35);
+    outline-offset: -2px;
+  }
+</style>
 {% endblock %}

@@ -20,8 +20,20 @@
 </div>
 
 {% if fb_qs %}
+  {# Auto-refresh notice (matches Exams/Register styling) #}
+  <div class="alert alert-info py-2 mb-2 small d-flex justify-content-between align-items-center">
+    <div>
+      <i class="bi bi-arrow-repeat"></i>
+      This tab auto-refreshes every 5 seconds. Updates pause while your mouse is over the table.
+      <span id="feedback-last-updated-time" class="ms-2"></span>
+    </div>
+    <div id="feedback-auto-refresh-status" class="d-none">
+      Updating…
+    </div>
+  </div>
+
   <div class="table-responsive">
-    <table class="table table-sm align-middle">
+    <table class="table table-sm align-middle table-striped table-hover">
       <thead>
         <tr>
           <th style="width:140px">Date</th>
@@ -30,7 +42,10 @@
           <th style="width:120px"></th>
         </tr>
       </thead>
-      <tbody>
+
+      {# Poll endpoint returns JSON: { "html": "<tr>...</tr>..." } #}
+      <tbody id="feedback-body"
+             data-poll-url="{% url 'instructor_feedback_poll' booking.id %}">
         {% for r in fb_qs %}
           <tr>
             <td>{{ r.date|date:"j M Y" }}</td>
@@ -39,7 +54,7 @@
               {{ r.overall_rating }}/5
               <span aria-hidden="true">🙂</span>
             </td>
-            <td class="text-end">
+            <td class="text-end position-relative" style="z-index: 3;">
               <a class="btn btn-outline-primary btn-sm"
                  href="{% url 'instructor_feedback_view' r.id %}">
                 View
@@ -50,6 +65,85 @@
       </tbody>
     </table>
   </div>
+
+  <script>
+    // Feedback tab auto-refresh: swap <tbody> rows (pauses on hover + while typing)
+    (function(){
+      const tbody = document.getElementById('feedback-body');
+      if (!tbody) return;
+
+      const pollUrl = tbody.dataset.pollUrl;
+      const INTERVAL = 5000;
+
+      const lastUpdatedEl = document.getElementById('feedback-last-updated-time');
+      const statusEl = document.getElementById('feedback-auto-refresh-status');
+
+      // Pause updates while hovering the table body
+      let isHovering = false;
+      tbody.addEventListener('mouseenter', () => { isHovering = true; });
+      tbody.addEventListener('mouseleave', () => { isHovering = false; });
+
+      function formatTime(d) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+      function setLastUpdatedNow() {
+        if (lastUpdatedEl) lastUpdatedEl.textContent = `Last updated: ${formatTime(new Date())}`;
+      }
+      setLastUpdatedNow();
+
+      // Don't refresh while user is interacting with inputs inside the table (future-proof)
+      function isBusy() {
+        const a = document.activeElement;
+        if (!a) return false;
+        const isField = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(a.tagName);
+        return isField && tbody.contains(a);
+      }
+
+      // Only refresh when the feedback tab is active (booking_detail uses Bootstrap tabs)
+      function feedbackTabIsActive() {
+        const pane = document.getElementById('feedback-pane');
+        if (!pane) return true; // if included elsewhere, always refresh
+        return pane.classList.contains('active') || pane.classList.contains('show');
+      }
+
+      async function tick() {
+        try {
+          if (!document.hidden && feedbackTabIsActive() && !isBusy() && !isHovering) {
+            if (statusEl) statusEl.classList.remove('d-none');
+
+            const resp = await fetch(pollUrl, { headers: {"X-Requested-With": "XMLHttpRequest"} });
+            if (resp.ok) {
+              const data = await resp.json();
+              if (data && typeof data.html === "string") {
+                if (tbody.getAttribute('data-last') !== data.html) {
+                  tbody.innerHTML = data.html;
+                  tbody.setAttribute('data-last', data.html);
+                  setLastUpdatedNow();
+                }
+              }
+            }
+          }
+        } catch (e) { /* silent */ }
+        finally {
+          if (statusEl) statusEl.classList.add('d-none');
+        }
+        setTimeout(tick, INTERVAL);
+      }
+
+      setTimeout(tick, INTERVAL);
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) setTimeout(tick, 200);
+      });
+    })();
+  </script>
+
+  <style>
+    /* Make hover row really obvious (works nicely with zebra striping) */
+    tbody#feedback-body tr:hover > * {
+      box-shadow: inset 0 0 0 9999px rgba(13, 110, 253, 0.10);
+    }
+  </style>
+
 {% else %}
   <div class="text-muted">No feedback responses for this booking yet.</div>
 {% endif %}
