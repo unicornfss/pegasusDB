@@ -195,11 +195,13 @@
             <td class="nowrap">
               {% if b.invoice_status %}
                 {% if b.invoice_status == 'sent' %}
-                  <span class="badge bg-success">Sent</span>
+                  <span class="badge bg-primary">Sent</span>
                 {% elif b.invoice_status == 'draft' %}
                   <span class="badge bg-secondary">Draft</span>
                 {% elif b.invoice_status == 'awaiting_instructor_review' or b.invoice_status == 'awaiting_review' %}
                   <span class="badge bg-warning text-dark">Awaiting review</span>
+                {% elif b.invoice_status == 'paid' %}
+                  <span class="badge bg-success">Paid</span>
                 {% else %}
                   <span class="badge bg-light text-dark">{{ b.invoice_status|title }}</span>
                 {% endif %}
