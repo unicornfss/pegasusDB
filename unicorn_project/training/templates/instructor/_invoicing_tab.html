@@ -267,6 +267,17 @@
           </span>
         {% endif %}
 
+        {# Mark as Paid (one-way) #}
+        {% if inv_lower == "sent" or inv_lower == "viewed" %}
+          <button type="submit"
+                  class="btn btn-warning"
+                  name="action"
+                  value="mark_paid"
+                  onclick="return confirm('Mark this invoice as PAID? This cannot be undone. Are you sure you wish to proceed?');">
+            <i class="bi bi-cash-coin"></i> Mark as paid
+          </button>
+        {% endif %}
+
         <a class="btn btn-outline-secondary"
            href="{% url 'instructor_invoice_preview' booking.pk %}">
           <i class="bi bi-file-earmark-pdf"></i> Download preview (PDF)

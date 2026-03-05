@@ -1184,6 +1184,26 @@ def instructor_booking_detail(request, pk):
 
 
         # ------------------------------------------------------------------
+        # MARK INVOICE AS PAID (Instructor)
+        # ------------------------------------------------------------------
+        elif action == "mark_paid":
+            # One-way action: once marked as Paid it cannot be undone via the UI.
+            if inv.status == "paid":
+                messages.info(request, "Invoice is already marked as Paid.")
+                return redirect(f"{request.path}#invoicing-pane")
+
+            # Only allow once the invoice has been sent/viewed.
+            if inv.status not in ("sent", "viewed"):
+                messages.error(request, "Invoice can only be marked as Paid after it has been sent.")
+                return redirect(f"{request.path}#invoicing-pane")
+
+            inv.status = "paid"
+            inv.save(update_fields=["status"])
+            messages.success(request, "Invoice marked as Paid.")
+            return redirect(f"{request.path}#invoicing-pane")
+
+
+        # ------------------------------------------------------------------
         # SAVE DRAFT OR SEND ADMIN
         # ------------------------------------------------------------------
         if action in ("save_draft", "send_admin"):
