@@ -85,12 +85,12 @@
       {# DELETE: submit this same form to the delete URL; skip validation; confirm first #}
       <button
         type="submit"
-        class="btn btn-outline-danger ms-auto"
+        class="btn btn-warning ms-auto"
         formaction="{% url 'admin_location_delete' form.instance.pk %}"
         formmethod="post"
         formnovalidate
-        onclick="return confirm('This will permanently delete this location. This cannot be undone.\n\nAre you sure you want to proceed?');">
-        <i class="bi bi-trash"></i> Delete
+        onclick="return confirm('If this location has NO bookings, it will be permanently deleted.\n\nIf it HAS been used for bookings, it will be archived instead (so history is preserved).\n\nProceed?');">
+        <i class="bi bi-archive"></i> Delete / Archive
       </button>
     {% endif %}
   </div>

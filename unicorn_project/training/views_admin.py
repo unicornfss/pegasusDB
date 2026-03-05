@@ -178,7 +178,7 @@ def business_form(request, pk=None):
         if form.is_valid():
             obj = form.save()
             messages.success(request, "Changes saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_business_list")
             return redirect("admin_business_edit", pk=obj.id)
         else:
@@ -190,7 +190,7 @@ def business_form(request, pk=None):
     locations = []
     add_location_url = None
     if obj:
-        locations = TrainingLocation.objects.filter(business=obj).order_by("name")
+        locations = TrainingLocation.objects.filter(business=obj).order_by("-is_active", "name")
         add_location_url = reverse("admin_location_new", args=[obj.id])
 
     # --- Bookings (right card) + filters ----------------------------------
@@ -279,7 +279,7 @@ def business_form(request, pk=None):
 @admin_required
 def location_new(request, business_id):
     biz = get_object_or_404(Business, pk=business_id)
-    other_locations = TrainingLocation.objects.filter(business=biz).order_by("name")
+    other_locations = TrainingLocation.objects.filter(business=biz, is_active=True).order_by("name")
 
     if request.method == "POST":
         form = TrainingLocationForm(request.POST)
@@ -288,7 +288,7 @@ def location_new(request, business_id):
             loc.business = biz
             loc.save()  # duplicates allowed
             messages.success(request, "Location saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_business_edit", pk=biz.id)
             return redirect("admin_location_edit", pk=loc.id)
         else:
@@ -310,7 +310,12 @@ def location_new(request, business_id):
 def location_edit(request, pk):
     loc = get_object_or_404(TrainingLocation, pk=pk)
     biz = loc.business
-    other_locations = TrainingLocation.objects.filter(business=biz).exclude(pk=loc.pk).order_by("name")
+    other_locations = (
+        TrainingLocation.objects
+        .filter(business=biz, is_active=True)
+        .exclude(pk=loc.pk)
+        .order_by("name")
+    )
 
     if request.method == "POST":
         form = TrainingLocationForm(request.POST, instance=loc)
@@ -319,7 +324,7 @@ def location_edit(request, pk):
             obj.business = biz
             obj.save()
             messages.success(request, "Location saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_business_edit", pk=biz.id)
             return redirect("admin_location_edit", pk=obj.id)
         else:
@@ -344,17 +349,19 @@ def location_delete(request, pk):
     business_pk = getattr(loc, "business_id", None)
     name = loc.name
 
-    try:
-        loc.delete()
-    except ProtectedError:
-        messages.error(
-            request,
-            f'“{name}” can’t be deleted because it has related records.'
-        )
+    # If this location has ever been used for a booking, don't hard-delete.
+    # Archive it instead so historical bookings remain intact.
+    if Booking.objects.filter(training_location=loc).exists():
+        if loc.is_active:
+            loc.is_active = False
+            loc.save(update_fields=["is_active"])
+        messages.success(request, f'Location “{name}” archived (it has existing bookings).')
         if business_pk:
             return redirect("admin_business_edit", pk=business_pk)
         return redirect("admin_business_list")
 
+    # Unused -> safe to delete.
+    loc.delete()
     messages.success(request, f'Location “{name}” deleted.')
     if business_pk:
         return redirect("admin_business_edit", pk=business_pk)
@@ -896,7 +903,7 @@ def booking_form(request, pk=None):
                         )
 
             messages.success(request, "Booking saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_booking_list")
             return redirect("admin_booking_edit", pk=booking.pk)
         else:

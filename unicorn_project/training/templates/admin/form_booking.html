@@ -5,6 +5,22 @@
 
 {% block content %}
 
+<style>
+  .booking-page{background:#f6f7fb;padding:1.25rem;border-radius:1rem;}
+  .booking-page h3{font-weight:600;}
+  .booking-page .card{border:0;box-shadow:0 6px 18px rgba(16,24,40,.08);border-radius:1rem;}
+  .booking-page .card-header{background:linear-gradient(180deg,#ffffff,#f7f8fb);font-weight:600;border-bottom:1px solid rgba(16,24,40,.08);}
+  .booking-page .card-body{padding:1.25rem;}
+  .booking-page .form-label{font-weight:600;color:#344054;margin-bottom:.35rem;}
+  .booking-page input.form-control,
+  .booking-page select.form-select,
+  .booking-page textarea.form-control{border-radius:.75rem;}
+  .booking-page .btn-reset-defaults{font-weight:600;}
+  .booking-page .helper-muted{color:#667085;}
+</style>
+
+<div class="booking-page">
+
 <h3 class="mb-2 d-flex align-items-center gap-2">
   {{ title }}
   {% if booking %}
@@ -40,7 +56,7 @@
   {% endif %}
 {% endif %}
 
-<form id="booking-form" method="post" class="card p-3">
+<form id="booking-form" method="post" class="card shadow-sm border-0 p-4">
   {% csrf_token %}
 
   {% if form.non_field_errors %}
@@ -219,6 +235,11 @@
                   {% for err in form.email.errors %}
                     <div class="text-danger small">{{ err }}</div>
                   {% endfor %}
+                </div>
+
+                <div class="col-12">
+                  <button type="button" class="btn btn-warning btn-sm btn-reset-defaults" onclick="resetContactsToLocationDefaults()"><i class="bi bi-arrow-counterclockwise me-1"></i>Reset contact details to location defaults</button>
+                  <div class="small helper-muted mt-1">Use this if you want to revert your edits back to the location&rsquo;s default contact details.</div>
                 </div>
 
               </div>
@@ -1076,6 +1097,7 @@ document.addEventListener("gmaps:ready", function () {
   /* ---- Data from view (safe defaults) ---- */
   const LOCATIONS     = {{ location_map_json|default:"{}"|safe }};
   const EXISTING_DAYS = {{ booking_days_initial_json|default:"[]"|safe }};
+  const IS_NEW_BOOKING = {% if booking %}false{% else %}true{% endif %};
 
   /* NEW: capture initial values to protect existing references */
   const INIT_CT  = "{{ form.instance.course_type_id|default:'' }}";
@@ -1087,6 +1109,47 @@ document.addEventListener("gmaps:ready", function () {
   const pad2   = (n) => String(n).padStart(2,'0');
   const toISO  = (d) => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
   const parseTime = (s) => s && /^\d{2}:\d{2}/.test(s) ? s.slice(0,5) : "";
+
+
+/* ---- Business dropdown helpers ---- */
+function sortBusinessDropdownAndAddOption() {
+  const bizSel = byName('business');
+  if (!bizSel) return;
+
+  const ADD_VALUE = '__add_business__';
+
+  // Remove any existing "add business" option to avoid duplicates
+  Array.from(bizSel.options).forEach(opt => {
+    if (opt.value === ADD_VALUE) opt.remove();
+  });
+
+  const options = Array.from(bizSel.options);
+
+  // Placeholder is typically the empty value option
+  const placeholder = options.find(o => !o.value || o.value === '');
+
+  // Sort all real options alphabetically (case-insensitive)
+  const sortable = options.filter(o => o !== placeholder && o.value);
+  sortable.sort((a, b) => (a.textContent || '').localeCompare((b.textContent || ''), undefined, {sensitivity:'base'}));
+
+  const current = bizSel.value;
+
+  bizSel.innerHTML = '';
+  if (placeholder) bizSel.appendChild(placeholder);
+  sortable.forEach(o => bizSel.appendChild(o));
+
+  const addOpt = document.createElement('option');
+  addOpt.value = ADD_VALUE;
+  addOpt.textContent = '➕ Add new business…';
+  bizSel.appendChild(addOpt);
+
+  // Restore selection if possible
+  if (Array.from(bizSel.options).some(o => o.value === current)) {
+    bizSel.value = current;
+  } else if (placeholder) {
+    bizSel.value = placeholder.value;
+  }
+}
 
   /* ---- Location helpers ---- */
   function clearContacts(){ const n=byName('contact_name'), p=byName('telephone'), e=byName('email'); if(n)n.value=''; if(p)p.value=''; if(e)e.value=''; }
@@ -1108,10 +1171,46 @@ document.addEventListener("gmaps:ready", function () {
   function onLocationChange(){
     const sel = byName('training_location');
     if (!sel || !sel.value) { clearContacts(); clearAddress(); return; }
+
+    // Shortcut: create a new location for the selected business
+    if (sel.value === '__add_new__') {
+      const bizSel = byName('business');
+      const bizId = String(bizSel?.value || '');
+      if (!bizId) {
+        alert('Please select a business first.');
+        sel.value = '';
+        return;
+      }
+      window.location.href = `/app/admin/businesses/${bizId}/locations/new/`;
+      return;
+    }
+
     const rec = LOCATIONS[sel.value];
     if (!rec) { clearContacts(); clearAddress(); return; }
-    fillContactsFromRecord(rec); setAddress(rec);
+
+    // Always update the displayed address text
+    setAddress(rec);
+
+    // Only auto-fill contact fields when:
+    // - creating a new booking, OR
+    // - the contact fields are currently blank (safe "fill in the gaps")
+    const n = byName('contact_name'), p = byName('telephone'), e = byName('email');
+    const anyFilled = (n && n.value.trim()) || (p && p.value.trim()) || (e && e.value.trim());
+
+    if (IS_NEW_BOOKING || !anyFilled) {
+      fillContactsFromRecord(rec);
+    }
   }
+
+  function resetContactsToLocationDefaults(){
+    const sel = byName('training_location');
+    if (!sel || !sel.value) return;
+    const rec = LOCATIONS[sel.value];
+    if (!rec) return;
+    // Force-apply the location defaults (even when editing an existing booking)
+    fillContactsFromRecord(rec);
+  }
+
   function rebuildLocationOptions() {
     const bizSel = byName('business'), locSel = byName('training_location');
     if (!bizSel || !locSel) return;
@@ -1131,13 +1230,27 @@ document.addEventListener("gmaps:ready", function () {
       locSel.appendChild(o);
     }
 
-    const real = Array.from(locSel.options).filter(o => o.value);
+    // Add shortcut option to create a new location for this business
+    const addNew = document.createElement('option');
+    addNew.value = '__add_new__';
+    addNew.textContent = '➕ Add new location…';
+    locSel.appendChild(addNew);
+
+
+    const real = Array.from(locSel.options).filter(o => o.value && o.value !== '__add_new__');
     if (prev && Array.from(locSel.options).some(o => o.value === prev)) {
       locSel.value = prev; onLocationChange(); return;
     }
     if (real.length === 0) { locSel.value=''; clearContacts(); clearAddress(); return; }
-    if (real.length === 1) { const rec=LOCATIONS[real[0].value]; if(rec){fillContactsFromRecord(rec); setAddress(rec);} locSel.value=''; return; }
-    locSel.value = real[0].value; onLocationChange();
+    // If there's only one location for the chosen business, select it.
+    // IMPORTANT: do NOT force-overwrite contact fields on edit; onLocationChange()
+    // contains the guard logic.
+    if (real.length === 1) {
+      locSel.value = real[0].value;
+      onLocationChange();
+      return;
+    }
+    locSel.value=''; onLocationChange();
   }
 
   /* ---- Days table helpers ---- */
@@ -1535,7 +1648,13 @@ document.addEventListener("gmaps:ready", function () {
         highlightInstructorDifferences();
     }
 
-    if (e.target.name === 'business')           rebuildLocationOptions();
+    if (e.target.name === 'business') {
+    if (String(e.target.value || '') === '__add_business__') {
+      window.location.href = '/app/admin/businesses/new/';
+      return;
+    }
+    rebuildLocationOptions();
+  }
     if (e.target.name === 'training_location')  onLocationChange();
     if (e.target.name === 'course_type')        handleCourseChanged();
     if (e.target.name === 'course_date')        populateFromHeader();
@@ -1562,6 +1681,9 @@ document.addEventListener("gmaps:ready", function () {
 }
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Ensure Business dropdown is sorted A–Z and includes “Add new business…”
+    sortBusinessDropdownAndAddOption();
+
     const locSel = byName('training_location'); 
     if (locSel) locSel.setAttribute('autocomplete','off');
     rebuildLocationOptions();

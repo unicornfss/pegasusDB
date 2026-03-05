@@ -41,6 +41,10 @@ class TrainingLocation(models.Model):
     business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="training_locations")
     name = models.CharField(max_length=255)
 
+    # Soft-delete / archive flag.
+    # We don't hard-delete a location if it has been used for bookings.
+    is_active = models.BooleanField(default=True, db_index=True)
+
     address_line = models.CharField(max_length=255, blank=True, null=True)
     town         = models.CharField(max_length=255, blank=True, null=True)
     postcode     = models.CharField(max_length=32,  blank=True, null=True)
@@ -170,7 +174,8 @@ class Booking(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     business          = models.ForeignKey(Business,         on_delete=models.CASCADE, related_name="bookings")
-    training_location = models.ForeignKey(TrainingLocation, on_delete=models.CASCADE, related_name="bookings")
+    # Prevent deleting a location that has bookings (we archive instead).
+    training_location = models.ForeignKey(TrainingLocation, on_delete=models.PROTECT, related_name="bookings")
     course_type       = models.ForeignKey(CourseType,       on_delete=models.PROTECT, related_name="bookings")
     instructor        = models.ForeignKey(
         "Personnel", on_delete=models.SET_NULL, null=True, blank=True, related_name="bookings"

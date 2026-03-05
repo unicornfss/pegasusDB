@@ -119,25 +119,29 @@
             <hr class="my-3">
 
             <div class="mb-0">
-              <div class="text-muted small">Location contact</div>
-              {% if booking.training_location %}
+              <div class="text-muted small">Course contact</div>
+
+              {# Show booking-specific contact details first; fall back to location defaults #}
+              {% firstof booking.contact_name booking.training_location.contact_name "" as cname %}
+              {% firstof booking.telephone booking.training_location.telephone "" as tel %}
+              {% firstof booking.email booking.training_location.email "" as em %}
+
+              {% if cname or tel or em %}
                 <div class="mt-1">
-                  {{ booking.training_location.contact_name|default:"—" }}<br>
-                  {% if booking.training_location.telephone %}
-                    <a href="tel:{{ booking.training_location.telephone }}">
-                      {{ booking.training_location.telephone }}
-                    </a><br>
+                  {{ cname|default:"—" }}<br>
+
+                  {% if tel %}
+                    <a href="tel:{{ tel }}">{{ tel }}</a><br>
                   {% endif %}
-                  {% if booking.training_location.email %}
-                    <a href="mailto:{{ booking.training_location.email }}">
-                      {{ booking.training_location.email }}
-                    </a>
+
+                  {% if em %}
+                    <a href="mailto:{{ em }}">{{ em }}</a>
                   {% endif %}
                 </div>
               {% else %}
                 <div class="mt-1">—</div>
               {% endif %}
-            </div>
+</div>
 
           </div>
         </div>

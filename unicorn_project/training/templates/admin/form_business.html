@@ -65,7 +65,12 @@
             <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
                href="{% url 'admin_location_edit' loc.id %}">
               <div>
-                <div class="fw-semibold">{{ loc.name }}</div>
+                <div class="fw-semibold">
+                  {{ loc.name }}
+                  {% if not loc.is_active %}
+                    <span class="badge text-bg-secondary ms-2">Archived</span>
+                  {% endif %}
+                </div>
                 <div class="small text-muted">
                   {{ loc.address_line }}{% if loc.town %}, {{ loc.town }}{% endif %}{% if loc.postcode %} {{ loc.postcode }}{% endif %}
                 </div>
