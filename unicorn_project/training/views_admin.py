@@ -903,7 +903,7 @@ def booking_form(request, pk=None):
                         )
 
             messages.success(request, "Booking saved.")
-            if "save_return" in request.POST:
+            if "save_return" in post:
                 return redirect("admin_booking_list")
             return redirect("admin_booking_edit", pk=booking.pk)
         else:
@@ -2176,26 +2176,19 @@ def api_courses_awaiting_closure(request):
 
 @login_required
 def api_courses_in_7_days(request):
-    today = timezone.localdate()
-    start = today + timedelta(days=1)     # tomorrow (avoids duplicating "today" widget)
-    end = today + timedelta(days=7)       # inclusive
+    target = timezone.localdate() + timedelta(days=7)
 
     bookings = (
         Booking.objects.filter(
-            days__date__range=(start, end),
-            status="scheduled",
+            days__date=target,
+            status="scheduled",  # only scheduled courses 7 days out
         )
         .select_related("instructor", "business", "training_location", "course_type")
-        .prefetch_related("days")
         .distinct()
     )
 
     results = []
     for b in bookings:
-        # Pick the first course day that falls within the window
-        in_window_dates = [d.date for d in b.days.all() if start <= d.date <= end]
-        first_in_window = min(in_window_dates) if in_window_dates else None
-
         results.append(
             {
                 "id": b.id,
@@ -2204,13 +2197,10 @@ def api_courses_in_7_days(request):
                 "instructor": str(b.instructor) if b.instructor else "",
                 "business": str(b.business) if b.business else "",
                 "location": str(b.training_location) if b.training_location else "",
-                "date": first_in_window.isoformat() if first_in_window else "",
+                "date": target.isoformat(),  # the day this course is taking place
                 "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
             }
         )
-
-    # Optional: sort by the shown date so the table is in chronological order
-    results.sort(key=lambda r: (r["date"] or "9999-12-31"))
 
     return JsonResponse({"data": results})
 
