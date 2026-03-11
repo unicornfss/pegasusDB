@@ -81,6 +81,7 @@ TEMPLATES = [
                 "unicorn_project.training.context_processors.role_context",
                 "unicorn_project.training.context_processors.logo_context",
                 'unicorn_project.training.context_processors.user_display_name',
+                'unicorn_project.training.context_processors.two_factor_prompt',
             ],
         },
     },

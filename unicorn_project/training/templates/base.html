@@ -281,6 +281,29 @@
 
   </div> {# /main flex row #}
 
+  {% if show_two_factor_prompt and request.user.is_authenticated %}
+  <div class="modal fade" id="twoFactorReminderModal" tabindex="-1" aria-labelledby="twoFactorReminderLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-warning">
+        <div class="modal-header bg-warning-subtle">
+          <h5 class="modal-title" id="twoFactorReminderLabel">
+            <i class="bi bi-shield-lock me-2"></i>Enable 2FA on your account
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="mb-2">Your account does not currently have two-factor authentication enabled.</p>
+          <p class="mb-0 text-muted">Adding 2FA helps protect bookings, certificates, and personal data if your password is ever exposed.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Maybe later</button>
+          <a href="{% url 'two_factor_setup' %}" class="btn btn-warning">Set up 2FA now</a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <script>
     function updateClock(){
       const el = document.getElementById('clock');
@@ -361,6 +384,12 @@
           }
         });
       });
+
+      const twoFactorModalEl = document.getElementById('twoFactorReminderModal');
+      if (twoFactorModalEl && window.bootstrap && bootstrap.Modal) {
+        const twoFactorModal = new bootstrap.Modal(twoFactorModalEl);
+        twoFactorModal.show();
+      }
     });
   </script>
 

@@ -1,163 +1,243 @@
 {% extends "base.html" %}
 {% block title %}{{ title }}{% endblock %}
 {% block content %}
-<h3 class="mb-3">{{ title }}</h3>
 
-<form method="post">
-  {% csrf_token %}
-  {% if form.non_field_errors %}
-    <div class="alert alert-danger">
-      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+          <i class="bi bi-person-gear text-primary me-2"></i>{{ title }}
+        </h2>
+        <a href="{% url 'admin_personnel_list' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back to Staff List
+        </a>
+      </div>
     </div>
-  {% endif %}
+  </div>
 
-  <div class="row g-3">
+  <form method="post">
+    {% csrf_token %}
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+      </div>
+    {% endif %}
 
-    <!-- NAME + EMAIL -->
-    <div class="col-md-4">
-      <label class="form-label">Name *</label>
-      {{ form.name }}
-      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
+    <div class="row g-4">
 
-    <div class="col-md-4">
-      <label class="form-label">Email</label>
-      {{ form.email }}
-      {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Telephone</label>
-      {{ form.telephone }}
-      {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <!-- ADDRESS -->
-    <div class="col-md-6">
-      <label class="form-label">Address</label>
-      {{ form.address_line }}
-      {% for err in form.address_line.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-3">
-      <label class="form-label">Town</label>
-      {{ form.town }}
-      {% for err in form.town.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-3">
-      <label class="form-label">Postcode</label>
-      {{ form.postcode }}
-      {% for err in form.postcode.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-12"><hr></div>
-
-    <!-- BANK DETAILS -->
-    <div class="col-md-4">
-      <label class="form-label">Bank sort code</label>
-      {{ form.bank_sort_code }}
-      {% for err in form.bank_sort_code.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Bank account number</label>
-      {{ form.bank_account_number }}
-      {% for err in form.bank_account_number.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-md-4">
-      <label class="form-label">Name on account</label>
-      {{ form.name_on_account }}
-      {% for err in form.name_on_account.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    <div class="col-12"><hr></div>
-
-    <!-- GROUPS BELOW BANK DETAILS -->
-    <div class="col-md-12">
-      <label class="form-label">User Groups</label>
-
-      <div class="row">
-        {% for group in form.groups %}
-          <div class="col-md-4 mb-2">
-            <div class="form-check form-switch">
-              {{ group.tag }}
-              <label class="form-check-label">{{ group.choice_label }}</label>
+      <!-- PERSONAL & CONTACT INFORMATION -->
+      <div class="col-lg-8">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-person-circle me-2"></i>Personal & Contact Information
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Full Name *</label>
+                {{ form.name }}
+                {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Email Address</label>
+                {{ form.email }}
+                {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Telephone</label>
+                {{ form.telephone }}
+                {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-12">
+                <hr class="my-3">
+                <h6 class="fw-bold text-muted mb-3">Address Details</h6>
+              </div>
+              <div class="col-12">
+                <label class="form-label fw-bold">Street Address</label>
+                {{ form.address_line }}
+                {% for err in form.address_line.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-6">
+                <label class="form-label fw-bold">Town/City</label>
+                {{ form.town }}
+                {% for err in form.town.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-6">
+                <label class="form-label fw-bold">Postcode</label>
+                {{ form.postcode }}
+                {% for err in form.postcode.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
             </div>
           </div>
-        {% endfor %}
+        </div>
       </div>
 
-      {% for err in form.groups.errors %}
-        <div class="text-danger small">{{ err }}</div>
-      {% endfor %}
+      <!-- ACCOUNT STATUS, SECURITY & PERMISSIONS -->
+      <div class="col-lg-4">
+        <div class="card shadow-sm">
+          <div class="card-header bg-info text-white">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-shield-check me-2"></i>Account Status & Permissions
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="mb-3">
+              <div class="form-check form-switch">
+                {{ form.can_login }}
+                <label class="form-check-label fw-bold">Allow Login</label>
+                <small class="form-text text-muted">User can sign in to the system</small>
+              </div>
+            </div>
+            <div class="mb-3">
+              <div class="form-check form-switch">
+                {{ form.is_active }}
+                <label class="form-check-label fw-bold">Active Account</label>
+                <small class="form-text text-muted">Account is active and operational</small>
+              </div>
+            </div>
+            
+            {% if instructor %}
+            <hr class="my-3">
+            <h6 class="fw-bold mb-3">Two-Factor Authentication</h6>
+            <div class="alert {% if instructor.totp_secret %}alert-success{% else %}alert-secondary{% endif %} py-2 px-3 mb-3">
+              <div class="d-flex align-items-center gap-2">
+                {% if instructor.totp_secret %}
+                  <i class="bi bi-shield-check-fill text-success fs-6"></i>
+                  <div>
+                    <small><strong>✓ Enabled</strong></small>
+                  </div>
+                {% else %}
+                  <i class="bi bi-shield-x text-secondary fs-6"></i>
+                  <div>
+                    <small><strong>✗ Disabled</strong></small>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+            <div class="d-grid gap-2 mb-3">
+              {% if instructor.totp_secret %}
+              <button type="submit" name="disable_2fa" value="1" class="btn btn-outline-danger btn-sm"
+                      onclick="return confirm('Disable 2FA for {{ instructor.name }}? They will be able to log in without a code.');"
+                      style="font-size: 0.85rem;">
+                <i class="bi bi-shield-x me-1"></i>Disable 2FA
+              </button>
+              {% endif %}
+              <button type="button" class="btn btn-warning"
+                      onclick="if(confirm('Reset password for {{ instructor.name }}? A temporary password will be emailed to them.')) { 
+                        var form = this.closest('form'); 
+                        var input = document.createElement('input'); 
+                        input.type = 'hidden'; 
+                        input.name = 'reset_password'; 
+                        input.value = '1'; 
+                        form.appendChild(input); 
+                        form.submit(); 
+                      }">
+                <i class="bi bi-key me-1"></i>Reset Password
+              </button>
+              {% if instructor and instructor.user %}
+              <a href="{% url 'admin_personnel_resend_password' instructor.id %}"
+                 class="btn btn-outline-secondary"
+                 onclick="return confirm('Send a NEW temporary password? This will invalidate their current password.');">
+                <i class="bi bi-envelope me-1"></i>Resend Password Email
+              </a>
+              {% endif %}
+            </div>
+
+            <hr class="my-3">
+            <h6 class="fw-bold mb-3">User Groups</h6>
+            <div class="d-flex flex-column gap-2">
+              {% for group in form.groups %}
+                <div class="form-check form-switch">
+                  {{ group.tag }}
+                  <label class="form-check-label fw-semibold">{{ group.choice_label }}</label>
+                </div>
+              {% endfor %}
+            </div>
+            {% for err in form.groups.errors %}
+              <div class="text-danger small mt-2">{{ err }}</div>
+            {% endfor %}
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- BANKING INFORMATION -->
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="card-title mb-0">
+              <i class="bi bi-bank me-2"></i>Banking Information
+            </h5>
+          </div>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Sort Code</label>
+                {{ form.bank_sort_code }}
+                {% for err in form.bank_sort_code.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Account Number</label>
+                {{ form.bank_account_number }}
+                {% for err in form.bank_account_number.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-bold">Account Name</label>
+                {{ form.name_on_account }}
+                {% for err in form.name_on_account.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
-    <div class="col-12"><hr></div>
+    <!-- ACTION BUTTONS -->
+    <div class="row mt-4">
+      <div class="col-12">
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+              <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-primary" type="submit" name="save_continue" value="1">
+                  <i class="bi bi-check-circle me-1"></i>Save and Continue Editing
+                </button>
+                <button class="btn btn-success" type="submit" name="save_return" value="1">
+                  <i class="bi bi-check2-all me-1"></i>Save and Return to List
+                </button>
+              </div>
 
-    <!-- TOGGLES -->
-    <div class="col-md-6">
-      <div class="form-check form-switch">
-          {{ form.can_login }}
-          <label class="form-check-label ms-2">Allow login?</label>
+              <div class="d-flex flex-wrap gap-2">
+                {% if instructor %}
+                <a href="{% url 'admin_personnel_delete' instructor.id %}"
+                   class="btn btn-danger btn-sm"
+                   onclick="return confirm('⚠️ WARNING: This action is permanent and cannot be undone.\n\n'
+                                           + 'It is recommended to mark the account as inactive instead.\n\n'
+                                           + 'Do you REALLY want to DELETE this staff member?');">
+                   <i class="bi bi-trash me-1"></i>Delete Staff Member
+                </a>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="col-md-6">
-      <div class="form-check form-switch">
-          {{ form.is_active }}
-          <label class="form-check-label ms-2">Active account</label>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- BUTTON BAR -->
-  <div class="mt-4 d-flex gap-2">
-
-    <a href="{% url 'admin_personnel_list' %}" class="btn btn-outline-secondary">
-      Back
-    </a>
-
-    <button class="btn btn-primary" type="submit" name="save_continue" value="1">
-      Save and continue editing
-    </button>
-
-    <button class="btn btn-success" type="submit" name="save_return" value="1">
-      Save and return
-    </button>
-
-    {% if instructor and instructor.user %}
-    <a href="{% url 'admin_personnel_resend_password' instructor.id %}"
-       class="btn btn-warning"
-       onclick="return confirm('Send a NEW temporary password? This will invalidate their current password.');">
-       Resend Password Email
-    </a>
-    {% endif %}
-
-    {% if instructor %}
-    <a href="{% url 'admin_personnel_delete' instructor.id %}"
-       class="btn btn-danger"
-       onclick="return confirm('⚠️ WARNING: This action is permanent and cannot be undone.\n\n'
-                               + 'It is recommended to mark the account as inactive instead.\n\n'
-                               + 'Do you REALLY want to DELETE this staff member?');">
-       Delete
-    </a>
-    {% endif %}
-
-  </div>
-
-</form>
+  </form>
+</div>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-
     const inactiveToggle = document.querySelector('[name="is_active"]');
     const loginToggle = document.querySelector('[name="can_login"]');
 
     function updateState() {
-
         if (!inactiveToggle.checked) {
             // Account inactive → disable login
             loginToggle.checked = false;
@@ -171,6 +251,78 @@ document.addEventListener("DOMContentLoaded", function () {
     inactiveToggle.addEventListener("change", updateState);
     updateState();
 });
+</script>
+
+<script>
+console.log('UNSAVED CHANGES SCRIPT RUNNING');
+
+let hasChanges = false;
+let isSubmitting = false;
+
+// Find ALL inputs on the entire page
+const allInputs = document.querySelectorAll('input, select, textarea');
+console.log('Found ' + allInputs.length + ' inputs on entire page');
+
+// Log first few inputs
+allInputs.forEach((inp, idx) => {
+    if (idx < 10) console.log('Input ' + idx + ':', inp.name, inp.type, inp.id);
+});
+
+// Attach change listener to each input
+allInputs.forEach(input => {
+    // Skip CSRF token and submit buttons
+    if (input.name === 'csrfmiddlewaretoken' || input.type === 'submit') return;
+
+    input.addEventListener('change', function(e) {
+        hasChanges = true;
+        console.log('CHANGE DETECTED on', this.name);
+    });
+
+    input.addEventListener('input', function(e) {
+        hasChanges = true;
+        console.log('INPUT DETECTED on', this.name);
+    });
+});
+
+console.log('Listeners attached to form inputs (excluding CSRF and submit)');
+
+// Mark form as being submitted (to bypass beforeunload)
+const myForm = document.querySelector('form');
+if (myForm) {
+    myForm.addEventListener('submit', function(e) {
+        isSubmitting = true;
+        console.log('Form submitting - bypassing unsaved changes warning');
+    });
+    
+    // Also listen for submit button clicks
+    myForm.addEventListener('click', function(e) {
+        const submitBtn = e.target.closest('button[type="submit"], input[type="submit"]');
+        if (submitBtn) {
+            isSubmitting = true;
+            console.log('Submit button clicked - bypassing unsaved changes warning');
+        }
+    });
+}
+
+// Only warn on navigation links, not form submissions
+document.addEventListener('click', function(e) {
+    if (!hasChanges) return;
+
+    const link = e.target.closest('a');
+    if (!link) return;
+
+    // Don't intercept clicks on form submit buttons
+    const submitButton = e.target.closest('button[type="submit"], input[type="submit"]');
+    if (submitButton) return;
+
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+
+    e.preventDefault();
+    if (confirm('You have unsaved changes. Do you want to leave without saving?')) {
+        window.location.href = href;
+    }
+}, true);
 </script>
 
 {% endblock %}

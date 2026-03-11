@@ -27,6 +27,20 @@ from .models import (
 
 import string, secrets
 
+
+def delivery_personnel_queryset(extra_personnel_ids=None):
+    qs = Personnel.objects.filter(
+        is_active=True,
+        user__groups__name__iexact="instructor",
+    )
+
+    if extra_personnel_ids:
+        qs = Personnel.objects.filter(
+            Q(pk__in=extra_personnel_ids) | Q(pk__in=qs.values("pk"))
+        )
+
+    return qs.distinct().order_by("name")
+
 # ---------------- Attendance ----------------
 #class AttendanceForm(forms.ModelForm):
 #    class Meta:
@@ -74,6 +88,10 @@ class BookingForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        current_instructor_id = getattr(self.instance, "instructor_id", None)
+        extra_ids = [current_instructor_id] if current_instructor_id else None
+        self.fields["instructor"].queryset = delivery_personnel_queryset(extra_ids)
 
         # Start with none until we know the business
         self.fields["training_location"].queryset = TrainingLocation.objects.none()
@@ -175,6 +193,12 @@ class BookingForm(forms.ModelForm):
                     raise ValidationError("Could not generate a unique course reference; please try again.")
 
         return cleaned
+
+    def clean_instructor(self):
+        instructor = self.cleaned_data.get("instructor")
+        if instructor and not delivery_personnel_queryset().filter(pk=instructor.pk).exists():
+            raise ValidationError("Only personnel with the instructor role can be assigned to deliver courses.")
+        return instructor
 
 
 

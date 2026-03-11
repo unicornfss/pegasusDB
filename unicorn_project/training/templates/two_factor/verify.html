@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Verify Two-Factor Setup{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <h2 class="mb-3">Verify Two-Factor Setup</h2>
+    <p>Enter the 6-digit code from your authenticator app to complete setup.</p>
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+    <form method="post" class="card p-3">{% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="id_code">Authentication Code</label>
+        <input class="form-control" type="text" name="code" maxlength="6" pattern="[0-9]{6}" required id="id_code" autofocus>
+      </div>
+      <button class="btn btn-success">Verify & Enable</button>
+      <a href="{% url 'user_profile' %}" class="btn btn-secondary ms-2">Cancel</a>
+    </form>
+  </div>
+</div>
+{% endblock %}

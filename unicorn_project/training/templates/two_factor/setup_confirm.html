@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Enable Two-Factor Authentication{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <h2 class="mb-3">Enable Two-Factor Authentication</h2>
+    <div class="alert alert-info">
+      <strong>Two-factor authentication (2FA)</strong> adds an extra layer of security to your account.
+      You'll need to use an authenticator app like Google Authenticator, Authy, or Microsoft Authenticator.
+    </div>
+    <div class="card p-3">
+      <p>Click the button below to generate your secret key and QR code.</p>
+      <form method="post">{% csrf_token %}
+        <button class="btn btn-primary">Generate QR Code</button>
+        <a href="{% url 'user_profile' %}" class="btn btn-secondary">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

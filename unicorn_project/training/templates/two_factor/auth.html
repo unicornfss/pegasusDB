@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Two-Factor Authentication{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <h2 class="mb-3">Two-Factor Authentication</h2>
+    <p>Please enter the 6-digit code from your authenticator app.</p>
+    {% if messages %}
+      {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+    <form method="post" class="card p-3">{% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label" for="id_code">Authentication Code</label>
+        <input class="form-control" type="text" name="code" maxlength="6" pattern="[0-9]{6}" required id="id_code" autofocus>
+        <div class="form-text">Enter the 6-digit code from your authenticator app</div>
+      </div>
+      <button class="btn btn-primary">Verify</button>
+      <div class="mt-2">
+        <a href="{% url 'login' %}">Back to login</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
