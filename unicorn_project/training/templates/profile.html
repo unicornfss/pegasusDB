@@ -43,6 +43,21 @@
         </div>
 
         <div class="col-md-6">
+            <h4>Security</h4>
+            <div class="mb-3">
+                <strong>Two-Factor Authentication (2FA):</strong>
+                {% if request.user.personnel.totp_secret %}
+                    <span class="badge bg-success">Enabled</span>
+                    <a href="{% url 'two_factor_disable' %}" class="btn btn-sm btn-outline-danger ms-2">Disable 2FA</a>
+                {% else %}
+                    <span class="badge bg-warning">Disabled</span>
+                    <a href="{% url 'two_factor_setup' %}" class="btn btn-sm btn-outline-success ms-2">Enable 2FA</a>
+                {% endif %}
+                <div class="form-text">
+                    2FA adds an extra layer of security by requiring a code from your phone.
+                </div>
+            </div>
+
             <h4>Contact & bank details</h4>
             {{ pform.as_p }}
         </div>

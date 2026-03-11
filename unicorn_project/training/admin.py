@@ -490,6 +490,15 @@ class PersonnelInline(admin.StackedInline):
     model = Personnel
     can_delete = False
     verbose_name_plural = "Personnel details"
+    readonly_fields = ("two_factor_status_display",)
+    
+    def two_factor_status_display(self, obj):
+        """Display 2FA status in the inline."""
+        if obj.totp_secret:
+            return format_html('<span style="color: green;">✓ 2FA Enabled</span>')
+        else:
+            return format_html('<span style="color: red;">✗ 2FA Disabled</span>')
+    two_factor_status_display.short_description = "Two-Factor Authentication"
 
 
 class CustomUserAdmin(UserAdmin):
@@ -519,9 +528,86 @@ class CustomUserAdmin(UserAdmin):
         }),
     )
 
-    list_display = ("email", "first_name", "last_name", "is_staff")
+    list_display = ("email", "first_name", "last_name", "is_staff", "two_factor_status")
     search_fields = ("email", "first_name", "last_name")
     ordering = ("email",)
+    actions = ["disable_2fa", "reset_password"]
+
+    @admin.display(description="2FA Status", boolean=True)
+    def two_factor_status(self, obj):
+        """Display 2FA status for the user."""
+        try:
+            return bool(obj.personnel.totp_secret)
+        except Personnel.DoesNotExist:
+            return False
+
+    @admin.action(description="Disable 2FA for selected users")
+    def disable_2fa(self, request, queryset):
+        """Admin action to disable 2FA for selected users."""
+        from django.utils.crypto import get_random_string
+        from unicorn_project.training.utils.passwords import send_initial_password_email
+        
+        updated = 0
+        for user in queryset:
+            try:
+                personnel = user.personnel
+                if personnel.totp_secret:
+                    personnel.totp_secret = None
+                    personnel.save(update_fields=['totp_secret'])
+                    updated += 1
+            except Personnel.DoesNotExist:
+                continue
+        
+        if updated:
+            self.message_user(
+                request,
+                f"Successfully disabled 2FA for {updated} user{'s' if updated != 1 else ''}.",
+            )
+        else:
+            self.message_user(
+                request,
+                "No users had 2FA enabled.",
+            )
+
+    @admin.action(description="Reset passwords for selected users")
+    def reset_password(self, request, queryset):
+        """Admin action to reset passwords for selected users."""
+        from django.utils.crypto import get_random_string
+        from unicorn_project.training.utils.passwords import send_initial_password_email
+        
+        updated = 0
+        for user in queryset:
+            try:
+                personnel = user.personnel
+                # Generate new password
+                temp_password = get_random_string(12)
+                
+                # Set the new password
+                user.set_password(temp_password)
+                user.is_active = True
+                user.save(update_fields=['password', 'is_active'])
+                
+                # Set must_change_password flag
+                personnel.must_change_password = True
+                personnel.save(update_fields=['must_change_password'])
+                
+                # Send email
+                send_initial_password_email(personnel, temp_password)
+                updated += 1
+            except Personnel.DoesNotExist:
+                continue
+        
+        if updated:
+            self.message_user(
+                request,
+                f"Successfully reset passwords for {updated} user{'s' if updated != 1 else ''}. "
+                f"Temporary passwords have been emailed.",
+            )
+        else:
+            self.message_user(
+                request,
+                "No users were updated.",
+            )
 
 
 # Replace Django’s default User admin with your custom version

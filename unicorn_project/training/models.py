@@ -159,6 +159,9 @@ class Personnel(models.Model):
     can_login = models.BooleanField(default=True)
     must_change_password = models.BooleanField(default=True)
 
+    # Two-factor authentication
+    totp_secret = models.CharField(max_length=32, blank=True, null=True, help_text="TOTP secret for 2FA")
+
     def __str__(self):
         return self.name
 

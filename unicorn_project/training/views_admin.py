@@ -40,6 +40,7 @@ from .forms import (
     Attendance, BusinessForm, CourseTypeForm, TrainingLocationForm,
     PersonnelForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
     CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm, PersonnelProfileForm,
+    delivery_personnel_queryset,
     MetaSettingForm
 )
 
@@ -681,7 +682,7 @@ def booking_list(request):
         ],
         "businesses":  Business.objects.order_by("name"),
         "course_types": CourseType.objects.order_by("name"),
-        "instructors": Personnel.objects.filter(is_active=True).order_by("name"),
+        "instructors": delivery_personnel_queryset(),
 
         "page_obj": page_obj,
         "page_prev_url": prev_url,
@@ -808,6 +809,28 @@ def booking_form(request, pk=None):
             except json.JSONDecodeError:
                 days_payload = []
 
+            valid_delivery_ids = {
+                str(person_id)
+                for person_id in delivery_personnel_queryset().values_list("pk", flat=True)
+            }
+
+            invalid_day_instructor = next(
+                (
+                    row.get("instructor")
+                    for row in days_payload
+                    if (row.get("instructor") or "").strip()
+                    and (row.get("instructor") or "").strip() not in valid_delivery_ids
+                ),
+                None,
+            )
+
+            if invalid_day_instructor:
+                messages.error(
+                    request,
+                    "Only personnel with the instructor role can be assigned to deliver course days.",
+                )
+                return redirect("admin_booking_edit", pk=booking.pk)
+
             if days_payload:
                 # Normalise the posted days (ignore completely empty rows)
                 def _normalise_rows(rows):
@@ -843,7 +866,7 @@ def booking_form(request, pk=None):
                             request,
                             "Cannot change course days or times because delegates are already registered."
                         )
-                        if "save_return" in post:
+                        if "save_return" in request.POST:
                             return redirect("admin_booking_list")
                         return redirect("admin_booking_edit", pk=booking.pk)
 
@@ -903,7 +926,7 @@ def booking_form(request, pk=None):
                         )
 
             messages.success(request, "Booking saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_booking_list")
             return redirect("admin_booking_edit", pk=booking.pk)
         else:
@@ -1599,6 +1622,26 @@ def admin_personnel_edit(request, pk):
         return HttpResponseForbidden("You cannot edit an account attached to a superuser.")
 
     if request.method == "POST":
+        # Handle 2FA operations
+        if "disable_2fa" in request.POST:
+            if inst.totp_secret:
+                inst.totp_secret = None
+                inst.save(update_fields=['totp_secret'])
+                messages.success(request, f"2FA disabled for {inst.name}.")
+            return redirect("admin_personnel_edit", pk=inst.pk)
+        
+        if "reset_password" in request.POST:
+            if inst.user:
+                temp_password = get_random_string(12)
+                inst.user.set_password(temp_password)
+                inst.user.is_active = True
+                inst.user.save(update_fields=['password', 'is_active'])
+                inst.must_change_password = True
+                inst.save(update_fields=['must_change_password'])
+                send_initial_password_email(inst, temp_password)
+                messages.success(request, f"Password reset for {inst.name}. Email sent.")
+            return redirect("admin_personnel_edit", pk=inst.pk)
+        
         form = PersonnelForm(request.POST, instance=inst)
 
         if form.is_valid():
@@ -1664,7 +1707,7 @@ def admin_personnel_edit(request, pk):
 
             messages.success(request, "Changes saved.")
 
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_personnel_list")
 
             return redirect("admin_personnel_edit", pk=inst.pk)

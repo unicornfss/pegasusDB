@@ -84,3 +84,14 @@ def user_display_name(request):
             name = user.get_full_name() or user.username
 
     return {"display_name": name}
+
+
+def two_factor_prompt(request):
+    should_prompt = False
+
+    if getattr(request, "user", None) and request.user.is_authenticated:
+        should_prompt = bool(request.session.pop("show_2fa_prompt", False))
+
+    return {
+        "show_two_factor_prompt": should_prompt,
+    }
