@@ -1465,11 +1465,12 @@ def admin_user_edit(request, pk: int):
 # =========================
 @admin_required
 def admin_personnel_list(request):
-    people = (
-        Personnel.objects.select_related("user")
-        .filter(Q(user__isnull=True) | Q(user__is_superuser=False))
-        .order_by("name")
-    )
+    people = Personnel.objects.select_related("user")
+
+    if not request.user.is_superuser:
+        people = people.filter(Q(user__isnull=True) | Q(user__is_superuser=False))
+
+    people = people.order_by("name")
 
     return render(
         request,
