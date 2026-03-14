@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row justify-content-center">
+    <div class="col-xl-7 col-lg-9">
+      <div class="card shadow-sm border-0">
+        <div class="card-header bg-primary text-white">
+          <h4 class="mb-0"><i class="bi bi-mortarboard me-2"></i>{{ title }}</h4>
+        </div>
+        <div class="card-body">
+          <div class="mb-4">
+            <div class="fw-semibold">{{ business.name }}</div>
+            <div class="text-muted small">{{ course_type.name }} at {{ training_location.name }}. This practice booking will auto-delete 7 days after creation.</div>
+          </div>
+
+          <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label fw-bold" for="{{ form.course_date.id_for_label }}">Start date</label>
+                {{ form.course_date }}
+                {% for err in form.course_date.errors %}<div class="text-danger small mt-1">{{ err }}</div>{% endfor %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label fw-bold" for="{{ form.start_time.id_for_label }}">Start time</label>
+                {{ form.start_time }}
+                {% for err in form.start_time.errors %}<div class="text-danger small mt-1">{{ err }}</div>{% endfor %}
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+              <a href="{% url 'instructor_bookings' %}" class="btn btn-outline-secondary">Back</a>
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i>Create practice booking
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

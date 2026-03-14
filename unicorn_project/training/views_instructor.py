@@ -37,8 +37,8 @@ from reportlab.lib import colors
 from statistics import mean
 from django.template.loader import render_to_string
 import subprocess, tempfile, os
-from .models import Personnel, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseType, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome, Resource
-from .forms import DelegateRegisterInstructorForm, BookingNotesForm
+from .models import Business, Personnel, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseType, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome, Resource
+from .forms import DelegateRegisterInstructorForm, BookingNotesForm, DummyBookingQuickCreateForm
 from .utils.invoice import (
     get_invoice_template_path,
     render_invoice_pdf,      # returns (bytes, filename); falls back to DOCX if PDF conversion not available
@@ -46,6 +46,7 @@ from .utils.invoice import (
     send_invoice_email,      # email helper with dev/admin routing
 )
 from .utils.certificates import build_certificates_pdf_for_booking
+from .services.dummy_bookings import delete_dummy_booking_tree
 
 SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9 _\-\(\)\.&]")
 
@@ -702,6 +703,14 @@ def instructor_bookings(request):
     # Simple list fallback (first page items) for older templates
     closed = list(closed_qs[:10])
 
+    dummy_businesses = list(
+        Business.objects
+        .filter(is_dummy=True, dummy_course_type__isnull=False, training_locations__is_active=True)
+        .select_related("dummy_course_type")
+        .distinct()
+        .order_by("name")
+    )
+
     return render(request, "instructor/bookings.html", {
         "title": "My bookings",
         "instructor": inst,
@@ -712,7 +721,116 @@ def instructor_bookings(request):
         "closed_rows": closed_rows,      # <— use this for rendering closed rows
         "closed_total": closed_total,    # <— correct badge count
         "closed": closed,                 # fallback if needed
+        "dummy_businesses": dummy_businesses,
     })
+
+
+@login_required
+def instructor_dummy_booking_new(request, business_id):
+    inst = getattr(request.user, "personnel", None)
+    if not inst:
+        messages.error(request, "Your user account isn’t linked to an instructor record.")
+        return redirect("home")
+
+    business = get_object_or_404(
+        Business.objects.select_related("dummy_course_type"),
+        pk=business_id,
+        is_dummy=True,
+    )
+    training_location = business.training_locations.filter(is_active=True).order_by("name").first()
+
+    if not business.dummy_course_type or not training_location:
+        messages.error(
+            request,
+            "This dummy business is not ready yet. It needs a default course type and at least one active training location.",
+        )
+        return redirect("instructor_bookings")
+
+    if request.method == "POST":
+        form = DummyBookingQuickCreateForm(request.POST)
+        if form.is_valid():
+            course_date = form.cleaned_data["course_date"]
+            start_time = form.cleaned_data["start_time"]
+            course_type = business.dummy_course_type
+
+            booking = Booking.objects.create(
+                business=business,
+                training_location=training_location,
+                course_type=course_type,
+                instructor=inst,
+                course_date=course_date,
+                start_time=start_time,
+                booking_notes="Dummy / familiarisation booking.",
+                course_fee=course_type.default_course_fee,
+                instructor_fee=course_type.default_instructor_fee,
+                contact_name=training_location.contact_name or business.contact_name or "",
+                telephone=training_location.telephone or business.telephone or "",
+                email=training_location.email or business.email or "",
+            )
+
+            duration_days = float(course_type.duration_days or 1.0)
+            rows = max(1, int(duration_days) if duration_days.is_integer() else int(duration_days) + 1)
+
+            def _hours_for_day(index, total, total_rows):
+                if total_rows == 1:
+                    return 3.5 if 0 < total < 1 else 7.0
+                whole = int(total)
+                frac = total - whole
+                if index <= whole:
+                    return 7.0
+                if frac > 0 and index == whole + 1:
+                    return 3.5
+                return 7.0
+
+            def _add_hours(base_time, hours_float):
+                base_dt = datetime.combine(datetime(2000, 1, 1).date(), base_time)
+                result = base_dt + timedelta(seconds=round(hours_float * 3600))
+                return result.time()
+
+            for i in range(rows):
+                day_no = i + 1
+                BookingDay.objects.create(
+                    booking=booking,
+                    date=course_date + timedelta(days=i),
+                    start_time=start_time,
+                    end_time=_add_hours(start_time, _hours_for_day(day_no, duration_days, rows)),
+                    instructor=inst,
+                    note="Dummy / familiarisation day",
+                )
+
+            messages.success(request, f"Practice booking created for {business.name}.")
+            return redirect("instructor_booking_detail", pk=booking.pk)
+    else:
+        form = DummyBookingQuickCreateForm(initial={"course_date": timezone.localdate()})
+
+    return render(request, "instructor/dummy_booking_new.html", {
+        "title": "Create practice booking",
+        "form": form,
+        "business": business,
+        "training_location": training_location,
+        "course_type": business.dummy_course_type,
+    })
+
+
+@login_required
+@require_POST
+def instructor_delete_dummy_booking(request, pk):
+    booking = get_object_or_404(
+        Booking.objects.select_related("business", "instructor"),
+        pk=pk,
+        business__is_dummy=True,
+    )
+    instr = getattr(request.user, "personnel", None)
+    is_admin = request.user.is_superuser or request.user.groups.filter(name__iexact="admin").exists()
+
+    if not is_admin and (not instr or booking.instructor_id != instr.id):
+        messages.error(request, "You do not have permission to delete this dummy booking.")
+        return redirect("instructor_bookings")
+
+    ref = booking.course_reference or ""
+    delete_dummy_booking_tree(booking)
+    messages.success(request, f"Dummy booking {ref} deleted.")
+    return redirect(request.POST.get("next") or reverse("instructor_bookings"))
 
 @login_required
 def whoami(request):
@@ -1017,88 +1135,81 @@ def instructor_booking_detail(request, pk):
             if not booking.date_completed:
                 booking.date_completed = now()
                 booking.save(update_fields=["date_completed"])
-           
-            try:
-                from django.core.mail import EmailMessage
-                import mimetypes
+            
+            if booking.is_dummy_business:
+                print("ℹ️ Dummy booking closure email skipped")
+            else:
+                try:
+                    from django.core.mail import EmailMessage
+                    import mimetypes
 
-                admin_email = getattr(settings, "ADMIN_INBOX_EMAIL", "")
-                instructor_email = booking.instructor.email or ""
-                catch_all = getattr(settings, "DEV_CATCH_ALL_EMAIL", "")
+                    admin_email = getattr(settings, "ADMIN_INBOX_EMAIL", "")
+                    instructor_email = booking.instructor.email or ""
+                    catch_all = getattr(settings, "DEV_CATCH_ALL_EMAIL", "")
 
-                subject = f"Course closure documents — {booking.course_type.name} ({booking.course_reference})"
+                    subject = f"Course closure documents — {booking.course_type.name} ({booking.course_reference})"
 
-                if settings.DEBUG:
-                    # DEV MODE — send to catch-all only
-                    to_recipients = [catch_all]
-                    effective_subject = (
-                        f"[DEV] {subject}  "
-                        f"(Would send to: {admin_email}, {instructor_email})"
-                    )
-                    cc_recipients = []
-                else:
-                    # PROD MODE — real recipients
-                    to_recipients = [admin_email] if admin_email else []
-                    cc_recipients = [instructor_email] if instructor_email else []
-                    effective_subject = subject
-
-                body = (
-                    "Please find attached to this email documents relating to the below course.\n\n"
-                    f"Course: {booking.course_type.name}\n"
-                    f"Business: {booking.business.name}\n"
-                    f"Reference: {booking.course_reference}\n"
-                    f"Closed on: {booking.date_completed.strftime('%Y-%m-%d %H:%M')}\n\n"
-                    "Attached documents:\n"
-                    " • Assessment Matrix\n"
-                    " • Registers\n"
-                    " • Certificates\n"
-                    " • Feedback Summary\n\n"
-                    "----------------------------------------\n"
-                    f"Instructor: {booking.instructor.name}\n"
-                    f"Email: {booking.instructor.email}\n"
-                )
-
-                # ✅ Force UTF-8 safe subject + body (ONLY if they are strings)
-                if isinstance(effective_subject, str):
-                    effective_subject = effective_subject.encode("utf-8", "ignore").decode("utf-8")
-
-                if isinstance(body, str):
-                    body = body.encode("utf-8", "ignore").decode("utf-8")
-
-                email = EmailMessage(
-                    subject=effective_subject,
-                    body=body,
-                    from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
-                    to=to_recipients,
-                    cc=cc_recipients,
-                )
-
-                # ✅ CRITICAL: enforce UTF-8
-                email.encoding = "utf-8"
-
-                # ✅ Attach PDFs safely
-                for filename, content in pdf_files:
-
-                    # ✅ SAFETY: unwrap nested tuples if any PDF helper returned (bytes, filename)
-                    if isinstance(content, tuple):
-                        content = content[0]
-
-                    # ✅ SAFETY: normalize filename to UTF-8 clean string
-                    if isinstance(filename, bytes):
-                        safe_filename = filename.decode("utf-8", "ignore")
+                    if settings.DEBUG:
+                        to_recipients = [catch_all]
+                        effective_subject = (
+                            f"[DEV] {subject}  "
+                            f"(Would send to: {admin_email}, {instructor_email})"
+                        )
+                        cc_recipients = []
                     else:
-                        safe_filename = str(filename).encode("utf-8", "ignore").decode("utf-8")
+                        to_recipients = [admin_email] if admin_email else []
+                        cc_recipients = [instructor_email] if instructor_email else []
+                        effective_subject = subject
 
-                    mime = mimetypes.guess_type(safe_filename)[0] or "application/pdf"
-                    email.attach(safe_filename, content, mime)
+                    body = (
+                        "Please find attached to this email documents relating to the below course.\n\n"
+                        f"Course: {booking.course_type.name}\n"
+                        f"Business: {booking.business.name}\n"
+                        f"Reference: {booking.course_reference}\n"
+                        f"Closed on: {booking.date_completed.strftime('%Y-%m-%d %H:%M')}\n\n"
+                        "Attached documents:\n"
+                        " • Assessment Matrix\n"
+                        " • Registers\n"
+                        " • Certificates\n"
+                        " • Feedback Summary\n\n"
+                        "----------------------------------------\n"
+                        f"Instructor: {booking.instructor.name}\n"
+                        f"Email: {booking.instructor.email}\n"
+                    )
 
+                    if isinstance(effective_subject, str):
+                        effective_subject = effective_subject.encode("utf-8", "ignore").decode("utf-8")
 
-                email.send(fail_silently=False)
-                print("📧 Closure email sent successfully")
+                    if isinstance(body, str):
+                        body = body.encode("utf-8", "ignore").decode("utf-8")
 
-            except Exception as e:
-                print("❌ Closure email failed:", e)
-                messages.error(request, f"Course closed, but email failed: {e}")
+                    email = EmailMessage(
+                        subject=effective_subject,
+                        body=body,
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                        to=to_recipients,
+                        cc=cc_recipients,
+                    )
+                    email.encoding = "utf-8"
+
+                    for filename, content in pdf_files:
+                        if isinstance(content, tuple):
+                            content = content[0]
+
+                        if isinstance(filename, bytes):
+                            safe_filename = filename.decode("utf-8", "ignore")
+                        else:
+                            safe_filename = str(filename).encode("utf-8", "ignore").decode("utf-8")
+
+                        mime = mimetypes.guess_type(safe_filename)[0] or "application/pdf"
+                        email.attach(safe_filename, content, mime)
+
+                    email.send(fail_silently=False)
+                    print("📧 Closure email sent successfully")
+
+                except Exception as e:
+                    print("❌ Closure email failed:", e)
+                    messages.error(request, f"Course closed, but email failed: {e}")
 
             print(f"📎 TOTAL PDFs GENERATED: {len(pdf_files)}")
 
@@ -1108,7 +1219,10 @@ def instructor_booking_detail(request, pk):
 
             print("✅ COURSE SUCCESSFULLY CLOSED")
 
-            messages.success(request, "✅ Course closed and documents emailed to admin and instructor.")
+            if booking.is_dummy_business:
+                messages.success(request, "✅ Dummy course closed. Admin email was skipped.")
+            else:
+                messages.success(request, "✅ Course closed and documents emailed to admin and instructor.")
             return redirect(f"{request.path}#closure-pane")
 
         # -------------------------------
@@ -1277,6 +1391,15 @@ def instructor_booking_detail(request, pk):
                     InvoiceItem.objects.create(invoice=inv, description=desc, amount=amt)
 
                 inv.save()
+
+                if booking.is_dummy_business:
+                    inv.status = "sent"
+                    inv.date_sent = now()
+                    inv.save(update_fields=["status", "date_sent", "invoice_date", "instructor_ref", "account_name", "sort_code", "account_number"])
+                    messages.success(request, "Dummy booking invoice marked as sent. Admin email skipped.")
+                    return redirect(
+                        f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
+                    )
 
                 # ----------------------------------------------------------------------
                 #                BUILD PDF + GATHER RECEIPTS + SEND EMAIL
@@ -3533,7 +3656,11 @@ def send_course_docs(request, pk):
     if request.method != "POST":
         return redirect("instructor_booking_detail", pk=booking.pk)
 
-    n = email_all_course_docs_to_admin(booking)
+    if booking.is_dummy_business:
+        messages.info(request, "Dummy familiarisation bookings do not email course documents to admin.")
+        return redirect("instructor_booking_detail", pk=booking.pk)
+
+    n = email_all_course_docs_to_admin(request, booking)
     if n:
         messages.success(request, f"Sent {n} PDF document(s) to admin.")
     else:

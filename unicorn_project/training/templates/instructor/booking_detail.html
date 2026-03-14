@@ -8,6 +8,9 @@
   {% if booking.course_reference %}
     <span class="badge bg-light text-dark border">Ref: {{ booking.course_reference }}</span>
   {% endif %}
+  {% if booking.is_dummy_business %}
+    <span class="badge bg-warning text-dark">Dummy booking</span>
+  {% endif %}
 </h3>
 
 {% with st=booking.status %}
@@ -30,6 +33,21 @@
   <div class="alert alert-warning d-flex align-items-center gap-2">
     <i class="bi bi-lock"></i>
     This course is closed. All tabs are read-only except <strong>Invoicing</strong>.
+  </div>
+{% endif %}
+
+{% if booking.is_dummy_business %}
+  <div class="alert alert-info d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div>
+      This is a dummy / familiarisation booking. It can be deleted directly and will auto-delete 7 days after it was created.
+    </div>
+    <form method="post" action="{% url 'instructor_delete_dummy_booking' booking.pk %}" class="m-0" onsubmit="return confirm('Delete this dummy booking and all linked registers, feedback, exams, and invoices?');">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{% url 'instructor_bookings' %}">
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash me-1"></i>Delete dummy booking
+      </button>
+    </form>
   </div>
 {% endif %}
 

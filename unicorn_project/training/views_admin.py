@@ -47,6 +47,7 @@ from .forms import (
 from .views_instructor import _feedback_queryset_for_booking, list_course_receipts_drive, render_invoice_pdf_via_preview
 from .utils.certificates import build_certificates_pdf_for_booking, _unique_delegates_for_booking
 from .google_oauth import get_drive_service
+from .services.dummy_bookings import delete_dummy_booking_tree
 
 
 
@@ -153,7 +154,7 @@ def business_list(request):
     rows = []
     for b in qs.order_by("name"):
         rows.append({
-            "cells": [b.name, b.town or "", b.postcode or ""],
+            "cells": [f"{b.name} (Dummy)" if b.is_dummy else b.name, b.town or "", b.postcode or ""],
             "edit_url": reverse("admin_business_edit", args=[b.id]),
         })
 
@@ -175,7 +176,11 @@ def business_form(request, pk=None):
 
     # --- Save flow ---------------------------------------------------------
     if request.method == "POST":
-        form = BusinessForm(request.POST, instance=obj)
+        form = BusinessForm(
+            request.POST,
+            instance=obj,
+            allow_dummy_configuration=request.user.is_superuser,
+        )
         if form.is_valid():
             obj = form.save()
             messages.success(request, "Changes saved.")
@@ -185,7 +190,7 @@ def business_form(request, pk=None):
         else:
             messages.error(request, "Please fix the errors below.")
     else:
-        form = BusinessForm(instance=obj)
+        form = BusinessForm(instance=obj, allow_dummy_configuration=request.user.is_superuser)
 
     # --- Locations (left card) --------------------------------------------
     locations = []
@@ -598,7 +603,7 @@ def booking_list(request):
         # NEW: invoice status pill
         inv = getattr(b, "invoice", None)
         inv_ctx = None
-        if inv:
+        if inv and not b.is_dummy_business:
             inv_st = (inv.status or "")
             inv_pill = invoice_status_style.get(inv_st, {"cls": "badge bg-secondary"})
             inv_label_fn = getattr(inv, "get_status_display",
@@ -612,7 +617,7 @@ def booking_list(request):
         rows.append({
             "date":       b.course_date,
             "course":     (b.course_type.name if b.course_type else ""),
-            "business":   (b.business.name if b.business else ""),
+            "business":   (f"{b.business.name} (Dummy)" if b.is_dummy_business else (b.business.name if b.business else "")),
             "status":     {
                 "label": label_fn(),
                 "cls":   pill.get("cls", "badge bg-secondary"),
@@ -696,6 +701,16 @@ def booking_list(request):
 
 
 def _admin_invoice_context(booking):
+    if booking.is_dummy_business:
+        return {
+            "admin_invoice": None,
+            "admin_invoice_base_fee": None,
+            "admin_invoice_items": [],
+            "admin_invoice_total": None,
+            "admin_invoice_status": None,
+            "admin_invoice_receipts": [],
+        }
+
     inv = getattr(booking, "invoice", None)
 
     if inv is None:
@@ -993,6 +1008,8 @@ def booking_form(request, pk=None):
     # ---------- NEW: tab + register detail support ----------
     # which tab is active (default = registers)
     active_tab = request.GET.get("tab", "registers")
+    if obj and obj.is_dummy_business and active_tab == "invoice":
+        active_tab = "registers"
 
     regs_day = None
     regs = None
@@ -1145,6 +1162,7 @@ def booking_form(request, pk=None):
         # certificates
         "cert_delegates": cert_delegates,
         "mileage_rate": get_meta("mileage_rate", "0"),
+        "show_invoice_tab": bool(obj and obj.pk and not obj.is_dummy_business),
     }
 
     # ---- NEW: attach admin invoice context if there is a booking ----
@@ -1163,6 +1181,9 @@ def admin_invoice_pdf(request, pk):
     """
     # Optional: you can still check an invoice exists and bounce back nicely
     booking = get_object_or_404(Booking, pk=pk)
+    if booking.is_dummy_business:
+        messages.info(request, "Invoices are hidden for dummy businesses in admin screens.")
+        return redirect("admin_booking_edit", pk=booking.pk)
     if not getattr(booking, "invoice", None):
         messages.error(request, "No invoice exists for this booking.")
         return redirect("admin_booking_edit", pk=booking.pk)
@@ -1215,7 +1236,10 @@ def booking_delete(request, pk):
 
     if request.method == "POST":
         ref = booking.course_reference or ""
-        booking.delete()
+        if booking.is_dummy_business:
+            delete_dummy_booking_tree(booking)
+        else:
+            booking.delete()
         messages.success(request, f"Booking {ref} deleted.")
         return redirect("admin_booking_list")
 
@@ -2271,7 +2295,7 @@ STATUS_BADGES = {
 def api_outstanding_invoices(request):
     invoices = (
         Invoice.objects
-        .filter(status__in=["sent", "awaiting_review"])
+        .filter(status__in=["sent", "awaiting_review"], booking__business__is_dummy=False)
         .select_related(
             "booking",
             "booking__course_type",

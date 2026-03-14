@@ -59,6 +59,14 @@ def run_anonymiser():
     except Exception as e:
         print(f"[Scheduler] anonymisation job FAILED: {e}")
 
+def run_purge_dummy_bookings():
+    print("[Scheduler] Running dummy booking purge...")
+    try:
+        call_command("purge_dummy_bookings", verbosity=0)
+        print("[Scheduler] Finished dummy booking purge.")
+    except Exception as e:
+        print(f"[Scheduler] dummy booking purge FAILED: {e}")
+
 def start():
     """
     Start APScheduler once per process.
@@ -99,11 +107,35 @@ def start():
             replace_existing=True,
         )
 
+    if test_every > 0:
+        dummy_desc = f"dummy purge every {test_every} min (interval)"
+        scheduler.add_job(
+            run_purge_dummy_bookings,
+            trigger="interval",
+            minutes=test_every,
+            id="purge_dummy_bookings_interval",
+            replace_existing=True,
+        )
+    else:
+        dummy_desc = "dummy purge every 15 min @ 00,15,30,45 (cron)"
+        scheduler.add_job(
+            run_purge_dummy_bookings,
+            CronTrigger(minute="0,15,30,45"),
+            id="purge_dummy_bookings_cron",
+            replace_existing=True,
+        )
+
     # Kickoff: run update_booking_statuses once immediately at startup/wake
     scheduler.add_job(
         run_update_booking_statuses,
         next_run_time=datetime.now(dtz.utc),
         id="update_booking_statuses_kick",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_purge_dummy_bookings,
+        next_run_time=datetime.now(dtz.utc),
+        id="purge_dummy_bookings_kick",
         replace_existing=True,
     )
 
@@ -132,4 +164,4 @@ def start():
     _scheduler = scheduler
 
     # Helpful log lines
-    print(f"[APScheduler] Started in PID {os.getpid()}: {bookings_desc}; {anon_desc}.")
+    print(f"[APScheduler] Started in PID {os.getpid()}: {bookings_desc}; {dummy_desc}; {anon_desc}.")

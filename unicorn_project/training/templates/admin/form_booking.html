@@ -347,6 +347,7 @@
       Certificates
     </button>
   </li>
+  {% if show_invoice_tab %}
   <li class="nav-item" role="presentation">
     <button class="nav-link {% if active_tab == 'invoice' %}active{% endif %}"
             id="tab-invoice"
@@ -356,6 +357,7 @@
       Invoice
     </button>
   </li>
+  {% endif %}
 </ul>
 
 
@@ -675,6 +677,7 @@
   </div>
 
       <!-- INVOICE TAB (admin read-only view + status control) -->
+    {% if show_invoice_tab %}
     <div class="tab-pane fade {% if active_tab == 'invoice' %}show active{% endif %}"
          id="tab-pane-invoice"
          role="tabpanel" aria-labelledby="tab-invoice">
@@ -846,6 +849,7 @@
     <div class="form-text">
       Changing this will affect who can edit or view the invoice. Use one of the “Save…” buttons below to apply.
     </div>
+    {% endif %}
   </div>
 {% endif %}
 

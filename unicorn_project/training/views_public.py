@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from django.db.models import Q
-from .models import Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel
+from .models import Booking, Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel
 from .forms_exam import DelegateExamStartForm
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -247,6 +247,29 @@ def _find_latest_attempt(exam, name, dob, instructor, exam_date):
         .first()
     )
 
+
+def _resolve_booking_for_attempt(exam, delegate_name, dob, instructor, exam_date):
+    if not instructor or not exam_date:
+        return None
+
+    register = (
+        DelegateRegister.objects
+        .select_related("booking_day__booking")
+        .filter(
+            booking_day__booking__course_type=exam.course_type,
+            booking_day__booking__instructor=instructor,
+            booking_day__date=exam_date,
+            name__iexact=delegate_name,
+            date_of_birth=dob,
+        )
+        .order_by("-created_at", "-id")
+        .first()
+    )
+
+    if not register or not getattr(register, "booking_day", None):
+        return None
+    return register.booking_day.booking
+
 def _start_new_attempt(exam, name, dob, instructor, exam_date):
     """Create a fresh attempt and consume any pending retake authorisation."""
     name_norm = _norm_name(name)
@@ -256,6 +279,7 @@ def _start_new_attempt(exam, name, dob, instructor, exam_date):
 
     attempt = ExamAttempt.objects.create(
         exam=exam,
+        booking=_resolve_booking_for_attempt(exam, name_norm, dob, instructor, exam_date),
         total_questions=total_q,
         score_correct=0,
         delegate_name=name_norm,
@@ -356,6 +380,7 @@ def _get_or_create_attempt(request, exam: Exam):
 
         new_attempt = ExamAttempt.objects.create(
             exam=exam,
+            booking=_resolve_booking_for_attempt(exam, delegate_name, date_of_birth, instructor, exam_day),
             instructor=instructor,
             exam_date=exam_day,
             delegate_name=delegate_name,
@@ -377,6 +402,7 @@ def _get_or_create_attempt(request, exam: Exam):
 
         new_attempt = ExamAttempt.objects.create(
             exam=exam,
+            booking=_resolve_booking_for_attempt(exam, delegate_name, date_of_birth, instructor, exam_day),
             instructor=instructor,
             exam_date=exam_day,
             delegate_name=delegate_name,
@@ -553,6 +579,7 @@ def delegate_exam_run(request: HttpRequest) -> HttpResponse:
 
             attempt = ExamAttempt.objects.create(
                 exam=exam,
+                booking=_resolve_booking_for_attempt(exam, delegate_name, dob, instructor, exam_date),
                 exam_date=exam_date,
                 instructor=instructor,
                 delegate_name=delegate_name,

@@ -51,7 +51,7 @@
   <div class="col-lg-6">
     <div class="card">
       <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Training locations for <strong>{{ business.name }}</strong></span>
+        <span>Training locations for <strong>{{ business.name }}</strong>{% if business.is_dummy %} <span class="badge bg-warning text-dark ms-2">Dummy</span>{% endif %}</span>
         {% if add_location_url %}
           <a class="btn btn-sm btn-success" href="{{ add_location_url }}">
             <i class="bi bi-plus-lg"></i> Add Location

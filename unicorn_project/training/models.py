@@ -20,6 +20,18 @@ from django.utils import timezone
 class Business(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
+    is_dummy = models.BooleanField(
+        default=False,
+        help_text="Marks this as a dummy / familiarisation business.",
+    )
+    dummy_course_type = models.ForeignKey(
+        "CourseType",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="dummy_businesses",
+        help_text="Default course type used when instructors create quick dummy bookings.",
+    )
 
     address_line = models.CharField(max_length=255, blank=True, null=True)
     town         = models.CharField(max_length=255, blank=True, null=True)
@@ -380,6 +392,10 @@ class Booking(models.Model):
     # -------------------------------
     def is_cancelled(self):
         return self.status == "cancelled"
+
+    @property
+    def is_dummy_business(self):
+        return bool(self.business_id and getattr(self.business, "is_dummy", False))
 
     def __str__(self):
         return self.course_reference or "(pending)"
@@ -898,6 +914,13 @@ class ExamAnswer(models.Model):
     
 class ExamAttempt(models.Model):
     exam = models.ForeignKey("Exam", on_delete=models.CASCADE, related_name="attempts")
+    booking = models.ForeignKey(
+        "Booking",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="exam_attempts",
+    )
 
     # Snapshot of who started (from the start page)
     delegate_name = models.CharField(max_length=120)

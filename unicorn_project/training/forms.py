@@ -216,6 +216,7 @@ class BusinessForm(forms.ModelForm):
         fields = [
             'name', 'address_line', 'town', 'postcode',
             'contact_name', 'telephone', 'email',
+            'is_dummy', 'dummy_course_type',
             'add_as_training_location',
         ]
         widgets = {
@@ -226,9 +227,12 @@ class BusinessForm(forms.ModelForm):
             'contact_name': forms.TextInput(attrs={'class':'form-control'}),
             'telephone': forms.TextInput(attrs={'class':'form-control'}),
             'email': forms.EmailInput(attrs={'class':'form-control'}),
+            'is_dummy': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'dummy_course_type': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def __init__(self, *args, **kwargs):
+        self.allow_dummy_configuration = kwargs.pop('allow_dummy_configuration', False)
         super().__init__(*args, **kwargs)
         # Pre-tick if an identical “default” location appears to exist
         if self.instance and self.instance.pk:
@@ -237,6 +241,38 @@ class BusinessForm(forms.ModelForm):
                 name=self.instance.name
             ).exists()
             self.fields['add_as_training_location'].initial = exists
+
+        if self.allow_dummy_configuration:
+            self.fields['dummy_course_type'].queryset = CourseType.objects.order_by('name')
+            self.fields['is_dummy'].help_text = "Allows this business to be used for practice / familiarisation bookings."
+            self.fields['dummy_course_type'].help_text = "Only used for dummy businesses. Instructors use this as the automatic course type when creating a practice booking."
+        else:
+            self.fields.pop('is_dummy', None)
+            self.fields.pop('dummy_course_type', None)
+
+    def clean(self):
+        cleaned = super().clean()
+
+        if not self.allow_dummy_configuration:
+            return cleaned
+
+        if cleaned.get('is_dummy'):
+            if not cleaned.get('dummy_course_type'):
+                self.add_error('dummy_course_type', 'Choose the default course type for this dummy business.')
+
+            has_existing_location = bool(
+                self.instance and self.instance.pk and TrainingLocation.objects.filter(
+                    business=self.instance,
+                    is_active=True,
+                ).exists()
+            )
+            if not cleaned.get('add_as_training_location') and not has_existing_location:
+                self.add_error(
+                    'add_as_training_location',
+                    'Dummy businesses need at least one active training location for quick familiarisation bookings.',
+                )
+
+        return cleaned
 
     def save(self, commit=True):
         biz = super().save(commit=commit)
@@ -272,6 +308,15 @@ class BusinessForm(forms.ModelForm):
             ).delete()
 
         return biz
+
+
+class DummyBookingQuickCreateForm(forms.Form):
+    course_date = forms.DateField(
+        widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
+    )
+    start_time = forms.TimeField(
+        widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'})
+    )
 
 
 # ---------------- CourseType ----------------
