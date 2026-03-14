@@ -820,51 +820,48 @@
                 {% endif %}
               </div>
             </div>
-          {% endif %}
+              {% if status == "sent" %}
+                <!-- Admin-controlled status dropdown -->
+                <div class="mt-3">
+                  <label class="form-label" for="id_invoice_status_admin">
+                    Admin invoice status
+                  </label>
+                  <select name="invoice_status_admin"
+                          id="id_invoice_status_admin"
+                          class="form-select"
+                          style="max-width:260px;">
+                    <option value="">— Leave unchanged —</option>
+                    <option value="awaiting_review"
+                            {% if status == "awaiting_review" %}selected{% endif %}>
+                      Send back to instructor
+                    </option>
+                    <option value="paid"
+                            {% if status == "paid" %}selected{% endif %}>
+                      Paid
+                    </option>
+                    <option value="rejected"
+                            {% if status == "rejected" %}selected{% endif %}>
+                      Rejected
+                    </option>
+                  </select>
+                  <div class="form-text">
+                    Changing this will affect who can edit or view the invoice. Use one of the “Save…” buttons below to apply.
+                  </div>
+                </div>
+              {% endif %}
 
-          {% if inv and status == "sent" %}
-  <!-- Admin-controlled status dropdown -->
-  <div class="mt-3">
-    <label class="form-label" for="id_invoice_status_admin">
-      Admin invoice status
-    </label>
-    <select name="invoice_status_admin"
-            id="id_invoice_status_admin"
-            class="form-select"
-            style="max-width:260px;">
-      <option value="">— Leave unchanged —</option>
-      <option value="awaiting_review"
-              {% if status == "awaiting_review" %}selected{% endif %}>
-        Send back to instructor
-      </option>
-      <option value="paid"
-              {% if status == "paid" %}selected{% endif %}>
-        Paid
-      </option>
-      <option value="rejected"
-              {% if status == "rejected" %}selected{% endif %}>
-        Rejected
-      </option>
-    </select>
-    <div class="form-text">
-      Changing this will affect who can edit or view the invoice. Use one of the “Save…” buttons below to apply.
-    </div>
-    {% endif %}
-  </div>
-{% endif %}
-
-
-          <!-- Admin comment (internal) -->
-          <div class="mt-3">
-            <label class="form-label" for="id_invoice_admin_comment">
-              Admin comment (internal)
-            </label>
-            <textarea name="invoice_admin_comment"
-                      id="id_invoice_admin_comment"
-                      class="form-control"
-                      rows="3"
-                      placeholder="Notes about this invoice; not emailed to the instructor.">{{ inv.admin_comment|default_if_none:"" }}</textarea>
-          </div>
+              <!-- Admin comment (internal) -->
+              <div class="mt-3">
+                <label class="form-label" for="id_invoice_admin_comment">
+                  Admin comment (internal)
+                </label>
+                <textarea name="invoice_admin_comment"
+                          id="id_invoice_admin_comment"
+                          class="form-control"
+                          rows="3"
+                          placeholder="Notes about this invoice; not emailed to the instructor.">{{ inv.admin_comment|default_if_none:"" }}</textarea>
+              </div>
+            {% endif %}
         {% endwith %}
       {% endif %}
     </div>
@@ -916,6 +913,7 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+  {% endif %}
   {% endif %}
 
 
