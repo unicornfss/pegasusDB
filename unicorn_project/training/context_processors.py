@@ -87,11 +87,6 @@ def user_display_name(request):
 
 
 def two_factor_prompt(request):
-    should_prompt = False
-
-    if getattr(request, "user", None) and request.user.is_authenticated:
-        should_prompt = bool(request.session.pop("show_2fa_prompt", False))
-
     return {
-        "show_two_factor_prompt": should_prompt,
+        "show_two_factor_prompt": False,
     }

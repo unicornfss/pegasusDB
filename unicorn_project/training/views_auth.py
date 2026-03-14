@@ -1,32 +1,22 @@
-from django.contrib import messages
-from django.contrib.auth.views import PasswordChangeView
-from django.http import HttpResponseRedirect
-from django.shortcuts import render
-from django.urls import reverse, reverse_lazy
-from django.utils.crypto import get_random_string
-import pyotp
-
-from django.contrib import messages
-from django.contrib.auth.views import PasswordChangeView
-from django.http import HttpResponseRedirect
-from django.shortcuts import render
-from django.urls import reverse, reverse_lazy
-from django.utils.crypto import get_random_string
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.forms import AuthenticationForm
-import pyotp
+from django.contrib import messages
+from django.contrib.auth.views import PasswordChangeView
+from django.http import HttpResponseRedirect
+from django.shortcuts import render
+from django.urls import reverse, reverse_lazy
+from django.utils.crypto import get_random_string
 
 from unicorn_project.training.models import Personnel
 from unicorn_project.training.utils.passwords import send_initial_password_email
 
 
 def _queue_two_factor_prompt(request, user):
-    personnel = getattr(user, "personnel", None)
-    request.session["show_2fa_prompt"] = bool(personnel and not personnel.totp_secret)
+    request.session["show_2fa_prompt"] = False
 
 
 def custom_login(request):
-    """Custom login view that handles 2FA."""
+    """Custom login view without 2FA enforcement."""
     if request.user.is_authenticated:
         return HttpResponseRedirect(reverse("home"))
     
@@ -34,17 +24,10 @@ def custom_login(request):
         form = AuthenticationForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
-            personnel = getattr(user, 'personnel', None)
-            
-            if personnel and personnel.totp_secret:
-                # Store user in session for 2FA verification
-                request.session['2fa_user_id'] = user.id
-                return HttpResponseRedirect(reverse("two_factor_auth"))
-            else:
-                # No 2FA, login normally
-                login(request, user)
-                _queue_two_factor_prompt(request, user)
-                return HttpResponseRedirect(reverse("post_login"))
+            request.session.pop('2fa_user_id', None)
+            login(request, user)
+            _queue_two_factor_prompt(request, user)
+            return HttpResponseRedirect(reverse("post_login"))
     else:
         form = AuthenticationForm(request)
     
@@ -52,7 +35,7 @@ def custom_login(request):
 
 
 def two_factor_auth(request):
-    """Verify 2FA code during login."""
+    """Complete legacy 2FA logins without requiring a code."""
     user_id = request.session.get('2fa_user_id')
     if not user_id:
         return HttpResponseRedirect(reverse("login"))
@@ -63,22 +46,14 @@ def two_factor_auth(request):
         user = User.objects.get(id=user_id)
         personnel = user.personnel
     except (User.DoesNotExist, Personnel.DoesNotExist):
-        del request.session['2fa_user_id']
+        request.session.pop('2fa_user_id', None)
         return HttpResponseRedirect(reverse("login"))
-    
-    if request.method == "POST":
-        code = request.POST.get("code", "").strip()
-        totp = pyotp.TOTP(personnel.totp_secret)
-        
-        if totp.verify(code):
-            login(request, user)
-            del request.session['2fa_user_id']
-            _queue_two_factor_prompt(request, user)
-            return HttpResponseRedirect(reverse("post_login"))
-        else:
-            messages.error(request, "Invalid 2FA code.")
-    
-    return render(request, "two_factor/auth.html")
+
+    login(request, user)
+    request.session.pop('2fa_user_id', None)
+    _queue_two_factor_prompt(request, user)
+    messages.warning(request, "Two-factor authentication is currently disabled. You have been signed in without a code.")
+    return HttpResponseRedirect(reverse("post_login"))
 
 
 class ForcePasswordChangeView(PasswordChangeView):
@@ -130,82 +105,27 @@ def forgot_password(request):
 
 
 def two_factor_setup(request):
-    """Enable 2FA for the current user."""
+    """Legacy 2FA setup route kept as a redirect while 2FA is disabled."""
     if not request.user.is_authenticated:
         return HttpResponseRedirect(reverse("login"))
-    
-    personnel = getattr(request.user, 'personnel', None)
-    if not personnel:
-        messages.error(request, "Profile not found.")
-        return HttpResponseRedirect(reverse("home"))
-    
-    if personnel.totp_secret:
-        messages.info(request, "2FA is already enabled.")
-        return HttpResponseRedirect(reverse("user_profile"))
-    
-    if request.method == "POST":
-        secret = pyotp.random_base32()
-        personnel.totp_secret = secret
-        personnel.save(update_fields=['totp_secret'])
-        
-        totp = pyotp.TOTP(secret)
-        provisioning_uri = totp.provisioning_uri(name=personnel.email, issuer_name="Unicorn Pegasus")
-        
-        return render(request, "two_factor/setup.html", {
-            'secret': secret,
-            'provisioning_uri': provisioning_uri,
-        })
-    
-    return render(request, "two_factor/setup_confirm.html")
+
+    messages.info(request, "Two-factor authentication is currently disabled.")
+    return HttpResponseRedirect(reverse("user_profile"))
 
 
 def two_factor_verify(request):
-    """Verify 2FA code during setup."""
+    """Legacy 2FA verification route kept as a redirect while 2FA is disabled."""
     if not request.user.is_authenticated:
         return HttpResponseRedirect(reverse("login"))
-    
-    personnel = getattr(request.user, 'personnel', None)
-    if not personnel or not personnel.totp_secret:
-        messages.error(request, "2FA not set up.")
-        return HttpResponseRedirect(reverse("user_profile"))
-    
-    if request.method == "POST":
-        code = request.POST.get("code", "").strip()
-        totp = pyotp.TOTP(personnel.totp_secret)
-        
-        if totp.verify(code):
-            messages.success(request, "2FA has been enabled successfully.")
-            return HttpResponseRedirect(reverse("user_profile"))
-        else:
-            messages.error(request, "Invalid code. Please try again.")
-    
-    return render(request, "two_factor/verify.html")
+
+    messages.info(request, "Two-factor authentication is currently disabled.")
+    return HttpResponseRedirect(reverse("user_profile"))
 
 
 def two_factor_disable(request):
-    """Disable 2FA for the current user."""
+    """Legacy 2FA disable route kept as a redirect while 2FA is disabled."""
     if not request.user.is_authenticated:
         return HttpResponseRedirect(reverse("login"))
-    
-    personnel = getattr(request.user, 'personnel', None)
-    if not personnel:
-        messages.error(request, "Profile not found.")
-        return HttpResponseRedirect(reverse("home"))
-    
-    if not personnel.totp_secret:
-        messages.info(request, "2FA is not enabled.")
-        return HttpResponseRedirect(reverse("user_profile"))
-    
-    if request.method == "POST":
-        code = request.POST.get("code", "").strip()
-        totp = pyotp.TOTP(personnel.totp_secret)
-        
-        if totp.verify(code):
-            personnel.totp_secret = None
-            personnel.save(update_fields=['totp_secret'])
-            messages.success(request, "2FA has been disabled.")
-            return HttpResponseRedirect(reverse("user_profile"))
-        else:
-            messages.error(request, "Invalid code. Please try again.")
-    
-    return render(request, "two_factor/disable.html")
+
+    messages.info(request, "Two-factor authentication is currently disabled.")
+    return HttpResponseRedirect(reverse("user_profile"))
