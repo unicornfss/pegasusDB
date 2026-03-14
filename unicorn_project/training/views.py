@@ -270,10 +270,6 @@ def user_profile(request):
 
     from django.contrib.auth import update_session_auth_hash
 
-    if request.user.is_superuser:
-        messages.error(request, "Superuser cannot edit profile here.")
-        return redirect("app_admin_dashboard")
-
     try:
         personnel = request.user.personnel
     except Personnel.DoesNotExist:
