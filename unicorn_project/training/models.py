@@ -117,6 +117,45 @@ class CourseType(models.Model):
 
 
 class Personnel(models.Model):
+    SIDEBAR_THEME_CHOICES = [
+        ("default", "Default Burgundy"),
+        ("ocean", "Ocean Blue"),
+        ("forest", "Forest Green"),
+        ("plum", "Plum"),
+        ("charcoal", "Charcoal"),
+    ]
+
+    AVATAR_ICON_CHOICES = [
+        ("initials", "Initials"),
+        ("person", "Person"),
+        ("person_badge", "Person Badge"),
+        ("teacher", "Teacher"),
+        ("star", "Star"),
+        ("graduation", "Graduation Cap"),
+        ("tools", "Tools"),
+        ("unicorn", "Sparkles"),
+        ("briefcase", "Briefcase"),
+        ("books", "Books"),
+        ("note", "Note"),
+        ("cog", "Cog"),
+        ("heart", "Heart"),
+        ("palette", "Palette"),
+        ("lightning", "Lightning"),
+        ("music", "Music"),
+        ("camera", "Camera"),
+        ("bug", "Bug"),
+        ("rocket", "Rocket"),
+        ("ambulance", "Ambulance"),
+        ("fire_engine", "Fire Engine"),
+        ("first_aid", "First Aid Kit"),
+        ("extinguisher", "Fire Extinguisher"),
+        ("firefighter", "Firefighter"),
+        ("paramedic", "Ambulance Crew"),
+        ("hospital", "Hospital"),
+        ("lifebuoy", "Lifebuoy"),
+        ("shield_medical", "Medical Shield"),
+    ]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
     # The important fix is here ↓↓↓
@@ -154,6 +193,26 @@ class Personnel(models.Model):
         choices=PASTEL_CHOICES,
         default='none'
     )
+
+    night_mode = models.BooleanField(default=False)
+
+    sidebar_theme = models.CharField(
+        max_length=20,
+        choices=SIDEBAR_THEME_CHOICES,
+        default="default",
+    )
+
+    sidebar_custom_color = models.CharField(
+        max_length=7,
+        blank=True,
+        default="",
+    )
+
+    avatar_icon = models.CharField(
+        max_length=30,
+        choices=AVATAR_ICON_CHOICES,
+        default="initials",
+    )
   
     is_active = models.BooleanField(default=True)
     can_login = models.BooleanField(default=True)
@@ -161,6 +220,43 @@ class Personnel(models.Model):
 
     # Two-factor authentication
     totp_secret = models.CharField(max_length=32, blank=True, null=True, help_text="TOTP secret for 2FA")
+
+    @property
+    def avatar_initial(self):
+        source = (self.name or self.email or "?").strip()
+        return (source[:1] or "?").upper()
+
+    @property
+    def avatar_icon_class(self):
+        return {
+            "person": "bi-person-fill",
+            "person_badge": "bi-person-badge-fill",
+            "teacher": "bi-easel2-fill",
+            "star": "bi-star-fill",
+            "graduation": "bi-mortarboard-fill",
+            "tools": "bi-tools",
+            "unicorn": "bi-stars",
+            "briefcase": "bi-briefcase-fill",
+            "books": "bi-journal-bookmark-fill",
+            "note": "bi-journal-text",
+            "cog": "bi-gear-fill",
+            "heart": "bi-heart-fill",
+            "palette": "bi-palette-fill",
+            "lightning": "bi-lightning-charge-fill",
+            "music": "bi-music-note-beamed",
+            "camera": "bi-camera-fill",
+            "bug": "bi-bug-fill",
+            "rocket": "bi-rocket-takeoff-fill",
+            "ambulance": "bi-truck-front-fill",
+            "fire_engine": "bi-fire",
+            "first_aid": "bi-heart-pulse-fill",
+            "extinguisher": "bi-shield-fill-plus",
+            "firefighter": "bi-person-badge-fill",
+            "paramedic": "bi-person-vcard-fill",
+            "hospital": "bi-hospital-fill",
+            "lifebuoy": "bi-life-preserver",
+            "shield_medical": "bi-shield-plus",
+        }.get(self.avatar_icon, "")
 
     def __str__(self):
         return self.name

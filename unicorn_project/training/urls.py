@@ -42,6 +42,7 @@ urlpatterns = [
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
     path("app/profile/", views.user_profile, name="user_profile"),
+    path("app/preferences/night-mode/", views.toggle_night_mode, name="toggle_night_mode"),
     path("app/instructor/day/<int:pk>/registers/send-pdf/", views_instructor.instructor_day_registers_pdf, name="instructor_send_register_pdf"),
     path("app/instructor/day/<int:pk>/registers/poll/", views_instructor.instructor_day_registers_poll, name="instructor_day_registers_poll"),
     path("app/instructor/booking/<uuid:pk>/upload-receipt/", instv.instructor_upload_receipt, name="instructor_upload_receipt"),

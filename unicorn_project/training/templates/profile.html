@@ -2,75 +2,351 @@
 
 {% block content %}
 
-<h2><i class="bi bi-person-gear"></i> My Profile</h2>
-<p>Update your personal and contact details below.</p>
-
-<form method="post" class="mt-3">
-    {% csrf_token %}
-
+<div class="container-fluid">
     <div class="row">
-        <div class="col-md-6">
-            <h4>Account details</h4>
-            {{ uform.as_p }}
-
-            <!-- Accessibility Section (moved up under Account details) -->
-            <h4 class="mt-4">Accessibility</h4>
-
-            <div class="form-check mt-2">
-                <input class="form-check-input"
-                    type="checkbox"
-                    id="id_dyslexia_mode"
-                    name="dyslexia_mode"
-                    {% if request.user.personnel.dyslexia_mode %}checked{% endif %}>
-                <label class="form-check-label" for="id_dyslexia_mode">
-                    Enable Dyslexia-friendly mode
-                </label>
-            </div>
-
-            <!-- Pastel background selector -->
-            <div id="pastel-options"
-                class="mt-3"
-                {% if not request.user.personnel.dyslexia_mode %}style="display:none"{% endif %}>
-                <label><strong>Pastel background colour</strong></label>
-                <select name="pastel_background" class="form-select mt-1">
-                    <option value="none"   {% if request.user.personnel.pastel_background == "none" %}selected{% endif %}>Default (off-white)</option>
-                    <option value="cream"  {% if request.user.personnel.pastel_background == "cream" %}selected{% endif %}>Cream</option>
-                    <option value="yellow" {% if request.user.personnel.pastel_background == "yellow" %}selected{% endif %}>Soft Yellow</option>
-                    <option value="blue"   {% if request.user.personnel.pastel_background == "blue" %}selected{% endif %}>Soft Blue</option>
-                    <option value="green"  {% if request.user.personnel.pastel_background == "green" %}selected{% endif %}>Soft Green</option>
-                </select>
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1"><i class="bi bi-person-gear text-primary me-2"></i>My Profile</h2>
+                    <p class="text-muted mb-0">Manage your account details, appearance, and personal preferences.</p>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div class="col-md-6">
-            <h4>Security</h4>
-            <div class="mb-3">
-                <strong>Two-Factor Authentication (2FA):</strong>
-                <span class="badge bg-secondary">Disabled</span>
-                <div class="form-text">
-                    Two-factor authentication is currently turned off for all users.
+    <form method="post">
+        {% csrf_token %}
+
+        {% if uform.non_field_errors or pform.non_field_errors %}
+        <div class="alert alert-danger">
+            {% for err in uform.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+            {% for err in pform.non_field_errors %}<div>{{ err }}</div>{% endfor %}
+        </div>
+        {% endif %}
+
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card shadow-sm h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="card-title mb-0"><i class="bi bi-person-circle me-2"></i>Personal, Contact & Banking Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ uform.first_name.id_for_label }}">First name</label>
+                                {{ uform.first_name }}
+                                {% for err in uform.first_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ uform.last_name.id_for_label }}">Last name</label>
+                                {{ uform.last_name }}
+                                {% for err in uform.last_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ uform.email.id_for_label }}">Email address</label>
+                                {{ uform.email }}
+                                {% for err in uform.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ pform.telephone.id_for_label }}">Telephone</label>
+                                {{ pform.telephone }}
+                                {% for err in pform.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+
+                            <div class="col-12">
+                                <hr class="my-3">
+                                <h6 class="fw-bold text-muted mb-3">Address Details</h6>
+                            </div>
+
+                            <div class="col-12">
+                                <label class="form-label fw-bold" for="{{ pform.address_line.id_for_label }}">Street address</label>
+                                {{ pform.address_line }}
+                                {% for err in pform.address_line.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold" for="{{ pform.town.id_for_label }}">Town / City</label>
+                                {{ pform.town }}
+                                {% for err in pform.town.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold" for="{{ pform.postcode.id_for_label }}">Postcode</label>
+                                {{ pform.postcode }}
+                                {% for err in pform.postcode.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+
+                            <div class="col-12">
+                                <hr class="my-3">
+                                <h6 class="fw-bold text-muted mb-3">Banking Information</h6>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ pform.bank_sort_code.id_for_label }}">Sort code</label>
+                                {{ pform.bank_sort_code }}
+                                {% for err in pform.bank_sort_code.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ pform.bank_account_number.id_for_label }}">Account number</label>
+                                {{ pform.bank_account_number }}
+                                {% for err in pform.bank_account_number.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-bold" for="{{ pform.name_on_account.id_for_label }}">Account name</label>
+                                {{ pform.name_on_account }}
+                                {% for err in pform.name_on_account.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <h4>Contact & bank details</h4>
-            {{ pform.as_p }}
+            <div class="col-lg-4 d-flex flex-column gap-4">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="card-title mb-0"><i class="bi bi-palette me-2"></i>Appearance & Accessibility</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-4">
+                            {{ pform.sidebar_custom_color }}
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h6 class="fw-bold mb-0">Sidebar colour</h6>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button type="button" id="reset-sidebar-theme" class="btn btn-outline-secondary btn-sm">Reset default</button>
+                                    <input id="sidebar-custom-color-picker" type="color" class="form-control form-control-color" value="{{ current_sidebar_custom_color }}">
+                                </div>
+                            </div>
+                            <div class="profile-choice-grid">
+                                {% for option in sidebar_theme_options %}
+                                <label class="profile-choice-card">
+                                    <input type="radio" name="sidebar_theme" value="{{ option.value }}" {% if current_sidebar_theme == option.value %}checked{% endif %}>
+                                    <span class="profile-choice-card-body">
+                                        <span class="profile-theme-swatch profile-theme-{{ option.value }}"></span>
+                                        <span class="d-block fw-semibold">{{ option.label }}</span>
+                                        <small class="text-muted">{{ option.hint }}</small>
+                                    </span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            <div class="mt-3">
+                                <label class="form-label fw-bold" for="{{ pform.sidebar_custom_color.id_for_label }}">Custom palette colour</label>
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="small text-muted">Pick any colour here to override the preset sidebar themes.</div>
+                                </div>
+                                {% for err in pform.sidebar_custom_color.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
+                            </div>
+                            {% for err in pform.sidebar_theme.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
+                        </div>
+
+                        <div class="mb-4">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <h6 class="fw-bold mb-0">Sidebar icon</h6>
+                                <button type="button" id="reset-avatar-icon" class="btn btn-outline-secondary btn-sm">Use initials</button>
+                            </div>
+                            <label class="form-label fw-bold" for="{{ pform.avatar_icon.id_for_label }}">Choose icon</label>
+                            {{ pform.avatar_icon }}
+                            <div class="profile-avatar-preview mt-3">
+                                <span class="profile-avatar-chip profile-avatar-chip--large" id="profile-avatar-preview">
+                                    {% if current_avatar_icon == "initials" %}
+                                        {{ current_avatar_initial }}
+                                    {% else %}
+                                        <i class="bi {% for option in avatar_icon_options %}{% if option.value == current_avatar_icon %}{{ option.icon_class }}{% endif %}{% endfor %}"></i>
+                                    {% endif %}
+                                </span>
+                                <div>
+                                    <div class="fw-semibold" id="profile-avatar-label">Current: {{ current_avatar_icon|title }}</div>
+                                    <div class="text-muted small">This updates the icon shown in the lower-left sidebar.</div>
+                                </div>
+                            </div>
+                            <datalist id="avatar-icon-legend">
+                                {% for option in avatar_icon_options %}
+                                <option value="{{ option.value }}">{{ option.label }}</option>
+                                {% endfor %}
+                            </datalist>
+                            {% for err in pform.avatar_icon.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            {{ pform.dyslexia_mode }}
+                            <label class="form-check-label fw-bold" for="{{ pform.dyslexia_mode.id_for_label }}">Enable Dyslexia-friendly mode</label>
+                        </div>
+
+                        <div id="pastel-options" {% if not pform.dyslexia_mode.value %}style="display:none"{% endif %}>
+                            <label class="form-label fw-bold" for="{{ pform.pastel_background.id_for_label }}">Reading background</label>
+                            {{ pform.pastel_background }}
+                            <div class="form-text">Only used when dyslexia-friendly mode is turned on.</div>
+                            {% for err in pform.pastel_background.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="card-title mb-0"><i class="bi bi-shield-check me-2"></i>Security</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <strong>Two-Factor Authentication (2FA):</strong>
+                            <span class="badge bg-secondary ms-2">Disabled</span>
+                            <div class="form-text mt-2">Two-factor authentication is currently turned off for all users.</div>
+                        </div>
+
+                        <div class="d-grid">
+                            <a href="{% url 'password_change' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-key me-1"></i>Change password
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body d-flex flex-wrap gap-2 justify-content-between align-items-center">
+                        <div class="text-muted small">Your sidebar preview updates immediately on this page. Save to keep the changes.</div>
+                        <button class="btn btn-primary" type="submit"><i class="bi bi-check-circle me-1"></i>Save profile changes</button>
+                    </div>
+                </div>
+            </div>
         </div>
-    </div>
-
-    <div class="mt-3 d-flex gap-2">
-        <button class="btn btn-primary">Save changes</button>
-
-        <a href="{% url 'password_change' %}" class="btn btn-outline-secondary">
-            <i class="bi bi-key"></i> Change password
-        </a>
-    </div>
-
-</form>
+    </form>
+</div>
 
 <script>
-document.getElementById("id_dyslexia_mode").addEventListener("change", function() {
-    document.getElementById("pastel-options").style.display =
-        this.checked ? "block" : "none";
+document.addEventListener("DOMContentLoaded", function () {
+    const dyslexiaToggle = document.getElementById("{{ pform.dyslexia_mode.id_for_label }}");
+    const pastelOptions = document.getElementById("pastel-options");
+    const sidebarInputs = document.querySelectorAll('input[name="sidebar_theme"]');
+    const sidebarCustomColorInput = document.getElementById("{{ pform.sidebar_custom_color.id_for_label }}");
+    const sidebarCustomColorPicker = document.getElementById("sidebar-custom-color-picker");
+    const avatarSelect = document.getElementById("{{ pform.avatar_icon.id_for_label }}");
+    const resetSidebarButton = document.getElementById("reset-sidebar-theme");
+    const resetAvatarButton = document.getElementById("reset-avatar-icon");
+    const sidebarAvatar = document.querySelector(".sidebar-avatar");
+    const profileAvatarPreview = document.getElementById("profile-avatar-preview");
+    const profileAvatarLabel = document.getElementById("profile-avatar-label");
+    const avatarInitial = sidebarAvatar ? sidebarAvatar.dataset.avatarInitial : "{{ current_avatar_initial|escapejs }}";
+    const presetThemeColors = {
+        default: "#8b0000",
+        ocean: "#0f4c81",
+        forest: "#1f6f50",
+        plum: "#5b2c6f",
+        charcoal: "#2d3748"
+    };
+    const avatarIconMap = {
+        initials: { label: "Initials", iconClass: "" },
+        person: { label: "Person", iconClass: "bi-person-fill" },
+        person_badge: { label: "Person Badge", iconClass: "bi-person-badge-fill" },
+        teacher: { label: "Teacher", iconClass: "bi-easel2-fill" },
+        star: { label: "Star", iconClass: "bi-star-fill" },
+        graduation: { label: "Graduation", iconClass: "bi-mortarboard-fill" },
+        tools: { label: "Tools", iconClass: "bi-tools" },
+        unicorn: { label: "Sparkles", iconClass: "bi-stars" },
+        briefcase: { label: "Briefcase", iconClass: "bi-briefcase-fill" },
+        books: { label: "Books", iconClass: "bi-journal-bookmark-fill" },
+        note: { label: "Note", iconClass: "bi-journal-text" },
+        cog: { label: "Cog", iconClass: "bi-gear-fill" },
+        heart: { label: "Heart", iconClass: "bi-heart-fill" },
+        palette: { label: "Palette", iconClass: "bi-palette-fill" },
+        lightning: { label: "Lightning", iconClass: "bi-lightning-charge-fill" },
+        music: { label: "Music", iconClass: "bi-music-note-beamed" },
+        camera: { label: "Camera", iconClass: "bi-camera-fill" },
+        bug: { label: "Bug", iconClass: "bi-bug-fill" },
+        rocket: { label: "Rocket", iconClass: "bi-rocket-takeoff-fill" },
+        ambulance: { label: "Ambulance", iconClass: "bi-truck-front-fill" },
+        fire_engine: { label: "Fire Engine", iconClass: "bi-fire" },
+        first_aid: { label: "First Aid Kit", iconClass: "bi-heart-pulse-fill" },
+        extinguisher: { label: "Fire Extinguisher", iconClass: "bi-shield-fill-plus" },
+        firefighter: { label: "Firefighter", iconClass: "bi-person-badge-fill" },
+        paramedic: { label: "Ambulance Crew", iconClass: "bi-person-vcard-fill" },
+        hospital: { label: "Hospital", iconClass: "bi-hospital-fill" },
+        lifebuoy: { label: "Lifebuoy", iconClass: "bi-life-preserver" },
+        shield_medical: { label: "Medical Shield", iconClass: "bi-shield-plus" }
+    };
+
+    function togglePastelOptions() {
+        if (!dyslexiaToggle || !pastelOptions) return;
+        pastelOptions.style.display = dyslexiaToggle.checked ? "block" : "none";
+    }
+
+    function applySidebarTheme(value) {
+        if (window.applySidebarTheme) {
+            window.applySidebarTheme(value || "default", sidebarCustomColorInput?.value || "");
+            return;
+        }
+        document.documentElement.setAttribute("data-sidebar-theme", value || "default");
+    }
+
+    function setCustomSidebarColor(value) {
+        if (!sidebarCustomColorInput) return;
+        sidebarCustomColorInput.value = value || "";
+        if (sidebarCustomColorPicker) {
+            sidebarCustomColorPicker.value = value || presetThemeColors.default;
+        }
+    }
+
+    function renderAvatar(value) {
+        const config = avatarIconMap[value] || avatarIconMap.initials;
+        if (!sidebarAvatar) return;
+        sidebarAvatar.dataset.avatarIcon = value;
+        if (profileAvatarLabel) {
+            profileAvatarLabel.textContent = "Current: " + config.label;
+        }
+        if (value === "initials" || !config.iconClass) {
+            sidebarAvatar.innerHTML = avatarInitial;
+            if (profileAvatarPreview) {
+                profileAvatarPreview.innerHTML = avatarInitial;
+            }
+            return;
+        }
+        sidebarAvatar.innerHTML = '<i class="bi ' + config.iconClass + '"></i>';
+        if (profileAvatarPreview) {
+            profileAvatarPreview.innerHTML = '<i class="bi ' + config.iconClass + '"></i>';
+        }
+    }
+
+    dyslexiaToggle?.addEventListener("change", togglePastelOptions);
+    togglePastelOptions();
+
+    sidebarInputs.forEach((input) => {
+        input.addEventListener("change", function () {
+            setCustomSidebarColor(presetThemeColors[this.value] || presetThemeColors.default);
+            if (sidebarCustomColorInput) {
+                sidebarCustomColorInput.value = "";
+            }
+            applySidebarTheme(this.value);
+        });
+    });
+
+    sidebarCustomColorPicker?.addEventListener("input", function () {
+        setCustomSidebarColor(this.value);
+        applySidebarTheme(document.querySelector('input[name="sidebar_theme"]:checked')?.value || "default");
+    });
+
+    avatarSelect?.addEventListener("change", function () {
+        renderAvatar(this.value);
+    });
+
+    resetSidebarButton?.addEventListener("click", function () {
+        const defaultInput = document.querySelector('input[name="sidebar_theme"][value="default"]');
+        if (!defaultInput) return;
+        defaultInput.checked = true;
+        setCustomSidebarColor("");
+        if (sidebarCustomColorPicker) {
+            sidebarCustomColorPicker.value = "#8b0000";
+        }
+        applySidebarTheme(defaultInput.value);
+    });
+
+    resetAvatarButton?.addEventListener("click", function () {
+        if (!avatarSelect) return;
+        avatarSelect.value = "initials";
+        renderAvatar("initials");
+    });
+
+    renderAvatar(avatarSelect?.value || "{{ current_avatar_icon|escapejs }}" || "initials");
+    setCustomSidebarColor(
+        sidebarCustomColorInput?.value || presetThemeColors[document.querySelector('input[name="sidebar_theme"]:checked')?.value || "default"]
+    );
+    applySidebarTheme(document.querySelector('input[name="sidebar_theme"]:checked')?.value || "default");
 });
 </script>
 

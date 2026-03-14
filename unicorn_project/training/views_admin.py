@@ -2220,19 +2220,27 @@ def api_courses_awaiting_closure(request):
 
 @login_required
 def api_courses_in_7_days(request):
-    target = timezone.localdate() + timedelta(days=7)
+    today = timezone.localdate()
+    target = today + timedelta(days=7)
 
     bookings = (
         Booking.objects.filter(
-            days__date=target,
+            days__date__gt=today,
+            days__date__lte=target,
             status="scheduled",  # only scheduled courses 7 days out
         )
         .select_related("instructor", "business", "training_location", "course_type")
+        .prefetch_related("days")
         .distinct()
     )
 
     results = []
     for b in bookings:
+        next_day = min(
+            (day.date for day in b.days.all() if day.date and today < day.date <= target),
+            default=b.course_date,
+        )
+
         results.append(
             {
                 "id": b.id,
@@ -2241,10 +2249,12 @@ def api_courses_in_7_days(request):
                 "instructor": str(b.instructor) if b.instructor else "",
                 "business": str(b.business) if b.business else "",
                 "location": str(b.training_location) if b.training_location else "",
-                "date": target.isoformat(),  # the day this course is taking place
+                "date": next_day.isoformat() if next_day else "",
                 "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
             }
         )
+
+    results.sort(key=lambda item: item["date"] or "")
 
     return JsonResponse({"data": results})
 

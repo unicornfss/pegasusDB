@@ -268,6 +268,45 @@ _STATUS_MAP = {
 @login_required
 def user_profile(request):
 
+    sidebar_theme_options = [
+        {"value": "default", "label": "Default", "hint": "Classic unicorn burgundy"},
+        {"value": "ocean", "label": "Ocean", "hint": "Deep navy blue"},
+        {"value": "forest", "label": "Forest", "hint": "Dark green"},
+        {"value": "plum", "label": "Plum", "hint": "Rich aubergine"},
+        {"value": "charcoal", "label": "Charcoal", "hint": "Slate grey"},
+    ]
+
+    avatar_icon_options = [
+        {"value": "initials", "label": "Initials", "icon_class": ""},
+        {"value": "person", "label": "Person", "icon_class": "bi-person-fill"},
+        {"value": "person_badge", "label": "Person Badge", "icon_class": "bi-person-badge-fill"},
+        {"value": "teacher", "label": "Teacher", "icon_class": "bi-easel2-fill"},
+        {"value": "star", "label": "Star", "icon_class": "bi-star-fill"},
+        {"value": "graduation", "label": "Graduation", "icon_class": "bi-mortarboard-fill"},
+        {"value": "tools", "label": "Tools", "icon_class": "bi-tools"},
+        {"value": "unicorn", "label": "Sparkles", "icon_class": "bi-stars"},
+        {"value": "briefcase", "label": "Briefcase", "icon_class": "bi-briefcase-fill"},
+        {"value": "books", "label": "Books", "icon_class": "bi-journal-bookmark-fill"},
+        {"value": "note", "label": "Note", "icon_class": "bi-journal-text"},
+        {"value": "cog", "label": "Cog", "icon_class": "bi-gear-fill"},
+        {"value": "heart", "label": "Heart", "icon_class": "bi-heart-fill"},
+        {"value": "palette", "label": "Palette", "icon_class": "bi-palette-fill"},
+        {"value": "lightning", "label": "Lightning", "icon_class": "bi-lightning-charge-fill"},
+        {"value": "music", "label": "Music", "icon_class": "bi-music-note-beamed"},
+        {"value": "camera", "label": "Camera", "icon_class": "bi-camera-fill"},
+        {"value": "bug", "label": "Bug", "icon_class": "bi-bug-fill"},
+        {"value": "rocket", "label": "Rocket", "icon_class": "bi-rocket-takeoff-fill"},
+        {"value": "ambulance", "label": "Ambulance", "icon_class": "bi-truck-front-fill"},
+        {"value": "fire_engine", "label": "Fire Engine", "icon_class": "bi-fire"},
+        {"value": "first_aid", "label": "First Aid Kit", "icon_class": "bi-heart-pulse-fill"},
+        {"value": "extinguisher", "label": "Fire Extinguisher", "icon_class": "bi-shield-fill-plus"},
+        {"value": "firefighter", "label": "Firefighter", "icon_class": "bi-person-badge-fill"},
+        {"value": "paramedic", "label": "Ambulance Crew", "icon_class": "bi-person-vcard-fill"},
+        {"value": "hospital", "label": "Hospital", "icon_class": "bi-hospital-fill"},
+        {"value": "lifebuoy", "label": "Lifebuoy", "icon_class": "bi-life-preserver"},
+        {"value": "shield_medical", "label": "Medical Shield", "icon_class": "bi-shield-plus"},
+    ]
+
     from django.contrib.auth import update_session_auth_hash
 
     try:
@@ -281,32 +320,22 @@ def user_profile(request):
         pform = PersonnelProfileForm(request.POST, instance=personnel)
 
         if uform.is_valid() and pform.is_valid():
-
-            # --- Update User fields (first/last/email) ---
             user = uform.save(commit=False)
+            profile = pform.save(commit=False)
             new_email = uform.cleaned_data["email"].strip().lower()
             user.username = new_email
             user.email = new_email
             user.save()
 
-            # --- Sync Personnel.email ---
-            personnel.email = new_email
-
-            # --- Sync profile preferences ---
-            personnel.dyslexia_mode = bool(request.POST.get("dyslexia_mode"))
-            personnel.pastel_background = request.POST.get("pastel_background", "none")
-
-            # Save Personnel fields
-            pform.save()
-
-            # --- ⭐ NEW: Sync User first/last → Personnel.name ---
             first = uform.cleaned_data.get("first_name", "").strip()
             last  = uform.cleaned_data.get("last_name", "").strip()
             full_name = f"{first} {last}".strip()
 
+            profile.email = new_email
             if full_name:
-                personnel.name = full_name
-                personnel.save(update_fields=["name"])
+                profile.name = full_name
+
+            profile.save()
 
             update_session_auth_hash(request, user)
             messages.success(request, "Your profile has been updated.")
@@ -316,10 +345,38 @@ def user_profile(request):
         uform = UserProfileForm(instance=request.user)
         pform = PersonnelProfileForm(instance=personnel)
 
+    current_sidebar_theme = pform["sidebar_theme"].value() or personnel.sidebar_theme
+    current_sidebar_custom_color = pform["sidebar_custom_color"].value() or personnel.sidebar_custom_color or "#8b0000"
+    current_avatar_icon = pform["avatar_icon"].value() or personnel.avatar_icon
+    current_night_mode = bool(pform["night_mode"].value() if "night_mode" in pform.fields else personnel.night_mode)
+
     return render(request, "profile.html", {
         "uform": uform,
         "pform": pform,
+        "sidebar_theme_options": sidebar_theme_options,
+        "avatar_icon_options": avatar_icon_options,
+        "current_sidebar_theme": current_sidebar_theme,
+        "current_sidebar_custom_color": current_sidebar_custom_color,
+        "current_avatar_icon": current_avatar_icon,
+        "current_avatar_initial": personnel.avatar_initial,
+        "current_night_mode": current_night_mode,
     })
+
+
+@login_required
+@require_POST
+def toggle_night_mode(request):
+    try:
+        personnel = request.user.personnel
+    except Personnel.DoesNotExist:
+        messages.error(request, "No personnel profile linked to this account.")
+        return redirect("no_roles")
+
+    personnel.night_mode = request.POST.get("night_mode") == "on"
+    personnel.save(update_fields=["night_mode"])
+
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("user_profile")
+    return redirect(next_url)
 
 # Public attendance
 def public_attendance(request, booking_day_id):
