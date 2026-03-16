@@ -1253,7 +1253,6 @@ def instructor_booking_detail(request, pk):
             dummy_closure_email_sent = False
             if booking.is_dummy_business:
                 try:
-                    from django.core.mail import EmailMessage
                     import mimetypes
 
                     instructor_email = (booking.instructor.email or "").strip()
@@ -1322,7 +1321,6 @@ def instructor_booking_detail(request, pk):
                     messages.error(request, f"Dummy course closed, but instructor email failed: {e}")
             else:
                 try:
-                    from django.core.mail import EmailMessage
                     import mimetypes
 
                     admin_email = getattr(settings, "ADMIN_INBOX_EMAIL", "")
