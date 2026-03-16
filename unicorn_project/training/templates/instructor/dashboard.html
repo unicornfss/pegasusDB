@@ -47,7 +47,7 @@
 
                     <!-- MISSING ASSESSMENTS -->
                     <li class="mb-2">
-                        <strong>{{ missing_assessments.count }}</strong>
+                        <strong>{{ missing_assessments|length }}</strong>
                         course(s) with missing assessments
 
                         {% if missing_assessments %}
@@ -111,7 +111,7 @@
                     <!-- INVOICES -->
                     <li class="mb-2">
                         <strong>{{ invoice_attention.count }}</strong>
-                        completed course(s) with invoice awaiting admin action
+                        completed course(s) awaiting invoice completion
 
                         {% if invoice_attention %}
                             <ul class="mt-2 ps-4 border-start border-3 small">
