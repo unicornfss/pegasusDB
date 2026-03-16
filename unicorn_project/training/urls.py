@@ -112,6 +112,13 @@ urlpatterns = [
     path("app/admin/personnel/<uuid:pk>/resend-password/", app_admin.admin_personnel_resend_password, name="admin_personnel_resend_password"),
     path("app/instructor/booking/<uuid:booking_id>/ics/", views_instructor.download_booking_ics, name="download_booking_ics"),
     path("app/instructor/resources/", instv.instructor_resources, name="instructor_resources"),
+    path("app/instructor/calendar/", instv.instructor_calendar, name="instructor_calendar"),
+    path("app/instructor/calendar/events/", instv.instructor_calendar_events, name="instructor_calendar_events"),
+    path("app/instructor/calendar/availability/", instv.instructor_set_availability, name="instructor_set_availability"),
+    path("app/instructor/calendar/patterns/", instv.instructor_list_patterns, name="instructor_list_patterns"),
+    path("app/instructor/calendar/patterns/create/", instv.instructor_create_pattern, name="instructor_create_pattern"),
+    path("app/instructor/calendar/patterns/update/", instv.instructor_update_pattern, name="instructor_update_pattern"),
+    path("app/instructor/calendar/patterns/delete/", instv.instructor_delete_pattern, name="instructor_delete_pattern"),
 
 
 

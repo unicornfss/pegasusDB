@@ -1,0 +1,652 @@
+{% extends "base.html" %}
+{% block title %}Instructor Calendar{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h3 class="mb-0">My Calendar (experimental)</h3>
+    <div class="small text-muted">
+      Click a date or drag across dates to set availability. Click "Recurring" to set patterns. Click a booking to open it.
+    </div>
+  </div>
+
+  <div class="d-flex gap-3 align-items-center flex-wrap mb-3 small">
+    <div class="d-flex align-items-center gap-2">
+      <span class="legend-dot" style="background:#2563eb"></span>
+      <span>Booking</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span class="legend-dot" style="background:#16a34a"></span>
+      <span>Available</span>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <span class="legend-dot" style="background:#dc2626"></span>
+      <span>Not available</span>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-primary ms-auto" data-bs-toggle="modal" data-bs-target="#patternListModal">
+      <i class="bi bi-repeat"></i> Manage Recurring
+    </button>
+  </div>
+
+  <div class="card shadow-sm mb-3">
+    <div class="card-body pb-2">
+      <label for="monthPicker" class="form-label mb-2">Jump to month:</label>
+      <input type="month" id="monthPicker" class="form-control" style="max-width: 200px;" />
+    </div>
+  </div>
+
+  <div class="card shadow-sm">
+    <div class="card-body">
+      <div id="instructor-calendar"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Availability Modal (single/batch dates) -->
+<div class="modal fade" id="availabilityModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Set availability</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-1"><strong>Selected dates:</strong> <span id="availabilityDateLabel">-</span></div>
+        <div class="small text-muted mb-2" id="availabilitySelectionMeta"></div>
+        <input type="hidden" id="availabilityDateInput" />
+
+        <div class="mb-3">
+          <label for="availabilityStatus" class="form-label">Status</label>
+          <select id="availabilityStatus" class="form-select">
+            <option value="available">Available</option>
+            <option value="unavailable">Not available</option>
+            <option value="clear">Clear / no status</option>
+          </select>
+        </div>
+
+        <div>
+          <label for="availabilityNote" class="form-label">Note (optional)</label>
+          <textarea id="availabilityNote" class="form-control" rows="3" maxlength="255"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveAvailabilityBtn">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pattern Editor Modal -->
+<div class="modal fade" id="patternModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Recurring Availability Pattern</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="patternEditId" />
+
+        <div class="row mb-3">
+          <div class="col-md-6">
+            <label for="patternStartDate" class="form-label">Start date</label>
+            <input type="date" id="patternStartDate" class="form-control" />
+          </div>
+          <div class="col-md-6">
+            <label for="patternEndDate" class="form-label">End date</label>
+            <input type="date" id="patternEndDate" class="form-control" />
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Days of week</label>
+          <div class="btn-group-vertical w-100" role="group">
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="0" id="dow-mon">
+              <label class="form-check-label" for="dow-mon">Monday</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="1" id="dow-tue">
+              <label class="form-check-label" for="dow-tue">Tuesday</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="2" id="dow-wed">
+              <label class="form-check-label" for="dow-wed">Wednesday</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="3" id="dow-thu">
+              <label class="form-check-label" for="dow-thu">Thursday</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="4" id="dow-fri">
+              <label class="form-check-label" for="dow-fri">Friday</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="5" id="dow-sat">
+              <label class="form-check-label" for="dow-sat">Saturday</label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input days-checkbox" type="checkbox" value="6" id="dow-sun">
+              <label class="form-check-label" for="dow-sun">Sunday</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <label for="patternStatus" class="form-label">Status</label>
+          <select id="patternStatus" class="form-select">
+            <option value="available">Available</option>
+            <option value="unavailable">Not available</option>
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="patternNote" class="form-label">Note (optional)</label>
+          <textarea id="patternNote" class="form-control" rows="2" maxlength="255" placeholder="e.g., Teaching Mon-Fri"></textarea>
+        </div>
+
+        <div class="alert alert-info small">
+          <strong>Tip:</strong> Individual dates you set directly will override this pattern for those specific dates, allowing you to make exceptions without deleting the pattern.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="savePatternBtn">Save Pattern</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pattern List Modal -->
+<div class="modal fade" id="patternListModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Recurring Availability Patterns</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#patternModal" onclick="resetPatternForm()">
+          <i class="bi bi-plus"></i> New Pattern
+        </button>
+
+        <div id="patternListContainer">
+          <p class="text-muted">Loading patterns...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Development Notice Modal -->
+<div class="modal fade" id="developmentNoticeModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title">
+          <i class="bi bi-info-circle"></i> My Calendar (Development)
+        </h5>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <h6><strong>Current Features:</strong></h6>
+          <ul class="small mb-0">
+            <li>View your assigned courses on the calendar</li>
+            <li>Set your availability (single dates or recurring patterns)</li>
+            <li>Override recurring patterns with individual date exceptions</li>
+          </ul>
+        </div>
+
+        <div class="mb-3">
+          <h6><strong>Coming Soon:</strong></h6>
+          <p class="small mb-0">This calendar will be used to display which instructor(s) are available on certain dates for scheduling and resource planning purposes.</p>
+        </div>
+
+        <div class="alert alert-warning small mb-0">
+          <strong><i class="bi bi-exclamation-triangle"></i> Missing Courses?</strong><br>
+          If you don't see your assigned courses on the calendar, please inform your administrator immediately so they can investigate the missing booking.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it!</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@fullcalendar/multimonth@6.1.15/index.global.min.js"></script>
+
+<style>
+  #instructor-calendar {
+    min-height: 70vh;
+  }
+  .legend-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+  .days-checkbox {
+    margin-right: 0.5rem;
+  }
+  .pattern-item {
+    border: 1px solid #e0e0e0;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    background: #f9f9f9;
+  }
+  .pattern-item-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    justify-content: flex-end;
+  }
+</style>
+
+<script>
+  (function () {
+    const calendarEl = document.getElementById('instructor-calendar');
+    if (!calendarEl) return;
+
+    function showCalendarError(message) {
+      calendarEl.innerHTML = '<div class="alert alert-danger mb-0">' + message + '</div>';
+    }
+
+    if (typeof FullCalendar === 'undefined' || !FullCalendar.Calendar) {
+      showCalendarError('Calendar failed to load. Please refresh the page. If it persists, the CDN may be blocked on this network.');
+      return;
+    }
+
+    const modalEl = document.getElementById('availabilityModal');
+    const dateLabelEl = document.getElementById('availabilityDateLabel');
+    const selectionMetaEl = document.getElementById('availabilitySelectionMeta');
+    const dateInputEl = document.getElementById('availabilityDateInput');
+    const statusEl = document.getElementById('availabilityStatus');
+    const noteEl = document.getElementById('availabilityNote');
+    const saveBtn = document.getElementById('saveAvailabilityBtn');
+    const monthPickerEl = document.getElementById('monthPicker');
+
+    let selectedDates = [];
+    let modal = null;
+
+    const eventsUrl = "{% url 'instructor_calendar_events' %}";
+    const availabilityUrl = "{% url 'instructor_set_availability' %}";
+    const patternsListUrl = "{% url 'instructor_list_patterns' %}";
+    const createPatternUrl = "{% url 'instructor_create_pattern' %}";
+    const updatePatternUrl = "{% url 'instructor_update_pattern' %}";
+    const deletePatternUrl = "{% url 'instructor_delete_pattern' %}";
+
+    function getCsrfToken() {
+      const m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function initializeModal() {
+      if (modal) return modal;
+      if (typeof bootstrap !== 'undefined' && bootstrap && typeof bootstrap.Modal === 'function') {
+        modal = new bootstrap.Modal(modalEl);
+        return modal;
+      }
+      return null;
+    }
+
+    async function submitAvailability(dateISO, status, note) {
+      const form = new URLSearchParams();
+      form.append('date', dateISO);
+      form.append('status', status);
+      form.append('note', note || '');
+
+      const resp = await fetch(availabilityUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          'X-CSRFToken': getCsrfToken(),
+          'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: form.toString()
+      });
+
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        throw new Error((data && data.error) ? data.error : 'Could not save availability');
+      }
+      return data;
+    }
+
+    function datesFromRange(startISO, endExclusiveISO) {
+      const out = [];
+      const d = new Date(startISO + 'T00:00:00');
+      const end = new Date(endExclusiveISO + 'T00:00:00');
+      while (d < end) {
+        out.push(d.toISOString().slice(0, 10));
+        d.setDate(d.getDate() + 1);
+      }
+      return out;
+    }
+
+    function openAvailabilityModalForDates(dates, status, note) {
+      if (!Array.isArray(dates) || dates.length === 0) return;
+
+      const m = initializeModal();
+      if (!m) {
+        showCalendarError('Availability modal failed to load. Please refresh the page.');
+        return;
+      }
+
+      selectedDates = dates;
+      const first = dates[0];
+      const last = dates[dates.length - 1];
+
+      dateInputEl.value = first;
+      if (dates.length === 1) {
+        dateLabelEl.textContent = first;
+        if (selectionMetaEl) selectionMetaEl.textContent = '1 day selected';
+      } else {
+        dateLabelEl.textContent = first + ' to ' + last;
+        if (selectionMetaEl) selectionMetaEl.textContent = dates.length + ' days selected';
+      }
+
+      statusEl.value = status || 'available';
+      noteEl.value = note || '';
+      m.show();
+    }
+
+    const hasMultiMonth = !!FullCalendar.multiMonthPlugin;
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: 'dayGridMonth',
+      height: 'auto',
+      firstDay: 1,
+      nowIndicator: true,
+      selectable: true,
+      selectMirror: true,
+      headerToolbar: {
+        left: 'prev,next today',
+        center: 'title',
+        right: hasMultiMonth ? 'timeGridDay,timeGridWeek,dayGridMonth,multiMonthYear' : 'timeGridDay,timeGridWeek,dayGridMonth'
+      },
+      buttonText: {
+        today: 'Today',
+        timeGridDay: 'Day',
+        timeGridWeek: 'Week',
+        dayGridMonth: 'Month',
+        multiMonthYear: 'Year'
+      },
+      events: async function(fetchInfo, successCallback, failureCallback) {
+        try {
+          const params = new URLSearchParams({
+            start: fetchInfo.startStr,
+            end: fetchInfo.endStr
+          });
+          const resp = await fetch(eventsUrl + '?' + params.toString(), {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+          });
+          if (!resp.ok) throw new Error('Failed to load events');
+          const data = await resp.json();
+          successCallback(data);
+        } catch (err) {
+          failureCallback(err);
+        }
+      },
+      dateClick: function(info) {
+        openAvailabilityModalForDates([info.dateStr], 'available', '');
+      },
+      select: function(info) {
+        const startISO = info.startStr.slice(0, 10);
+        const endISO = info.endStr.slice(0, 10);
+        const dates = datesFromRange(startISO, endISO);
+        openAvailabilityModalForDates(dates, 'available', '');
+        calendar.unselect();
+      },
+      eventClick: function(info) {
+        const eventType = info.event.extendedProps && info.event.extendedProps.eventType;
+        if (eventType === 'booking' && info.event.url) {
+          info.jsEvent.preventDefault();
+          window.location.href = info.event.url;
+          return;
+        }
+
+        if (eventType === 'availability') {
+          info.jsEvent.preventDefault();
+          openAvailabilityModalForDates([
+            (info.event.extendedProps.date || info.event.startStr).slice(0, 10)
+          ],
+            info.event.extendedProps.status || 'available',
+            info.event.extendedProps.note || ''
+          );
+        }
+      }
+    });
+
+    saveBtn.addEventListener('click', async function() {
+      saveBtn.disabled = true;
+      try {
+        const targets = selectedDates.length ? selectedDates : [dateInputEl.value];
+        for (const d of targets) {
+          await submitAvailability(d, statusEl.value, noteEl.value || '');
+        }
+        const m = initializeModal();
+        if (m) m.hide();
+        calendar.refetchEvents();
+      } catch (err) {
+        alert(err && err.message ? err.message : 'Could not save availability');
+      } finally {
+        saveBtn.disabled = false;
+      }
+    });
+
+    // Month picker
+    monthPickerEl.addEventListener('change', function() {
+      if (!this.value) return;
+      const [year, month] = this.value.split('-');
+      const firstDay = new Date(year, parseInt(month) - 1, 1);
+      calendar.gotoDate(firstDay);
+    });
+
+    // Pattern management
+    function resetPatternForm() {
+      document.getElementById('patternEditId').value = '';
+      document.getElementById('patternStartDate').value = '';
+      document.getElementById('patternEndDate').value = '';
+      document.getElementById('patternStatus').value = 'available';
+      document.getElementById('patternNote').value = '';
+      document.querySelectorAll('.days-checkbox').forEach(cb => cb.checked = false);
+    }
+
+    function getSelectedDaysOfWeek() {
+      const selected = [];
+      document.querySelectorAll('.days-checkbox:checked').forEach(cb => {
+        selected.push(cb.value);
+      });
+      return selected.join(',');
+    }
+
+    function setSelectedDaysOfWeek(daysStr) {
+      const daysArray = daysStr.split(',').map(s => s.trim()).filter(s => s);
+      document.querySelectorAll('.days-checkbox').forEach(cb => {
+        cb.checked = daysArray.includes(cb.value);
+      });
+    }
+
+    async function loadPatterns() {
+      try {
+        const resp = await fetch(patternsListUrl, {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+        if (!data.ok) throw new Error('Failed to load patterns');
+
+        const container = document.getElementById('patternListContainer');
+        if (!data.patterns || data.patterns.length === 0) {
+          container.innerHTML = '<p class="text-muted">No recurring patterns set yet.</p>';
+          return;
+        }
+
+        let html = '';
+        for (const p of data.patterns) {
+          const startDate = new Date(p.start_date).toLocaleDateString('en-GB');
+          const endDate = new Date(p.end_date).toLocaleDateString('en-GB');
+          const statusBadge = p.status === 'available' ? 
+            '<span class="badge bg-success">Available</span>' : 
+            '<span class="badge bg-danger">Not available</span>';
+
+          html += `
+            <div class="pattern-item">
+              <div class="d-flex justify-content-between align-items-start">
+                <div>
+                  <div><strong>${p.days_labels.join(', ')}</strong></div>
+                  <div class="small text-muted">${startDate} to ${endDate}</div>
+                  <div class="small mt-1">${statusBadge}</div>
+                  ${p.note ? `<div class="small text-muted mt-1"><em>${p.note}</em></div>` : ''}
+                </div>
+                <div class="pattern-item-actions">
+                  <button type="button" class="btn btn-sm btn-outline-secondary" onclick="editPattern(${p.id})">
+                    Edit
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePattern(${p.id})">
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+        container.innerHTML = html;
+      } catch (err) {
+        const container = document.getElementById('patternListContainer');
+        container.innerHTML = '<p class="text-danger">Failed to load patterns: ' + err.message + '</p>';
+      }
+    }
+
+    window.editPattern = async function(patternId) {
+      try {
+        const resp = await fetch(patternsListUrl, {
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await resp.json();
+        const pattern = data.patterns.find(p => p.id === patternId);
+        if (!pattern) throw new Error('Pattern not found');
+
+        document.getElementById('patternEditId').value = pattern.id;
+        document.getElementById('patternStartDate').value = pattern.start_date;
+        document.getElementById('patternEndDate').value = pattern.end_date;
+        document.getElementById('patternStatus').value = pattern.status;
+        document.getElementById('patternNote').value = pattern.note;
+        setSelectedDaysOfWeek(pattern.days_of_week);
+
+        const patternModal = new bootstrap.Modal(document.getElementById('patternModal'));
+        patternModal.show();
+      } catch (err) {
+        alert('Failed to load pattern: ' + err.message);
+      }
+    };
+
+    window.deletePattern = async function(patternId) {
+      if (!confirm('Delete this recurring pattern?')) return;
+
+      try {
+        const form = new URLSearchParams();
+        form.append('pattern_id', patternId);
+
+        const resp = await fetch(deletePatternUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: form.toString()
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed to delete');
+
+        loadPatterns();
+        calendar.refetchEvents();
+      } catch (err) {
+        alert('Delete failed: ' + err.message);
+      }
+    };
+
+    document.getElementById('savePatternBtn').addEventListener('click', async function() {
+      const btn = this;
+      btn.disabled = true;
+
+      const patternId = document.getElementById('patternEditId').value;
+      const startDate = document.getElementById('patternStartDate').value;
+      const endDate = document.getElementById('patternEndDate').value;
+      const status = document.getElementById('patternStatus').value;
+      const daysOfWeek = getSelectedDaysOfWeek();
+      const note = document.getElementById('patternNote').value;
+
+      if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        btn.disabled = false;
+        return;
+      }
+
+      if (!daysOfWeek) {
+        alert('Please select at least one day of week');
+        btn.disabled = false;
+        return;
+      }
+
+      try {
+        const form = new URLSearchParams();
+        form.append('start_date', startDate);
+        form.append('end_date', endDate);
+        form.append('status', status);
+        form.append('days_of_week', daysOfWeek);
+        form.append('note', note);
+
+        let url = createPatternUrl;
+        if (patternId) {
+          form.append('pattern_id', patternId);
+          url = updatePatternUrl;
+        }
+
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: form.toString()
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.error || 'Failed to save');
+
+        const patternModal = bootstrap.Modal.getInstance(document.getElementById('patternModal'));
+        if (patternModal) patternModal.hide();
+
+        loadPatterns();
+        calendar.refetchEvents();
+      } catch (err) {
+        alert('Save failed: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Load patterns when pattern list modal opens
+    document.getElementById('patternListModal').addEventListener('show.bs.modal', loadPatterns);
+
+    try {
+      calendar.render();
+      // Show development notice modal after calendar loads
+      setTimeout(() => {
+        const noticeModal = new bootstrap.Modal(document.getElementById('developmentNoticeModal'));
+        noticeModal.show();
+      }, 300);
+    } catch (err) {
+      showCalendarError('Calendar failed to render. ' + (err && err.message ? err.message : 'Please refresh and try again.'));
+    }
+  })();
+</script>
+{% endblock %}

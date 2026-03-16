@@ -163,6 +163,11 @@
                 <i class="bi bi-calendar-event"></i> My bookings
             </a>
 
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_calendar' %}active{% endif %}"
+               href="{% url 'instructor_calendar' %}">
+              <i class="bi bi-calendar3"></i> My calendar
+            </a>
+
             <a class="leaf {% if request.resolver_match.url_name == 'accident_report_list' %}active{% endif %}"
                href="{% url 'accident_report_list' %}">
                 <i class="bi bi-clipboard2"></i> Accident reports

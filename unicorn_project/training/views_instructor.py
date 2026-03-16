@@ -18,6 +18,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory
 from django.urls import reverse, resolve
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django.utils.formats import date_format
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.timezone import now, localtime
@@ -39,7 +40,7 @@ from reportlab.lib import colors
 from statistics import mean
 from django.template.loader import render_to_string
 import subprocess, tempfile, os
-from .models import Business, Personnel, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseType, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome, Resource
+from .models import Business, Personnel, Booking, BookingDay, CompetencyAssessment, DelegateRegister, CourseType, CourseCompetency, FeedbackResponse, Invoice, InvoiceItem, Exam, ExamAttempt, ExamAttemptAnswer, CourseOutcome, Resource, InstructorAvailability, InstructorAvailabilityPattern
 from .forms import DelegateRegisterInstructorForm, BookingNotesForm, DummyBookingQuickCreateForm
 from .utils.invoice import (
     get_invoice_template_path,
@@ -748,6 +749,366 @@ def instructor_bookings(request):
         "closed": closed,                 # fallback if needed
         "dummy_businesses": dummy_businesses,
     })
+
+
+@login_required
+def instructor_calendar(request):
+    inst = _get_instructor(request.user)
+    if not inst:
+        messages.error(request, "Your user account isn't linked to an instructor record.")
+        return redirect("home")
+
+    return render(
+        request,
+        "instructor/calendar.html",
+        {
+            "title": "Instructor calendar",
+            "instructor": inst,
+        },
+    )
+
+
+@login_required
+def instructor_calendar_events(request):
+    inst = _get_instructor(request.user)
+    if not inst:
+        return JsonResponse({"detail": "Forbidden"}, status=403)
+
+    start_raw = (request.GET.get("start") or "")[:10]
+    end_raw = (request.GET.get("end") or "")[:10]
+    start_date = parse_date(start_raw) if start_raw else None
+    end_date = parse_date(end_raw) if end_raw else None
+
+    days_qs = (
+        BookingDay.objects
+        .filter(instructor=inst)
+        .select_related("booking__course_type", "booking__business")
+    )
+    if start_date:
+        days_qs = days_qs.filter(date__gte=start_date)
+    if end_date:
+        # FullCalendar uses an exclusive end date for event ranges.
+        days_qs = days_qs.filter(date__lt=end_date)
+
+    avail_qs = InstructorAvailability.objects.filter(instructor=inst)
+    if start_date:
+        avail_qs = avail_qs.filter(date__gte=start_date)
+    if end_date:
+        avail_qs = avail_qs.filter(date__lt=end_date)
+
+    events = []
+
+    # Build set of dates with booking assignments (bookings take absolute priority)
+    booking_dates = set(d.date for d in days_qs)
+
+    for d in days_qs:
+        ct_name = d.booking.course_type.name if d.booking and d.booking.course_type_id else "Course"
+        business_name = d.booking.business.name if d.booking and d.booking.business_id else "Business"
+        events.append({
+            "id": f"booking-day-{d.id}",
+            "title": f"{ct_name} - {business_name}",
+            "start": d.date.isoformat(),
+            "allDay": True,
+            "color": "#2563eb",
+            "textColor": "#ffffff",
+            "url": reverse("instructor_booking_detail", kwargs={"pk": d.booking_id}),
+            "extendedProps": {
+                "eventType": "booking",
+                "bookingId": str(d.booking_id),
+            },
+        })
+
+    for a in avail_qs:
+        # Skip if this date has a course booking (bookings override all availability)
+        if a.date in booking_dates:
+            continue
+
+        is_available = a.status == InstructorAvailability.STATUS_AVAILABLE
+        events.append({
+            "id": f"availability-{a.id}",
+            "title": "Available" if is_available else "Not available",
+            "start": a.date.isoformat(),
+            "allDay": True,
+            "color": "#16a34a" if is_available else "#dc2626",
+            "textColor": "#ffffff",
+            "extendedProps": {
+                "eventType": "availability",
+                "status": a.status,
+                "note": a.note or "",
+                "date": a.date.isoformat(),
+            },
+        })
+
+    # Expand patterns and add as events, but skip dates with explicit InstructorAvailability entries or bookings
+    patterns = InstructorAvailabilityPattern.objects.filter(instructor=inst)
+    if start_date:
+        patterns = patterns.filter(end_date__gte=start_date)
+    if end_date:
+        patterns = patterns.filter(start_date__lt=end_date)
+
+    # Build set of dates with explicit availability entries (for override logic)
+    explicit_dates = set(a.date for a in avail_qs)
+
+    for p in patterns:
+        # Expand pattern to individual dates
+        expanded_dates = p.expand_to_dates()
+
+        for d in expanded_dates:
+            # Skip if there's a course booking on this date (absolute priority)
+            if d in booking_dates:
+                continue
+
+            # Skip if there's an explicit InstructorAvailability entry for this date
+            if d in explicit_dates:
+                continue
+
+            # Also skip if outside the requested date range
+            if start_date and d < start_date:
+                continue
+            if end_date and d >= end_date:
+                continue
+
+            is_available = p.status == InstructorAvailabilityPattern.STATUS_AVAILABLE
+            events.append({
+                "id": f"pattern-{p.id}-{d.isoformat()}",
+                "title": "Available" if is_available else "Not available",
+                "start": d.isoformat(),
+                "allDay": True,
+                "color": "#16a34a" if is_available else "#dc2626",
+                "textColor": "#ffffff",
+                "extendedProps": {
+                    "eventType": "availability",
+                    "status": p.status,
+                    "note": p.note or "",
+                    "date": d.isoformat(),
+                    "isPattern": True,
+                    "patternId": p.id,
+                },
+            })
+
+    return JsonResponse(events, safe=False)
+
+
+@login_required
+@require_POST
+def instructor_set_availability(request):
+    inst = _get_instructor(request.user)
+    if not inst:
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    date_str = (request.POST.get("date") or "").strip()
+    status = (request.POST.get("status") or "").strip().lower()
+    note = (request.POST.get("note") or "").strip()
+
+    day = parse_date(date_str)
+    if not day:
+        return JsonResponse({"ok": False, "error": "Invalid date"}, status=400)
+
+    if status == "clear":
+        InstructorAvailability.objects.filter(instructor=inst, date=day).delete()
+        return JsonResponse({"ok": True, "status": "clear", "date": day.isoformat()})
+
+    valid_status = {
+        InstructorAvailability.STATUS_AVAILABLE,
+        InstructorAvailability.STATUS_UNAVAILABLE,
+    }
+    if status not in valid_status:
+        return JsonResponse({"ok": False, "error": "Invalid status"}, status=400)
+
+    obj, created = InstructorAvailability.objects.get_or_create(
+        instructor=inst,
+        date=day,
+        defaults={"status": status, "note": note[:255]},
+    )
+    if not created:
+        obj.status = status
+        obj.note = note[:255]
+        obj.save(update_fields=["status", "note", "updated_at"])
+
+    return JsonResponse({
+        "ok": True,
+        "status": obj.status,
+        "date": obj.date.isoformat(),
+        "note": obj.note,
+    })
+
+
+@login_required
+def instructor_list_patterns(request):
+    """GET: List all recurring availability patterns for the instructor."""
+    inst = _get_instructor(request.user)
+    if not inst:
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    patterns = InstructorAvailabilityPattern.objects.filter(instructor=inst)
+    data = []
+    for p in patterns:
+        data.append({
+            "id": p.id,
+            "start_date": p.start_date.isoformat(),
+            "end_date": p.end_date.isoformat(),
+            "status": p.status,
+            "days_of_week": p.days_of_week,
+            "days_labels": p.get_days_of_week_labels(),
+            "note": p.note,
+            "created_at": p.created_at.isoformat(),
+        })
+    return JsonResponse({"ok": True, "patterns": data})
+
+
+@require_POST
+@login_required
+def instructor_create_pattern(request):
+    """POST: Create a new recurring availability pattern."""
+    inst = _get_instructor(request.user)
+    if not inst:
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    start_str = (request.POST.get("start_date") or "").strip()
+    end_str = (request.POST.get("end_date") or "").strip()
+    status = (request.POST.get("status") or "").strip().lower()
+    days_str = (request.POST.get("days_of_week") or "").strip()
+    note = (request.POST.get("note") or "").strip()
+
+    start_date = parse_date(start_str)
+    end_date = parse_date(end_str)
+
+    if not start_date or not end_date:
+        return JsonResponse({"ok": False, "error": "Invalid date range"}, status=400)
+
+    if start_date > end_date:
+        return JsonResponse({"ok": False, "error": "Start date must be before end date"}, status=400)
+
+    valid_status = {
+        InstructorAvailabilityPattern.STATUS_AVAILABLE,
+        InstructorAvailabilityPattern.STATUS_UNAVAILABLE,
+    }
+    if status not in valid_status:
+        return JsonResponse({"ok": False, "error": "Invalid status"}, status=400)
+
+    # Validate days_of_week (comma-separated integers 0-6)
+    if not days_str:
+        return JsonResponse({"ok": False, "error": "No days selected"}, status=400)
+
+    try:
+        days_list = [int(d.strip()) for d in days_str.split(",") if d.strip()]
+        if not all(0 <= d <= 6 for d in days_list):
+            raise ValueError("Invalid day number")
+        days_str = ",".join(str(d) for d in sorted(set(days_list)))
+    except (ValueError, TypeError):
+        return JsonResponse({"ok": False, "error": "Invalid day format"}, status=400)
+
+    pattern = InstructorAvailabilityPattern.objects.create(
+        instructor=inst,
+        start_date=start_date,
+        end_date=end_date,
+        status=status,
+        days_of_week=days_str,
+        note=note[:255] if note else "",
+    )
+
+    return JsonResponse({
+        "ok": True,
+        "pattern": {
+            "id": pattern.id,
+            "start_date": pattern.start_date.isoformat(),
+            "end_date": pattern.end_date.isoformat(),
+            "status": pattern.status,
+            "days_of_week": pattern.days_of_week,
+            "days_labels": pattern.get_days_of_week_labels(),
+            "note": pattern.note,
+        },
+    })
+
+
+@require_POST
+@login_required
+def instructor_update_pattern(request):
+    """POST: Update an existing pattern."""
+    inst = _get_instructor(request.user)
+    if not inst:
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    pattern_id = request.POST.get("pattern_id")
+    if not pattern_id:
+        return JsonResponse({"ok": False, "error": "Pattern ID required"}, status=400)
+
+    pattern = get_object_or_404(InstructorAvailabilityPattern, id=pattern_id, instructor=inst)
+
+    start_str = (request.POST.get("start_date") or "").strip()
+    end_str = (request.POST.get("end_date") or "").strip()
+    status = (request.POST.get("status") or "").strip().lower()
+    days_str = (request.POST.get("days_of_week") or "").strip()
+    note = (request.POST.get("note") or "").strip()
+
+    if start_str:
+        start_date = parse_date(start_str)
+        if not start_date:
+            return JsonResponse({"ok": False, "error": "Invalid start date"}, status=400)
+        pattern.start_date = start_date
+
+    if end_str:
+        end_date = parse_date(end_str)
+        if not end_date:
+            return JsonResponse({"ok": False, "error": "Invalid end date"}, status=400)
+        pattern.end_date = end_date
+
+    if pattern.start_date > pattern.end_date:
+        return JsonResponse({"ok": False, "error": "Start date must be before end date"}, status=400)
+
+    if status:
+        valid_status = {
+            InstructorAvailabilityPattern.STATUS_AVAILABLE,
+            InstructorAvailabilityPattern.STATUS_UNAVAILABLE,
+        }
+        if status not in valid_status:
+            return JsonResponse({"ok": False, "error": "Invalid status"}, status=400)
+        pattern.status = status
+
+    if days_str:
+        try:
+            days_list = [int(d.strip()) for d in days_str.split(",") if d.strip()]
+            if not all(0 <= d <= 6 for d in days_list):
+                raise ValueError("Invalid day number")
+            pattern.days_of_week = ",".join(str(d) for d in sorted(set(days_list)))
+        except (ValueError, TypeError):
+            return JsonResponse({"ok": False, "error": "Invalid day format"}, status=400)
+
+    if note is not None:
+        pattern.note = note[:255]
+
+    pattern.save()
+
+    return JsonResponse({
+        "ok": True,
+        "pattern": {
+            "id": pattern.id,
+            "start_date": pattern.start_date.isoformat(),
+            "end_date": pattern.end_date.isoformat(),
+            "status": pattern.status,
+            "days_of_week": pattern.days_of_week,
+            "days_labels": pattern.get_days_of_week_labels(),
+            "note": pattern.note,
+        },
+    })
+
+
+@require_POST
+@login_required
+def instructor_delete_pattern(request):
+    """POST: Delete a pattern."""
+    inst = _get_instructor(request.user)
+    if not inst:
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    pattern_id = request.POST.get("pattern_id")
+    if not pattern_id:
+        return JsonResponse({"ok": False, "error": "Pattern ID required"}, status=400)
+
+    pattern = get_object_or_404(InstructorAvailabilityPattern, id=pattern_id, instructor=inst)
+    pattern.delete()
+    return JsonResponse({"ok": True, "message": "Pattern deleted"})
+
 
 
 @login_required

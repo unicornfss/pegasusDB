@@ -273,6 +273,116 @@ class Personnel(models.Model):
     def __str__(self):
         return self.name
 
+
+class InstructorAvailability(models.Model):
+    STATUS_AVAILABLE = "available"
+    STATUS_UNAVAILABLE = "unavailable"
+
+    STATUS_CHOICES = [
+        (STATUS_AVAILABLE, "Available"),
+        (STATUS_UNAVAILABLE, "Not available"),
+    ]
+
+    instructor = models.ForeignKey(
+        "Personnel",
+        on_delete=models.CASCADE,
+        related_name="availability_entries",
+    )
+    date = models.DateField(db_index=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    note = models.CharField(max_length=255, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instructor", "date"],
+                name="uniq_instructor_availability_per_day",
+            )
+        ]
+        ordering = ["date"]
+
+    def __str__(self):
+        return f"{self.instructor.name} - {self.date} ({self.get_status_display()})"
+
+
+class InstructorAvailabilityPattern(models.Model):
+    """
+    Recurring availability pattern for an instructor.
+    Expands to individual InstructorAvailability dates.
+    Individual dates override patterns.
+    """
+    STATUS_AVAILABLE = "available"
+    STATUS_UNAVAILABLE = "unavailable"
+
+    STATUS_CHOICES = [
+        (STATUS_AVAILABLE, "Available"),
+        (STATUS_UNAVAILABLE, "Not available"),
+    ]
+
+    # Days of week: 0=Monday, 6=Sunday (Django convention)
+    # Stored as comma-separated string like "1,2,3" for Tue,Wed,Thu
+    DOW_LABELS = {
+        0: "Monday",
+        1: "Tuesday",
+        2: "Wednesday",
+        3: "Thursday",
+        4: "Friday",
+        5: "Saturday",
+        6: "Sunday",
+    }
+
+    instructor = models.ForeignKey(
+        "Personnel",
+        on_delete=models.CASCADE,
+        related_name="availability_patterns",
+    )
+    start_date = models.DateField(db_index=True)
+    end_date = models.DateField(db_index=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES)
+    days_of_week = models.CharField(
+        max_length=13,  # "0,1,2,3,4,5,6" is 13 chars
+        help_text="Comma-separated day numbers: 0=Mon, 6=Sun",
+    )
+    note = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        days_list = [self.DOW_LABELS[int(d)] for d in self.days_of_week.split(",") if d]
+        return f"{self.instructor.name} - {', '.join(days_list)} ({self.get_status_display()})"
+
+    def get_days_of_week_list(self):
+        """Return list of day numbers as integers."""
+        if not self.days_of_week:
+            return []
+        return [int(d) for d in self.days_of_week.split(",") if d.isdigit()]
+
+    def get_days_of_week_labels(self):
+        """Return list of day names."""
+        return [self.DOW_LABELS[int(d)] for d in self.days_of_week.split(",") if d]
+
+    def expand_to_dates(self):
+        """
+        Expand this pattern to a list of dates matching the recurrence.
+        Returns list of date objects that match the pattern.
+        """
+        from datetime import timedelta
+        days = self.get_days_of_week_list()
+        if not days:
+            return []
+
+        result = []
+        current = self.start_date
+        while current <= self.end_date:
+            if current.weekday() in days:
+                result.append(current)
+            current += timedelta(days=1)
+        return result
+
 # =========================
 # Operational Models
 # =========================
