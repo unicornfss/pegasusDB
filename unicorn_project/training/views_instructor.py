@@ -1662,7 +1662,6 @@ def instructor_booking_detail(request, pk):
                 #                BUILD PDF + GATHER RECEIPTS + SEND EMAIL
                 # ----------------------------------------------------------------------
                 try:
-                    from django.core.mail import EmailMessage
                     import mimetypes
 
                     # Generate invoice PDF identical to preview
