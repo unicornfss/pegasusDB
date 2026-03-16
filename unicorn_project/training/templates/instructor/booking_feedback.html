@@ -6,17 +6,6 @@
     <strong>Average overall:</strong>
     {% if fb_avg %}{{ fb_avg|floatformat:1 }} (5/5){% else %}—{% endif %}
   </div>
-
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary btn-sm"
-       href="{% url 'instructor_feedback_pdf_summary' booking.id %}">
-      Summary PDF
-    </a>
-    <a class="btn btn-primary btn-sm"
-       href="{% url 'instructor_feedback_pdf_all' booking.id %}">
-      Export all to PDF
-    </a>
-  </div>
 </div>
 
 {% if fb_qs %}

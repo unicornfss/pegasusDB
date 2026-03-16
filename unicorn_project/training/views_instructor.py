@@ -1,5 +1,6 @@
 from pathlib import Path
 import io, contextlib, os, re, mimetypes, logging
+from urllib.parse import urlencode
 from collections import defaultdict
 from decimal import Decimal, InvalidOperation
 from datetime import timedelta, datetime
@@ -18,6 +19,7 @@ from django.test import RequestFactory
 from django.urls import reverse, resolve
 from django.utils import timezone
 from django.utils.formats import date_format
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.timezone import now, localtime
 from django.views.decorators.http import require_POST, require_http_methods
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
@@ -55,6 +57,17 @@ def _get_instructor(user):
     if not user.is_authenticated:
         return None
     return getattr(user, "personnel", None)
+
+
+def _safe_next_url(request, fallback_url: str) -> str:
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(
+        url=candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return fallback_url
 
 
 
@@ -703,9 +716,26 @@ def instructor_bookings(request):
     # Simple list fallback (first page items) for older templates
     closed = list(closed_qs[:10])
 
+    # Add first register-day id for direct register-entry links in list rows.
+    visible_bookings = list(in_progress) + list(awaiting) + list(scheduled) + list(closed_rows)
+    visible_booking_ids = [b.id for b in visible_bookings]
+
+    first_day_by_booking = {}
+    if visible_booking_ids:
+        for day in (
+            BookingDay.objects
+            .filter(booking_id__in=visible_booking_ids)
+            .order_by('booking_id', 'date', 'id')
+        ):
+            if day.booking_id not in first_day_by_booking:
+                first_day_by_booking[day.booking_id] = day.id
+
+    for b in visible_bookings:
+        b.first_day_id = first_day_by_booking.get(b.id)
+
     dummy_businesses = list(
         Business.objects
-        .filter(is_dummy=True, dummy_course_type__isnull=False, training_locations__is_active=True)
+        .filter(is_dummy=True, training_locations__is_active=True)
         .select_related("dummy_course_type")
         .distinct()
         .order_by("name")
@@ -739,19 +769,22 @@ def instructor_dummy_booking_new(request, business_id):
     )
     training_location = business.training_locations.filter(is_active=True).order_by("name").first()
 
-    if not business.dummy_course_type or not training_location:
+    if not training_location:
         messages.error(
             request,
-            "This dummy business is not ready yet. It needs a default course type and at least one active training location.",
+            "This dummy business is not ready yet. It needs at least one active training location.",
         )
         return redirect("instructor_bookings")
 
     if request.method == "POST":
-        form = DummyBookingQuickCreateForm(request.POST)
+        form = DummyBookingQuickCreateForm(
+            request.POST,
+            default_course_type=business.dummy_course_type,
+        )
         if form.is_valid():
             course_date = form.cleaned_data["course_date"]
             start_time = form.cleaned_data["start_time"]
-            course_type = business.dummy_course_type
+            course_type = form.cleaned_data["course_type"]
 
             booking = Booking.objects.create(
                 business=business,
@@ -801,14 +834,17 @@ def instructor_dummy_booking_new(request, business_id):
             messages.success(request, f"Practice booking created for {business.name}.")
             return redirect("instructor_booking_detail", pk=booking.pk)
     else:
-        form = DummyBookingQuickCreateForm(initial={"course_date": timezone.localdate()})
+        form = DummyBookingQuickCreateForm(
+            initial={"course_date": timezone.localdate()},
+            default_course_type=business.dummy_course_type,
+        )
 
     return render(request, "instructor/dummy_booking_new.html", {
         "title": "Create practice booking",
         "form": form,
         "business": business,
         "training_location": training_location,
-        "course_type": business.dummy_course_type,
+        "default_course_type": business.dummy_course_type,
     })
 
 
@@ -1013,6 +1049,30 @@ def instructor_booking_detail(request, pk):
     # ------------------------------------------------------------------
     if request.method == "POST":
 
+        # ✅ Dummy-only: unset final closure so instructor can continue practising
+        if request.POST.get("action") == "reopen_dummy_course":
+            if not booking.is_dummy_business:
+                messages.error(request, "Only dummy bookings can be reopened from course closure.")
+                return redirect(f"{request.path}#closure-pane")
+
+            if booking.status != "completed":
+                messages.info(request, "This dummy booking is already open.")
+                return redirect(f"{request.path}#closure-pane")
+
+            booking.status = "awaiting_closure"
+            booking.date_completed = None
+            booking.course_registers_status = None
+            booking.assessment_matrix_status = None
+            booking.save(update_fields=[
+                "status",
+                "date_completed",
+                "course_registers_status",
+                "assessment_matrix_status",
+            ])
+
+            messages.success(request, "Dummy booking reopened. Course closure has been unset so you can continue training.")
+            return redirect(f"{request.path}#closure-pane")
+
         # ✅ AUTOSAVE course-closure dropdowns (no locking / no emails yet)
         if request.POST.get("action") == "autosave_closure":
 
@@ -1032,18 +1092,77 @@ def instructor_booking_detail(request, pk):
 
             print("🔥 FINAL CLOSE CLICKED")
 
-            reg = booking.course_registers_status
-            ass = booking.assessment_matrix_status
+            reg_manual = request.POST.get("registers_send_separately") == "on"
+            counts_confirm = request.POST.get("delegate_counts_confirm") == "on"
+            ass_manual = request.POST.get("assessment_send_separately") == "on"
+            feedback_manual = request.POST.get("feedback_send_separately") == "on"
+
+            day_counts = list(
+                BookingDay.objects
+                .filter(booking=booking)
+                .annotate(delegate_count=Count("registers"))
+                .order_by("date")
+            )
+            missing_delegate_days = [d for d in day_counts if (d.delegate_count or 0) <= 0]
+            counts_vary = len({d.delegate_count or 0 for d in day_counts}) > 1 if len(day_counts) > 1 else False
+            # Keep closure checks aligned with the assessments matrix delegate set
+            # (deduped by name + DOB), otherwise duplicates across days appear as
+            # false extra pending outcomes.
+            pending_outcome_regs = [
+                r for r in _unique_delegates_for_booking(booking)
+                if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
+            ]
+
+            if missing_delegate_days and not reg_manual:
+                day_labels = ", ".join(d.date.strftime("%d %b %Y") for d in missing_delegate_days)
+                messages.error(
+                    request,
+                    f"Cannot close course: no delegates recorded for {day_labels}. "
+                    "Tick 'registers will be submitted separately' if paper records will follow."
+                )
+                return redirect(f"{request.path}#closure-pane")
+
+            if counts_vary and not (counts_confirm or reg_manual):
+                messages.error(
+                    request,
+                    "Cannot close course: delegate counts vary across days. "
+                    "Please confirm this is accurate (or mark registers as separate submission)."
+                )
+                return redirect(f"{request.path}#closure-pane")
+
+            if pending_outcome_regs and not ass_manual:
+                pending_labels = ", ".join(
+                    f"{r.name}" for r in pending_outcome_regs[:8]
+                )
+                extra = "" if len(pending_outcome_regs) <= 8 else f" and {len(pending_outcome_regs)-8} more"
+                messages.error(
+                    request,
+                    "Cannot close course: assessment outcomes still pending for "
+                    f"{pending_labels}{extra}. "
+                    "Set outcomes to Pass/Fail/DNF or tick 'assessment matrix will be submitted separately'."
+                )
+                return redirect(f"{request.path}#closure-pane")
+
+            feedback_count = FeedbackResponse.objects.filter(booking=booking).count()
+            if feedback_count <= 0 and not feedback_manual:
+                messages.error(
+                    request,
+                    "Cannot close course: no feedback has been submitted. "
+                    "Submit at least one feedback form or tick 'feedback will be submitted separately'."
+                )
+                return redirect(f"{request.path}#closure-pane")
+
+            reg = "send_later" if reg_manual else "completed"
+            ass = "send_later" if ass_manual else "completed"
+            booking.course_registers_status = reg
+            booking.assessment_matrix_status = ass
+            booking.save(update_fields=["course_registers_status", "assessment_matrix_status"])
 
             print("REGISTER:", reg)
             print("ASSESSMENT:", ass)
 
             # ✅ Safety check
-            if not (
-                reg in ["completed", "send_later"]
-                and ass in ["completed", "send_later"]
-                and booking.status != "completed"
-            ):
+            if not (reg in ["completed", "send_later"] and ass in ["completed", "send_later"] and booking.status != "completed"):
                 print("⛔ BLOCKED: Closure conditions not met")
                 messages.error(request, "Course cannot be closed yet.")
                 return redirect(f"{request.path}#closure-pane")
@@ -1136,8 +1255,76 @@ def instructor_booking_detail(request, pk):
                 booking.date_completed = now()
                 booking.save(update_fields=["date_completed"])
             
+            dummy_closure_email_sent = False
             if booking.is_dummy_business:
-                print("ℹ️ Dummy booking closure email skipped")
+                try:
+                    from django.core.mail import EmailMessage
+                    import mimetypes
+
+                    instructor_email = (booking.instructor.email or "").strip()
+                    catch_all = (getattr(settings, "DEV_CATCH_ALL_EMAIL", "") or "").strip()
+
+                    subject = f"[DUMMY] Course closure documents — {booking.course_type.name} ({booking.course_reference})"
+                    if settings.DEBUG and catch_all:
+                        to_recipients = [catch_all]
+                        effective_subject = (
+                            f"[DEV] {subject} "
+                            f"(Would send to instructor: {instructor_email or '(none configured)'})"
+                        )
+                    else:
+                        if not instructor_email:
+                            raise ValueError("Instructor email is not configured for this dummy booking.")
+                        to_recipients = [instructor_email]
+                        effective_subject = subject
+
+                    body = (
+                        "Please find attached documents for the dummy / familiarisation course closure.\n\n"
+                        f"Course: {booking.course_type.name}\n"
+                        f"Business: {booking.business.name}\n"
+                        f"Reference: {booking.course_reference}\n"
+                        f"Closed on: {booking.date_completed.strftime('%Y-%m-%d %H:%M')}\n\n"
+                        "Attached documents:\n"
+                        " - Assessment Matrix\n"
+                        " - Registers\n"
+                        " - Certificates\n"
+                        " - Feedback Summary\n\n"
+                        "This is a dummy booking test email only. Admin closure email has been skipped.\n\n"
+                        "----------------------------------------\n"
+                        f"Instructor: {booking.instructor.name}\n"
+                        f"Email: {booking.instructor.email or '(none)'}\n"
+                    )
+
+                    manual_lines = []
+                    if booking.course_registers_status in ("send_later", "separate"):
+                        manual_lines.append("Course registers will be submitted manually.")
+                    if booking.assessment_matrix_status in ("send_later", "separate"):
+                        manual_lines.append("Assessment matrix will be submitted manually.")
+                    if feedback_manual:
+                        manual_lines.append("Feedback will be submitted manually.")
+                    if manual_lines:
+                        body += "\nManual submissions to follow:\n" + "\n".join(f" - {ln}" for ln in manual_lines)
+
+                    email = EmailMessage(
+                        subject=effective_subject,
+                        body=body,
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                        to=to_recipients,
+                    )
+
+                    for filename, content in pdf_files:
+                        if isinstance(content, tuple):
+                            content = content[0]
+                        safe_filename = str(filename)
+                        mime = mimetypes.guess_type(safe_filename)[0] or "application/pdf"
+                        email.attach(safe_filename, content, mime)
+
+                    email.send(fail_silently=False)
+                    dummy_closure_email_sent = True
+                    print("📧 Dummy closure email sent to instructor route")
+
+                except Exception as e:
+                    print("❌ Dummy closure email failed:", e)
+                    messages.error(request, f"Dummy course closed, but instructor email failed: {e}")
             else:
                 try:
                     from django.core.mail import EmailMessage
@@ -1176,6 +1363,16 @@ def instructor_booking_detail(request, pk):
                         f"Instructor: {booking.instructor.name}\n"
                         f"Email: {booking.instructor.email}\n"
                     )
+
+                    manual_lines = []
+                    if booking.course_registers_status in ("send_later", "separate"):
+                        manual_lines.append("Course registers will be submitted manually.")
+                    if booking.assessment_matrix_status in ("send_later", "separate"):
+                        manual_lines.append("Assessment matrix will be submitted manually.")
+                    if feedback_manual:
+                        manual_lines.append("Feedback will be submitted manually.")
+                    if manual_lines:
+                        body += "\nManual submissions to follow:\n" + "\n".join(f" - {ln}" for ln in manual_lines)
 
                     if isinstance(effective_subject, str):
                         effective_subject = effective_subject.encode("utf-8", "ignore").decode("utf-8")
@@ -1220,7 +1417,10 @@ def instructor_booking_detail(request, pk):
             print("✅ COURSE SUCCESSFULLY CLOSED")
 
             if booking.is_dummy_business:
-                messages.success(request, "✅ Dummy course closed. Admin email was skipped.")
+                if dummy_closure_email_sent:
+                    messages.success(request, "✅ Dummy course closed. Documents emailed to instructor only (admin skipped).")
+                else:
+                    messages.success(request, "✅ Dummy course closed. Admin email was skipped.")
             else:
                 messages.success(request, "✅ Course closed and documents emailed to admin and instructor.")
             return redirect(f"{request.path}#closure-pane")
@@ -1393,10 +1593,67 @@ def instructor_booking_detail(request, pk):
                 inv.save()
 
                 if booking.is_dummy_business:
-                    inv.status = "sent"
-                    inv.date_sent = now()
-                    inv.save(update_fields=["status", "date_sent", "invoice_date", "instructor_ref", "account_name", "sort_code", "account_number"])
-                    messages.success(request, "Dummy booking invoice marked as sent. Admin email skipped.")
+                    try:
+                        file_bytes, filename = render_invoice_pdf_via_preview(request, booking)
+                        attachments, link_lines = gather_receipt_attachments_and_links(booking)
+
+                        instr_real = getattr(booking.instructor, "email", "") or ""
+                        catch_all = getattr(settings, "DEV_CATCH_ALL_EMAIL", "")
+                        if catch_all:
+                            to_recipients = [catch_all]
+                            effective_subject = (
+                                f"[DEV] [DUMMY] Instructor invoice — {booking.course_type.name} "
+                                f"({booking.course_reference or booking.pk}) "
+                                f"(Would send to instructor: {instr_real or '(none configured)'})"
+                            )
+                        else:
+                            if not instr_real:
+                                raise ValueError("Instructor email is not configured for this dummy booking.")
+                            to_recipients = [instr_real]
+                            effective_subject = (
+                                f"[DUMMY] Instructor invoice — {booking.course_type.name} "
+                                f"({booking.course_reference or booking.pk})"
+                            )
+
+                        body = (
+                            f"{_time_greeting()},\n\n"
+                            f"Please find attached the invoice for the dummy / familiarisation booking "
+                            f"for {booking.course_type.name} completed by {booking.instructor.name} "
+                            f"for {booking.business.name}.\n\n"
+                            "This is a dummy booking test email only. It has NOT been sent to admin "
+                            "and will not enter the normal admin invoice workflow.\n\n"
+                            "You can review the booking in the portal if needed.\n\n"
+                            "Many thanks\n\n"
+                            "Unicorn Admin System\n\n"
+                            "https://unicorn.adminforge.co.uk"
+                        )
+
+                        if link_lines:
+                            body += "\n\nReceipts:\n" + "\n".join(f" - {ln}" for ln in link_lines)
+
+                        email = EmailMessage(
+                            subject=effective_subject,
+                            body=body,
+                            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@example.com"),
+                            to=to_recipients,
+                        )
+                        email.attach(
+                            filename=filename,
+                            content=file_bytes,
+                            mimetype="application/pdf",
+                        )
+                        for fname, content, mime in attachments:
+                            email.attach(filename=fname, content=content, mimetype=mime)
+
+                        email.send(fail_silently=False)
+
+                        inv.status = "sent"
+                        inv.date_sent = now()
+                        inv.save(update_fields=["status", "date_sent", "invoice_date", "instructor_ref", "account_name", "sort_code", "account_number"])
+                        messages.success(request, "Dummy booking invoice emailed to instructor only. Admin email skipped.")
+                    except Exception as e:
+                        messages.error(request, f"Failed to send dummy invoice email: {e}")
+
                     return redirect(
                         f"{reverse('instructor_booking_detail', kwargs={'pk': booking.pk})}?tab=invoicing"
                     )
@@ -1512,10 +1769,32 @@ def instructor_booking_detail(request, pk):
         "active_tab": request.POST.get("active_tab") or request.GET.get("tab", ""),
     }
 
-    # ✅ ENABLE CLOSE BUTTON ONLY WHEN BOTH CONFIRMED
+    # ✅ Closure prerequisites and readiness
     reg = booking.course_registers_status
     ass = booking.assessment_matrix_status
     status = booking.status
+
+    closure_day_counts_qs = list(
+        BookingDay.objects
+        .filter(booking=booking)
+        .annotate(delegate_count=Count("registers"))
+        .order_by("date")
+    )
+    closure_day_delegate_counts = [
+        {"date": d.date, "count": d.delegate_count or 0}
+        for d in closure_day_counts_qs
+    ]
+    closure_missing_delegate_days = [d for d in closure_day_counts_qs if (d.delegate_count or 0) <= 0]
+    closure_counts_vary = (
+        len({d.delegate_count or 0 for d in closure_day_counts_qs}) > 1
+        if len(closure_day_counts_qs) > 1 else False
+    )
+    closure_pending_outcomes = [
+        r for r in _unique_delegates_for_booking(booking)
+        if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
+    ]
+    closure_feedback_count = FeedbackResponse.objects.filter(booking=booking).count()
+    closure_missing_feedback = closure_feedback_count <= 0
 
     print("🔎 CLOSURE CHECK:")
     print("REGISTER:", repr(reg))
@@ -1526,19 +1805,28 @@ def instructor_booking_detail(request, pk):
         reg in ["completed", "send_later"]
         and ass in ["completed", "send_later"]
         and status != "completed"
+        and not closure_missing_delegate_days
+        and not closure_pending_outcomes
+        and not closure_missing_feedback
+        and not closure_counts_vary
     )
 
 
     print("✅ CAN CLOSE:", can_close_course)
 
     ctx["can_close_course"] = can_close_course
+    ctx["closure_day_delegate_counts"] = closure_day_delegate_counts
+    ctx["closure_missing_delegate_days"] = closure_missing_delegate_days
+    ctx["closure_counts_vary"] = closure_counts_vary
+    ctx["closure_pending_outcomes"] = closure_pending_outcomes
+    ctx["closure_feedback_count"] = closure_feedback_count
+    ctx["closure_missing_feedback"] = closure_missing_feedback
 
 
 
     # -----------------------------------------
     # FEEDBACK CONTEXT (FIX)
     # -----------------------------------------
-    from .models import FeedbackResponse
     from django.db.models import Avg
 
     fb_qs = FeedbackResponse.objects.filter(booking=booking)
@@ -1623,16 +1911,71 @@ def instructor_booking_detail(request, pk):
         ).count()
 
         day_rows.append({
+            "id": d.pk,
             "date": d.date,
             "start_time": d.start_time,
             "n": n,
             "warn": warn_count > 0,
             "warn_count": warn_count,
-            "edit_url": reverse("instructor_day_registers", args=[d.pk]),
+            "edit_url": (
+                reverse("instructor_booking_detail", kwargs={"pk": booking.pk})
+                + f"?day={d.pk}#days-pane"
+            ),
         })
 
     ctx["day_rows"] = day_rows
     ctx["days"] = days
+    ctx["last_day"] = days.last()
+
+    selected_day = None
+    selected_day_rows = []
+    selected_day_id = request.GET.get("day")
+    if selected_day_id:
+        try:
+            selected_day = days.filter(pk=int(selected_day_id)).first()
+        except (TypeError, ValueError):
+            selected_day = None
+
+    if selected_day:
+        selected_day_back_url = (
+            reverse("instructor_booking_detail", kwargs={"pk": booking.pk})
+            + f"?day={selected_day.pk}#days-pane"
+        )
+        selected_regs = (
+            DelegateRegister.objects.filter(booking_day=selected_day)
+            .order_by("name")
+            .only("id", "name", "date_of_birth", "job_title", "employee_id", "health_status", "notes")
+        )
+        for reg in selected_regs:
+            symbol, cls, title = _health_badge_tuple(reg.health_status)
+            selected_day_rows.append({
+                "obj": reg,
+                "health_symbol": symbol,
+                "health_class": cls,
+                "health_title": title,
+                "edit_url": reverse("instructor_delegate_edit", args=[reg.pk]) + "?" + urlencode({"next": selected_day_back_url}),
+            })
+
+        ctx["selected_day"] = selected_day
+        ctx["selected_day_rows"] = selected_day_rows
+        ctx["selected_day_back_url"] = selected_day_back_url
+        ctx["selected_day_add_url"] = reverse("instructor_delegate_new", args=[selected_day.pk]) + "?" + urlencode({"next": selected_day_back_url})
+        ctx["selected_day_full_url"] = reverse("instructor_day_registers", args=[selected_day.pk])
+        ctx["selected_day_pdf_url"] = reverse("instructor_day_registers_pdf", args=[selected_day.pk])
+    else:
+        ctx["selected_day"] = None
+        ctx["selected_day_rows"] = []
+
+    # For dummy booking quick-test links: pair each exam with its matching day
+    if booking.is_dummy_business and booking.course_type.has_exam:
+        exams_list = list(Exam.objects.filter(course_type=booking.course_type).order_by("sequence"))
+        days_list = list(days)
+        ctx["dummy_exam_day_pairs"] = [
+            (exams_list[i], days_list[i] if i < len(days_list) else None)
+            for i in range(len(exams_list))
+        ]
+    else:
+        ctx["dummy_exam_day_pairs"] = []
 
     # -------------------------------------------------------
     # Build unified event description for Google & ICS
@@ -1957,10 +2300,13 @@ def instructor_delegate_edit(request, pk: int):
     if guard:
         return guard
 
+    fallback_url = redirect("instructor_day_registers", pk=reg.booking_day_id).url
+    next_url = _safe_next_url(request, fallback_url)
+
     if request.method == "POST" and "delete" in request.POST:
         reg.delete()
         messages.success(request, "Delegate removed.")
-        return redirect("instructor_day_registers", pk=reg.booking_day_id)
+        return redirect(next_url)
 
     if request.method == "POST":
         form = DelegateRegisterInstructorForm(
@@ -1969,7 +2315,7 @@ def instructor_delegate_edit(request, pk: int):
         if form.is_valid():
             form.save()
             messages.success(request, "Delegate updated.")
-            return redirect("instructor_day_registers", pk=reg.booking_day_id)
+            return redirect(next_url)
     else:
         form = DelegateRegisterInstructorForm(
             instance=reg, current_instructor=instr
@@ -1980,7 +2326,7 @@ def instructor_delegate_edit(request, pk: int):
         "form": form,
         "reg": reg,
         "day": reg.booking_day,
-        "back_url": redirect("instructor_day_registers", pk=reg.booking_day_id).url,
+        "back_url": next_url,
     })
 
 
@@ -2072,6 +2418,9 @@ def instructor_delegate_new(request, day_pk: int):
     if guard:
         return guard
 
+    fallback_url = redirect("instructor_day_registers", pk=day.pk).url
+    next_url = _safe_next_url(request, fallback_url)
+
     if request.method == "POST":
         form = DelegateRegisterInstructorForm(request.POST, current_instructor=instr)
         if form.is_valid():
@@ -2081,7 +2430,7 @@ def instructor_delegate_new(request, day_pk: int):
                 obj.date = timezone.localdate()
             obj.save()
             messages.success(request, "Delegate added.")
-            return redirect("instructor_day_registers", pk=day.pk)
+            return redirect(next_url)
     else:
         form = DelegateRegisterInstructorForm(current_instructor=instr)
 
@@ -2089,7 +2438,7 @@ def instructor_delegate_new(request, day_pk: int):
         "title": "Add delegate",
         "form": form,
         "day": day,
-        "back_url": redirect("instructor_day_registers", pk=day.pk).url,
+        "back_url": next_url,
     })
 
 @login_required
@@ -2107,6 +2456,9 @@ def instructor_register_edit(request, pk: int):
     if guard:
         return guard
 
+    fallback_url = redirect("instructor_day_registers", pk=reg.booking_day_id).url
+    next_url = _safe_next_url(request, fallback_url)
+
     if request.method == "POST":
         form = DelegateRegisterInstructorForm(request.POST, instance=reg, current_instructor=instr)
         if form.is_valid():
@@ -2114,7 +2466,7 @@ def instructor_register_edit(request, pk: int):
             obj.instructor = instr
             obj.save()
             messages.success(request, "Delegate updated.")
-            return redirect("instructor_day_registers", pk=reg.booking_day_id)
+            return redirect(next_url)
         else:
             messages.error(request, "Please correct the errors below.")
     else:
@@ -2126,7 +2478,7 @@ def instructor_register_edit(request, pk: int):
         "form": form,
         "reg": reg,
         "day": day,
-        "back_url": redirect("instructor_day_registers", pk=day.pk).url,
+        "back_url": next_url,
     })
 
 @login_required
@@ -2149,9 +2501,11 @@ def instructor_delegate_delete(request, pk: int):
         return HttpResponseNotAllowed(["POST"])
 
     day_pk = reg.booking_day_id
+    fallback_url = redirect("instructor_day_registers", pk=day_pk).url
+    next_url = _safe_next_url(request, fallback_url)
     reg.delete()
     messages.success(request, "Delegate deleted.")
-    return redirect("instructor_day_registers", pk=day_pk)
+    return redirect(next_url)
 
 
 @login_required

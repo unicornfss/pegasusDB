@@ -311,12 +311,25 @@ class BusinessForm(forms.ModelForm):
 
 
 class DummyBookingQuickCreateForm(forms.Form):
+    course_type = forms.ModelChoiceField(
+        queryset=CourseType.objects.none(),
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        empty_label='- Select a course type -',
+    )
     course_date = forms.DateField(
         widget=forms.DateInput(attrs={'class': 'form-control', 'type': 'date'})
     )
     start_time = forms.TimeField(
         widget=forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'})
     )
+
+    def __init__(self, *args, **kwargs):
+        default_course_type = kwargs.pop('default_course_type', None)
+        super().__init__(*args, **kwargs)
+
+        self.fields['course_type'].queryset = CourseType.objects.order_by('name')
+        if default_course_type and not self.is_bound:
+            self.fields['course_type'].initial = default_course_type
 
 
 # ---------------- CourseType ----------------
@@ -666,7 +679,7 @@ class FeedbackForm(forms.ModelForm):
             # the rest are normal inputs/textarea/checkbox:
             "comments":       forms.Textarea(attrs={"rows": 4}),
             "wants_callback": forms.CheckboxInput(),
-            "date":           forms.DateInput(attrs={"type": "date"}),
+            "date":           forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
         }
 
 class ExamForm(forms.ModelForm):

@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from django.db.models import Q
-from .models import Booking, Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel
+from .models import Booking, Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel, CourseType
 from .forms_exam import DelegateExamStartForm
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -128,12 +128,46 @@ def delegate_exam_start(request):
                     )
         # if form invalid, the form will show its field errors; no banner needed
     else:
+        initial_exam_date = timezone.localdate()
+        raw_date = request.GET.get("exam_date", "")
+        if raw_date:
+            try:
+                from datetime import date as _date
+                initial_exam_date = _date.fromisoformat(raw_date)
+            except ValueError:
+                pass
         form = DelegateExamStartForm(
             initial={
                 "exam_code": exam.exam_code,
-                "exam_date": timezone.localdate(),
+                "exam_date": initial_exam_date,
             }
         )
+
+    # Filter instructor dropdown to those with a booking for this course+date
+    exam_date_for_filter = None
+    if request.method == "POST" and form.is_bound:
+        try:
+            exam_date_for_filter = form.fields["exam_date"].clean(form.data.get("exam_date", ""))
+        except Exception:
+            pass
+    else:
+        # On GET, always filter by the resolved initial date (URL param or today)
+        exam_date_for_filter = initial_exam_date
+
+    if exam_date_for_filter:
+        filtered_instructors = (
+            Personnel.objects
+            .filter(
+                bookings__course_type=course_type,
+                bookings__days__date=exam_date_for_filter,
+            )
+            .distinct()
+            .order_by("name")
+        )
+        if filtered_instructors.exists():
+            form.fields["instructor"].queryset = filtered_instructors
+            if request.method == "GET" and filtered_instructors.count() == 1:
+                form.fields["instructor"].initial = filtered_instructors.first().pk
 
     ctx = {
         "exam": exam,
@@ -145,6 +179,34 @@ def delegate_exam_start(request):
 
 from math import ceil
 # ...
+
+def exam_instructors_api(request):
+    """JSON: instructors who have a booking for a given exam's course type on a given date."""
+    from django.http import JsonResponse
+    code = (request.GET.get("examcode") or "").upper()
+    raw_date = (request.GET.get("date") or "").strip()
+    if not code or not raw_date:
+        return JsonResponse({"instructors": []})
+    try:
+        from datetime import date as _date
+        d = _date.fromisoformat(raw_date)
+    except ValueError:
+        return JsonResponse({"instructors": []})
+    exam = Exam.objects.filter(exam_code=code).select_related("course_type").first()
+    if not exam:
+        return JsonResponse({"instructors": []})
+    instructors = list(
+        Personnel.objects
+        .filter(bookings__course_type=exam.course_type, bookings__days__date=d)
+        .distinct()
+        .order_by("name")
+        .values("id", "name")
+    )
+    if not instructors:
+        # No booking match for this date — return all instructors as fallback
+        instructors = list(Personnel.objects.order_by("name").values("id", "name"))
+    return JsonResponse({"instructors": instructors})
+
 
 @ensure_csrf_cookie
 def delegate_exam_rules(request):

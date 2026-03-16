@@ -218,6 +218,37 @@ tbody th.sticky.left { box-shadow: 1px 0 0 rgba(0,0,0,.05); }
 
 .lock-indicator { opacity: 0.7; font-size: 0.9em; margin-left: .2rem; }
 
+/* Night mode readability */
+html[data-color-scheme="night"] .matrix-wrap {
+  background: #0f141b;
+  border-color: rgba(148, 163, 184, .30);
+}
+html[data-color-scheme="night"] .matrix-table {
+  --zebra-even: #1a2431;
+  --zebra-odd: #111923;
+  --zebra-hover: #243447;
+}
+html[data-color-scheme="night"] .matrix-table th,
+html[data-color-scheme="night"] .matrix-table td {
+  color: #e7edf7;
+  border-bottom-color: rgba(148, 163, 184, .25);
+  border-right-color: rgba(148, 163, 184, .18);
+}
+html[data-color-scheme="night"] .sticky.top,
+html[data-color-scheme="night"] .sticky.corner,
+html[data-color-scheme="night"] .matrix-table tr.outcome-row th.outcome-label {
+  background: #1a2431 !important;
+  color: #f3f6fb !important;
+}
+html[data-color-scheme="night"] .name-rotator .last,
+html[data-color-scheme="night"] .comp-code {
+  color: #c6d2e3;
+}
+html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
+  background: #192432;
+  border-top-color: rgba(148, 163, 184, .30);
+}
+
 </style>
 
 <script>

@@ -16,19 +16,43 @@
 
   <h1 class="h4 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
 
+  <style>
+    body.night-mode #exam-start-form .form-label,
+    body.night-mode #exam-start-form .form-text,
+    body.night-mode #exam-start-form .text-danger {
+      color: #e7effb !important;
+    }
+    body.night-mode #exam-start-form input[type="text"],
+    body.night-mode #exam-start-form input[type="date"],
+    body.night-mode #exam-start-form select {
+      background: #1f2d40 !important;
+      color: #eef5ff !important;
+      border-color: #4b6282 !important;
+    }
+    body.night-mode #exam-start-form input::placeholder {
+      color: #b8c8dd !important;
+    }
+  </style>
+
   {% comment %}If the name/date matched the register, we show a green “continue” button. All banners/alerts are handled by Django messages in base.html.{% endcomment %}
   {% if can_continue %}
-    <form class="d-flex justify-content-end mb-3" method="get" action="{% url 'delegate_exam_rules' %}">
-      <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
-      <input type="hidden" name="name" value="{{ form.name.value|default_if_none:'' }}">
-      <input type="hidden" name="date_of_birth" value="{{ form.date_of_birth.value|default_if_none:'' }}">
-      <input type="hidden" name="instructor" value="{{ form.instructor.value|default_if_none:'' }}">
-      <input type="hidden" name="exam_date" value="{{ form.exam_date.value|default_if_none:'' }}">
-      <button class="btn btn-success">Continue to exam rules</button>
-    </form>
+    <div class="alert alert-success mb-3 d-flex justify-content-between align-items-center gap-3 flex-wrap">
+      <div>Details confirmed. Continue to exam rules, or edit and re-submit if anything is incorrect.</div>
+      <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="edit-details-btn">Edit details</button>
+        <form method="get" action="{% url 'delegate_exam_rules' %}">
+          <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
+          <input type="hidden" name="name" value="{{ form.name.value|default_if_none:'' }}">
+          <input type="hidden" name="date_of_birth" value="{{ form.date_of_birth.value|default_if_none:'' }}">
+          <input type="hidden" name="instructor" value="{{ form.instructor.value|default_if_none:'' }}">
+          <input type="hidden" name="exam_date" value="{{ form.exam_date.value|default_if_none:'' }}">
+          <button class="btn btn-success btn-sm">Continue to exam rules</button>
+        </form>
+      </div>
+    </div>
   {% endif %}
 
-  <form method="post" class="card" novalidate>
+  <form method="post" class="card {% if can_continue %}d-none{% endif %}" id="exam-start-form" novalidate>
     {% csrf_token %}
     <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
 
@@ -69,15 +93,47 @@
 
   <script>
   (function () {
-    const d = document.querySelector('input[name="exam_date"]');
-    if (d && !d.value) {
-      const today = new Date();
-      d.value = today.toISOString().slice(0,10);
+    const dateInput = document.querySelector('input[name="exam_date"]');
+    const instrSelect = document.querySelector('select[name="instructor"]');
+    const editBtn = document.getElementById('edit-details-btn');
+    const startForm = document.getElementById('exam-start-form');
+    if (!dateInput || !instrSelect) return;
+
+    function updateInstructors() {
+      const d = dateInput.value;
+      if (!d) return;
+      const code = dateInput.closest('form').querySelector('[name="examcode"]').value || '';
+      fetch('/exam/instructors/?examcode=' + encodeURIComponent(code) + '&date=' + encodeURIComponent(d))
+        .then(function(r) { return r.json(); })
+        .then(function(resp) {
+          if (!resp.instructors || resp.instructors.length === 0) return; // API error, keep existing
+          var current = instrSelect.value;
+          instrSelect.innerHTML = '<option value="">----------</option>';
+          resp.instructors.forEach(function(i) {
+            var opt = document.createElement('option');
+            opt.value = i.id;
+            opt.textContent = i.name;
+            if (String(i.id) === String(current)) opt.selected = true;
+            instrSelect.appendChild(opt);
+          });
+          if (resp.instructors.length === 1) {
+            instrSelect.value = String(resp.instructors[0].id);
+          }
+        })
+        .catch(function() {});
     }
+
+    dateInput.addEventListener('change', updateInstructors);
+    if (editBtn && startForm) {
+      editBtn.addEventListener('click', function () {
+        startForm.classList.remove('d-none');
+        editBtn.closest('.alert')?.classList.add('d-none');
+      });
+    }
+
+    updateInstructors();
   })();
   </script>
-
-
 
   {% include "legal/_inline_notice_exam.html" %}
 </div>

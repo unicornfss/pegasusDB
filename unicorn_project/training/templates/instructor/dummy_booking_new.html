@@ -13,12 +13,22 @@
         <div class="card-body">
           <div class="mb-4">
             <div class="fw-semibold">{{ business.name }}</div>
-            <div class="text-muted small">{{ course_type.name }} at {{ training_location.name }}. This practice booking will auto-delete 7 days after creation.</div>
+            <div class="text-muted small">
+              Location: {{ training_location.name }}. This practice booking will auto-delete 7 days after creation.
+            </div>
+            {% if default_course_type %}
+            <div class="small text-muted mt-1">Default suggestion: {{ default_course_type.name }}</div>
+            {% endif %}
           </div>
 
           <form method="post">
             {% csrf_token %}
             <div class="row g-3">
+              <div class="col-12">
+                <label class="form-label fw-bold" for="{{ form.course_type.id_for_label }}">Course type</label>
+                {{ form.course_type }}
+                {% for err in form.course_type.errors %}<div class="text-danger small mt-1">{{ err }}</div>{% endfor %}
+              </div>
               <div class="col-md-6">
                 <label class="form-label fw-bold" for="{{ form.course_date.id_for_label }}">Start date</label>
                 {{ form.course_date }}

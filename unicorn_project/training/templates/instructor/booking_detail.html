@@ -37,17 +37,50 @@
 {% endif %}
 
 {% if booking.is_dummy_business %}
-  <div class="alert alert-info d-flex justify-content-between align-items-center gap-3 flex-wrap">
-    <div>
-      This is a dummy / familiarisation booking. It can be deleted directly and will auto-delete 7 days after it was created.
+  <div class="alert alert-info mb-3">
+    <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-2">
+      <div>
+        <strong>Practice / familiarisation booking.</strong>
+        Can be deleted directly and will auto-delete 7 days after it was created.
+      </div>
+      <form method="post" action="{% url 'instructor_delete_dummy_booking' booking.pk %}" class="m-0" onsubmit="return confirm('Delete this dummy booking and all linked registers, feedback, exams, and invoices?');">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{% url 'instructor_bookings' %}">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+          <i class="bi bi-trash me-1"></i>Delete dummy booking
+        </button>
+      </form>
     </div>
-    <form method="post" action="{% url 'instructor_delete_dummy_booking' booking.pk %}" class="m-0" onsubmit="return confirm('Delete this dummy booking and all linked registers, feedback, exams, and invoices?');">
-      {% csrf_token %}
-      <input type="hidden" name="next" value="{% url 'instructor_bookings' %}">
-      <button type="submit" class="btn btn-outline-danger btn-sm">
-        <i class="bi bi-trash me-1"></i>Delete dummy booking
-      </button>
-    </form>
+
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="small text-muted me-1">Quick test:</span>
+
+      {% for d in days %}
+        <a class="btn btn-outline-primary btn-sm"
+           href="{% url 'public_delegate_register' %}?ct={{ booking.course_type.code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+           target="_blank" rel="noopener">
+          <i class="bi bi-people me-1"></i>Register - Day {{ forloop.counter }}
+        </a>
+      {% endfor %}
+
+      {% for ex, d in dummy_exam_day_pairs %}
+        {% if d %}
+          <a class="btn btn-outline-primary btn-sm"
+             href="{% url 'delegate_exam_start' %}?examcode={{ ex.exam_code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+             target="_blank" rel="noopener">
+            <i class="bi bi-pencil-square me-1"></i>Exam {{ ex.sequence }} - Day {{ forloop.counter }}
+          </a>
+        {% endif %}
+      {% endfor %}
+
+      {% if last_day %}
+        <a class="btn btn-outline-primary btn-sm"
+           href="{% url 'public_feedback_form' %}?course={{ booking.course_type.code }}&date={{ last_day.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+           target="_blank" rel="noopener">
+          <i class="bi bi-chat-left-text me-1"></i>Feedback form
+        </a>
+      {% endif %}
+    </div>
   </div>
 {% endif %}
 
@@ -379,7 +412,7 @@
               <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
               <td class="text-end">
                 <a class="btn btn-outline-primary btn-sm" href="{{ d.edit_url }}">
-                  <i class="bi bi-people"></i> View / edit
+                  <i class="bi bi-people"></i> View / edit in tab
                 </a>
               </td>
             </tr>
@@ -400,6 +433,69 @@
         </tbody>
       </table>
     </div>
+
+    {% if selected_day %}
+      <div class="card mt-3" id="selected-day-register-panel">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <strong>Register for {{ selected_day.date|date:"j M Y" }}</strong>
+            <span class="text-muted ms-2">Manage submissions without leaving this booking.</span>
+          </div>
+          <div class="d-flex gap-2 flex-wrap">
+            <a class="btn btn-outline-primary btn-sm" href="{{ selected_day_add_url }}">
+              <i class="bi bi-person-plus"></i> Add delegate
+            </a>
+            <a class="btn btn-outline-primary btn-sm" href="{{ selected_day_pdf_url }}" download>
+              <i class="bi bi-filetype-pdf"></i> Export PDF
+            </a>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ selected_day_full_url }}">
+              Open full page
+            </a>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive mb-0">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width:22%">Name</th>
+                  <th style="width:14%">Date of birth</th>
+                  <th style="width:18%">Job title</th>
+                  <th style="width:28%">Notes</th>
+                  <th style="width:8%" class="d-none d-lg-table-cell">Employee ID</th>
+                  <th style="width:6%" class="text-center">Health</th>
+                  <th style="width:12%" class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="selected-day-register-body">
+                {% for r in selected_day_rows %}
+                  <tr>
+                    <td>{{ r.obj.name }}</td>
+                    <td>{{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}</td>
+                    <td>{{ r.obj.job_title|default:"—" }}</td>
+                    <td class="text-muted">{% if r.obj.notes %}{{ r.obj.notes|truncatechars:100 }}{% else %}—{% endif %}</td>
+                    <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
+                    <td class="text-center"><span class="badge {{ r.health_class }}" title="{{ r.health_title }}">{{ r.health_symbol }}</span></td>
+                    <td class="text-end">
+                      <a class="btn btn-outline-primary btn-sm" href="{{ r.edit_url }}">Edit</a>
+                      <form method="post" action="{% url 'instructor_delegate_delete' r.obj.pk %}" class="d-inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ selected_day_back_url }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                      </form>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr>
+                    <td colspan="7" class="text-muted">No delegates yet for this day.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    {% endif %}
   </div>
 
   <script>
@@ -450,6 +546,15 @@
         var freshHTML = freshTbody.innerHTML.trim();
         if (currTbody.innerHTML.trim() !== freshHTML) {
           currTbody.innerHTML = freshHTML;
+        }
+
+        var freshPanel = freshPane.querySelector('#selected-day-register-panel');
+        var currPanel = daysPane.querySelector('#selected-day-register-panel');
+        if (freshPanel && currPanel) {
+          var freshPanelHTML = freshPanel.innerHTML.trim();
+          if (currPanel.innerHTML.trim() !== freshPanelHTML) {
+            currPanel.innerHTML = freshPanelHTML;
+          }
         }
       } catch (e) {
         // swallow errors silently
@@ -559,7 +664,13 @@
 
                               <td>
                                 {% if att.finished_at %}
-                                  {% if att.passed %}
+                                  {% if att.viva_decided_at %}
+                                    {% if att.passed %}
+                                      <span class="badge bg-success">Pass (after viva)</span>
+                                    {% else %}
+                                      <span class="badge bg-danger">Fail (after viva)</span>
+                                    {% endif %}
+                                  {% elif att.passed %}
                                     <span class="badge bg-success">Pass</span>
                                   {% elif att.viva_eligible %}
                                     <span class="badge bg-warning text-dark">Viva</span>
@@ -638,43 +749,121 @@
   {% if not is_locked %}
   <form method="post" class="mt-3" id="closure-form">
     {% csrf_token %}
-    <input type="hidden" name="action" value="autosave_closure">
+    <input type="hidden" name="action" value="final_close_course">
 
-    <!-- Registers -->
-    <div class="mb-3">
-      <label class="form-label"><strong>Course registers</strong></label>
-      <select class="form-select" name="course_registers_status" required>
-        <option value="">-- Select --</option>
-        <option value="completed" {% if booking.course_registers_status == "completed" %}selected{% endif %}>
-          Complete
-        </option>
-        <option value="send_later" {% if booking.course_registers_status == "send_later" %}selected{% endif %}>
-          Will send separately
-        </option>
-      </select>
+    <div class="alert alert-info">
+      Before closing the course, complete the checks below. If something was completed on paper, tick the relevant
+      "will be submitted separately" checkbox and the closure email will include that note.
     </div>
 
-    <!-- Assessments -->
-    <div class="mb-3">
-      <label class="form-label"><strong>Assessment matrix</strong></label>
-      <select class="form-select" name="assessment_matrix_status" required>
-        <option value="">-- Select --</option>
-        <option value="completed" {% if booking.assessment_matrix_status == "completed" %}selected{% endif %}>
-          Completed
-        </option>
-        <option value="send_later" {% if booking.assessment_matrix_status == "send_later" %}selected{% endif %}>
-          Will send separately
-        </option>
-      </select>
-    </div>
+    <div class="card mb-3">
+      <div class="card-header"><strong>1. Delegate registers by day</strong></div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-sm mb-2">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th class="text-end">Delegates recorded</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in closure_day_delegate_counts %}
+                <tr>
+                  <td>{{ row.date|date:"j M Y" }}</td>
+                  <td class="text-end">
+                    {% if row.count > 0 %}
+                      <span class="badge bg-success">{{ row.count }}</span>
+                    {% else %}
+                      <span class="badge bg-danger">0</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
 
-        <!-- Close Button -->
-        {% if can_close_course %}
-          <button type="submit" class="btn btn-danger" onclick="
-            document.querySelector('#closure-form input[name=action]').value = 'final_close_course';">
-            ✅ Close course & send documents
-          </button>
+        {% if closure_missing_delegate_days %}
+          <div class="alert alert-warning py-2">
+            Missing delegates on:
+            {% for d in closure_missing_delegate_days %}
+              <strong>{{ d.date|date:"j M Y" }}</strong>{% if not forloop.last %}, {% endif %}
+            {% endfor %}
+          </div>
+          <div class="form-check">
+            <input class="form-check-input closure-check" type="checkbox" id="registers_send_separately" name="registers_send_separately">
+            <label class="form-check-label" for="registers_send_separately">
+              Registers for missing day(s) will be submitted separately (paper copy completed).
+            </label>
+          </div>
+        {% elif closure_counts_vary %}
+          <div class="alert alert-warning py-2">
+            Delegate counts differ across days. Confirm this is correct (for example absences/sickness).
+          </div>
+          <div class="form-check">
+            <input class="form-check-input closure-check" type="checkbox" id="delegate_counts_confirm" name="delegate_counts_confirm">
+            <label class="form-check-label" for="delegate_counts_confirm">
+              I confirm the differing delegate counts are accurate.
+            </label>
+          </div>
+        {% else %}
+          <div class="alert alert-success py-2 mb-0">All days have delegates recorded and counts are consistent.</div>
         {% endif %}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><strong>2. Assessment outcomes</strong></div>
+      <div class="card-body">
+        {% if closure_pending_outcomes %}
+          <div class="alert alert-warning py-2">
+            Pending outcomes still exist. Set each delegate to Pass / Fail / DNF in the Assessments tab.
+          </div>
+          <div class="small mb-2">
+            {% for r in closure_pending_outcomes|slice:":12" %}
+              <div>• {{ r.name }}</div>
+            {% endfor %}
+            {% if closure_pending_outcomes|length > 12 %}
+              <div class="text-muted">...and {{ closure_pending_outcomes|length|add:"-12" }} more</div>
+            {% endif %}
+          </div>
+          <div class="form-check">
+            <input class="form-check-input closure-check" type="checkbox" id="assessment_send_separately" name="assessment_send_separately">
+            <label class="form-check-label" for="assessment_send_separately">
+              Assessment matrix will be submitted separately (paper copy completed).
+            </label>
+          </div>
+        {% else %}
+          <div class="alert alert-success py-2 mb-0">All delegates have non-pending outcomes.</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header"><strong>3. Feedback submissions</strong></div>
+      <div class="card-body">
+        {% if closure_missing_feedback %}
+          <div class="alert alert-warning py-2">
+            No feedback has been submitted for this course yet.
+          </div>
+          <div class="form-check">
+            <input class="form-check-input closure-check" type="checkbox" id="feedback_send_separately" name="feedback_send_separately">
+            <label class="form-check-label" for="feedback_send_separately">
+              Feedback will be submitted separately.
+            </label>
+          </div>
+        {% else %}
+          <div class="alert alert-success py-2 mb-0">
+            Feedback received: <strong>{{ closure_feedback_count }}</strong> submission{{ closure_feedback_count|pluralize }}.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <button type="submit" class="btn btn-danger" id="close-course-btn" {% if not can_close_course %}disabled{% endif %}>
+      ✅ Close course & send documents
+    </button>
 
         <!-- ✅ VIEW CERTIFICATES BUTTON (ALWAYS AVAILABLE) -->
         <a
@@ -691,6 +880,19 @@
     <div class="alert alert-success mt-3">
       ✅ Course has already been closed.
     </div>
+
+    {% if booking.is_dummy_business %}
+      <div class="alert alert-warning">
+        This is a dummy booking. You can reopen it to continue familiarisation and submit more practice entries.
+      </div>
+      <form method="post" class="mt-2" onsubmit="return confirm('Reopen this dummy booking and unset course closure status?');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reopen_dummy_course">
+        <button type="submit" class="btn btn-outline-warning">
+          <i class="bi bi-arrow-counterclockwise me-1"></i> Reopen dummy booking (unset closure)
+        </button>
+      </form>
+    {% endif %}
   {% endif %}
 
 </div>
@@ -769,27 +971,144 @@ document.addEventListener("DOMContentLoaded", function () {
 <!-- END new script -->
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const regSelect = document.querySelector('select[name="course_registers_status"]');
-  const assessSelect = document.querySelector('select[name="assessment_matrix_status"]');
-  const form = document.getElementById("closure-form");
+  window.initClosureFormState = function () {
+    const form = document.getElementById("closure-form");
+    const closeBtn = document.getElementById("close-course-btn");
 
-  function autoSubmit() {
-    const activeTab = document.querySelector(".nav-link.active");
-    if (activeTab) {
-      const target = activeTab.getAttribute("data-bs-target");
-      if (target) {
-        const hidden = document.createElement("input");
-        hidden.type = "hidden";
-        hidden.name = "active_tab";
-        hidden.value = target.replace("#", "");
-        form.appendChild(hidden);
-      }
+    if (!form || !closeBtn) return;
+
+    function requiredChecksSatisfied() {
+      const regManual = document.getElementById("registers_send_separately");
+      const countsConfirm = document.getElementById("delegate_counts_confirm");
+      const assManual = document.getElementById("assessment_send_separately");
+      const feedbackManual = document.getElementById("feedback_send_separately");
+
+      if (regManual && !regManual.checked) return false;
+      if (countsConfirm && !countsConfirm.checked) return false;
+      if (assManual && !assManual.checked) return false;
+      if (feedbackManual && !feedbackManual.checked) return false;
+      return true;
     }
-    form.submit();
+
+    function refreshButtonState() {
+      closeBtn.disabled = !requiredChecksSatisfied();
+    }
+
+    form.querySelectorAll(".closure-check").forEach(function (el) {
+      el.addEventListener("change", refreshButtonState);
+    });
+    refreshButtonState();
+
+    form.addEventListener("submit", function () {
+      const activeTab = document.querySelector(".nav-link.active");
+      if (!activeTab) return;
+      const target = activeTab.getAttribute("data-bs-target");
+      if (!target) return;
+      const hidden = document.createElement("input");
+      hidden.type = "hidden";
+      hidden.name = "active_tab";
+      hidden.value = target.replace("#", "");
+      form.appendChild(hidden);
+    });
+  };
+
+  window.initClosureFormState();
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const assessmentsTabBtn = document.getElementById("assessments-tab");
+  const assessmentsPane = document.getElementById("assessments-pane");
+  if (!assessmentsTabBtn || !assessmentsPane) return;
+
+  let assessmentsRefreshing = false;
+
+  function runInlineScripts(container) {
+    var scripts = container.querySelectorAll("script");
+    scripts.forEach(function (oldScript) {
+      var s = document.createElement("script");
+      if (oldScript.src) {
+        s.src = oldScript.src;
+      } else {
+        s.textContent = oldScript.textContent;
+      }
+      document.body.appendChild(s);
+      document.body.removeChild(s);
+    });
   }
 
-  regSelect.addEventListener("change", autoSubmit);
-  assessSelect.addEventListener("change", autoSubmit);
+  async function refreshAssessmentsPane() {
+    if (assessmentsRefreshing) return;
+    assessmentsRefreshing = true;
+
+    try {
+      var url = window.location.href.split('#')[0];
+      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'fetch' }
+      });
+      if (!res.ok) return;
+
+      var html = await res.text();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      var freshPane = tmp.querySelector('#assessments-pane');
+      if (!freshPane) return;
+
+      assessmentsPane.innerHTML = freshPane.innerHTML;
+      runInlineScripts(assessmentsPane);
+    } catch (e) {
+      // swallow errors silently
+    } finally {
+      assessmentsRefreshing = false;
+    }
+  }
+
+  assessmentsTabBtn.addEventListener("shown.bs.tab", refreshAssessmentsPane);
+});
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const closureTabBtn = document.getElementById("closure-tab");
+  const closurePane = document.getElementById("closure-pane");
+  if (!closureTabBtn || !closurePane) return;
+
+  let closureRefreshing = false;
+
+  async function refreshClosurePane() {
+    if (closureRefreshing) return;
+    closureRefreshing = true;
+
+    try {
+      var url = window.location.href.split('#')[0];
+      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'fetch' }
+      });
+      if (!res.ok) return;
+
+      var html = await res.text();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      var freshPane = tmp.querySelector('#closure-pane');
+      if (!freshPane) return;
+
+      closurePane.innerHTML = freshPane.innerHTML;
+      if (typeof window.initClosureFormState === "function") {
+        window.initClosureFormState();
+      }
+    } catch (e) {
+      // swallow errors silently
+    } finally {
+      closureRefreshing = false;
+    }
+  }
+
+  closureTabBtn.addEventListener("shown.bs.tab", refreshClosurePane);
 });
 </script>
 

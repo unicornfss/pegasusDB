@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
+from unicorn_project.version import APP_VERSION
 
 # --- Paths ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent

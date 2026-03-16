@@ -168,6 +168,9 @@ def public_delegate_register(request):
             .distinct()
             .order_by("name")
         )
+        # UX: if there is only one matching instructor, preselect them.
+        if not form.is_bound and instructors.count() == 1:
+            form.fields["instructor"].initial = instructors.first().pk
 
     if request.method == "POST" and form.is_valid():
         delegate = form.save(commit=False)
@@ -647,8 +650,11 @@ def public_feedback_form(request):
                 .filter(
                     course_type=course,
                     instructor=inst,
-                    course_date=the_date,
                 )
+                .filter(
+                    Q(course_date=the_date) | Q(days__date=the_date)
+                )
+                .distinct()
                 .order_by("created_at")
                 .first()
             )

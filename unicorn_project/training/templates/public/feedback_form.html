@@ -33,6 +33,49 @@
 }
 /* small helper for optional hint */
 .opt-flag { color:#6c757d; font-weight:400; font-size:.9rem; }
+
+/* Night mode readability tuning for feedback page */
+body.night-mode #feedback-form,
+body.night-mode #feedback-form label,
+body.night-mode #feedback-form .form-label,
+body.night-mode #feedback-form .form-check-label,
+body.night-mode #feedback-form .form-text,
+body.night-mode #feedback-form h5,
+body.night-mode #feedback-form h2 {
+  color: #e7effb !important;
+}
+body.night-mode #feedback-form hr {
+  border-color: #4a5d79;
+  opacity: 1;
+}
+body.night-mode #feedback-form .emoji-scale .form-check {
+  background: #1f2d40;
+  border: 1px solid #3f536f;
+  border-radius: .45rem;
+  padding: .25rem .45rem;
+  margin-bottom: .3rem;
+}
+body.night-mode #feedback-form .emoji-scale .num,
+body.night-mode #feedback-form .opt-flag {
+  color: #c6d5ea !important;
+}
+body.night-mode #feedback-form textarea,
+body.night-mode #feedback-form input[type="text"],
+body.night-mode #feedback-form input[type="email"],
+body.night-mode #feedback-form input[type="tel"],
+body.night-mode #feedback-form input[type="date"],
+body.night-mode #feedback-form select {
+  background: #1f2d40 !important;
+  color: #eef5ff !important;
+  border-color: #4b6282 !important;
+}
+body.night-mode #feedback-form textarea::placeholder,
+body.night-mode #feedback-form input::placeholder {
+  color: #b8c8dd !important;
+}
+body.night-mode #feedback-form .invalid-feedback {
+  color: #ffb4b4;
+}
 </style>
 
 <div class="mb-3">

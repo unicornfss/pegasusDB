@@ -9,6 +9,7 @@
 
 <form method="post" class="card p-3">
   {% csrf_token %}
+  {% if back_url %}<input type="hidden" name="next" value="{{ back_url }}">{% endif %}
 
   {% if form.non_field_errors %}
     <div class="alert alert-danger">

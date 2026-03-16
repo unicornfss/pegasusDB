@@ -53,13 +53,19 @@
       <div class="card-body p-0">
         <ul class="list-group list-group-flush review-answers">
           {% for a in q.answers.all %}
-            <li class="list-group-item d-flex justify-content-between align-items-center
-                       {% if sel and sel.answer_id == a.id %}selected{% endif %}">
-              <span>{{ a.text }}</span>
-              {% if sel and sel.answer_id == a.id %}
-                <span class="badge bg-primary">Chosen</span>
-              {% endif %}
-            </li>
+            {% if sel and sel.answer_id == a.id %}
+              <li class="list-group-item d-flex align-items-center gap-3 fw-semibold"
+                  style="background:#cfe2ff; border-left:5px solid #0d6efd; padding-left:1rem;">
+                <span class="badge bg-primary flex-shrink-0">&#10003; Your answer</span>
+                <span>{{ a.text }}</span>
+              </li>
+            {% else %}
+              <li class="list-group-item d-flex align-items-center gap-3 text-muted"
+                  style="border-left:5px solid transparent; padding-left:1rem;">
+                <span class="flex-shrink-0" style="width:84px;"></span>
+                <span>{{ a.text }}</span>
+              </li>
+            {% endif %}
           {% endfor %}
         </ul>
       </div>
@@ -100,13 +106,43 @@
 </script>
 
 <style>
-/* Light hover on review list too */
-.review-answers .list-group-item:hover {
-  background: rgba(0,0,0,.03);
+/* Zebra striping for easier scan, with chosen answer still strongly highlighted */
+.review-answers .list-group-item:nth-child(odd) {
+  background: #eef3ff;
+  border-left-color: #7fa7ff !important;
 }
-.review-answers .list-group-item.selected {
-  background: rgba(13,110,253,.08); /* bs-primary with opacity */
-  border-left: 3px solid #0d6efd;
+.review-answers .list-group-item:nth-child(even) {
+  background: #e4ecfb;
+  border-left-color: #5f8eea !important;
+}
+.review-answers .list-group-item:hover {
+  background: #d7e4ff;
+}
+.review-answers .list-group-item .badge.bg-primary {
+  font-weight: 700;
+}
+
+body.night-mode .review-answers .list-group-item:nth-child(odd) {
+  background: #1f2d40;
+  border-left-color: #4c6f9f !important;
+  color: #d7e4f5 !important;
+}
+body.night-mode .review-answers .list-group-item:nth-child(even) {
+  background: #24344a;
+  border-left-color: #5f84b7 !important;
+  color: #d7e4f5 !important;
+}
+body.night-mode .review-answers .list-group-item:hover {
+  background: #2a3e58;
+}
+body.night-mode .review-answers .list-group-item[style*="background:#cfe2ff"] {
+  background: #35547a !important;
+  border-left-color: #9ac2ff !important;
+  color: #ffffff !important;
+}
+body.night-mode .review-answers .badge.bg-primary {
+  background-color: #7fb1ff !important;
+  color: #0d223f !important;
 }
 </style>
 {% endblock %}

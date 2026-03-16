@@ -27,15 +27,89 @@
     main { flex: 1 1 auto; }
     .card-narrow { max-width: 48rem; margin-inline: auto; }
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    .night-toggle {
+      min-width: 130px;
+      white-space: nowrap;
+    }
+
+    body.night-mode {
+      background: #121821 !important;
+      color: #dbe5f0;
+    }
+    body.night-mode h1,
+    body.night-mode h2,
+    body.night-mode h3,
+    body.night-mode h4,
+    body.night-mode h5,
+    body.night-mode h6,
+    body.night-mode .lead,
+    body.night-mode .fw-semibold,
+    body.night-mode .fw-bold {
+      color: #f2f6ff !important;
+    }
+    body.night-mode header,
+    body.night-mode footer {
+      background: #1a2432 !important;
+      border-color: #2f3b4f !important;
+      color: #dbe5f0;
+    }
+    body.night-mode .card,
+    body.night-mode .list-group-item,
+    body.night-mode .alert,
+    body.night-mode .form-control,
+    body.night-mode .form-select,
+    body.night-mode .table,
+    body.night-mode .badge.bg-light,
+    body.night-mode .bg-white {
+      background-color: #1c2838 !important;
+      color: #dbe5f0 !important;
+      border-color: #334155 !important;
+    }
+    body.night-mode .text-muted,
+    body.night-mode .form-text,
+    body.night-mode .small {
+      color: #b3c0d1 !important;
+    }
+    body.night-mode .btn-outline-secondary {
+      color: #dbe5f0;
+      border-color: #6b7a90;
+      background: #253347;
+    }
+    body.night-mode .btn-outline-secondary:hover {
+      background: #324762;
+      color: #fff;
+    }
+    body.night-mode .btn-outline-secondary:disabled,
+    body.night-mode .btn-outline-secondary.disabled {
+      color: #c6d3e5;
+      border-color: #5a687d;
+      background: #202b3b;
+      opacity: 1;
+    }
+    body.night-mode #timer.badge.bg-dark {
+      background: #3f5f8d !important;
+      color: #f8fbff !important;
+    }
+    body.night-mode a {
+      color: #9bc5ff;
+    }
   </style>
 </head>
 <body class="bg-light">
   <div class="page-wrap">
     <header class="bg-white border-bottom">
       <div class="container py-3">
-        {% block header %}
-          <h1 class="h4 mb-0">{% block title_text %}{% endblock %}</h1>
-        {% endblock %}
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+          <div>
+            {% block header %}
+              <h1 class="h4 mb-0">{% block title_text %}{% endblock %}</h1>
+            {% endblock %}
+          </div>
+          <button type="button" id="nightToggle" class="btn btn-outline-secondary btn-sm night-toggle" aria-pressed="false">
+            Night mode: Off
+          </button>
+        </div>
       </div>
     </header>
 
@@ -68,6 +142,29 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
           integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
           crossorigin="anonymous"></script>
+  <script>
+    (function () {
+      var key = 'publicNightMode';
+      var btn = document.getElementById('nightToggle');
+      if (!btn) return;
+
+      function apply(on) {
+        document.body.classList.toggle('night-mode', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.textContent = on ? 'Night mode: On' : 'Night mode: Off';
+      }
+
+      var saved = localStorage.getItem(key);
+      var on = saved === '1';
+      apply(on);
+
+      btn.addEventListener('click', function () {
+        on = !on;
+        localStorage.setItem(key, on ? '1' : '0');
+        apply(on);
+      });
+    })();
+  </script>
   {% if GOOGLE_MAPS_API_KEY %}
   <script async defer
     src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places"

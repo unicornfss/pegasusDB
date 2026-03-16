@@ -51,24 +51,42 @@ def carry_forward_competencies(new_reg):
 
     two_years_ago = timezone.localdate() - timedelta(days=730)
 
-    prior = (DelegateRegister.objects
-             .filter(
-                 name__iexact=name,
-                 date_of_birth=dob,
-                 outcome='dnf',
-                 booking_day__booking__course_type=course_type,
-                 booking_day__date__gte=two_years_ago,
-                 booking_day__date__lt=bd.date,
-             )
-             .order_by('-booking_day__date', '-id')
-             .first())
+    business = getattr(bd.booking, "business", None)
+
+    prior_qs = (DelegateRegister.objects
+                .filter(
+                    name__iexact=name,
+                    date_of_birth=dob,
+                    outcome='dnf',
+                    booking_day__booking__course_type=course_type,
+                    booking_day__date__gte=two_years_ago,
+                )
+                .exclude(booking_day__booking=bd.booking))
+
+    if business is not None:
+        prior_qs = prior_qs.filter(booking_day__booking__business=business)
+
+    # Use the most-recent matching prior row to determine the source date for the note,
+    # but collect assessments from ALL register rows for that person in the same prior booking.
+    # This is essential for multi-day courses where assessments are stored against the
+    # representative (lowest-id) row while the most-recent row has a different id.
+    prior = prior_qs.order_by('-booking_day__date', '-id').first()
 
     if not prior:
         _remove_cf_note(new_reg)
         return 0
 
+    prior_booking = prior.booking_day.booking
+
+    # Gather all register rows for this delegate in the prior booking
+    all_prior_regs = DelegateRegister.objects.filter(
+        name__iexact=name,
+        date_of_birth=dob,
+        booking_day__booking=prior_booking,
+    )
+
     prev_assessments = (CompetencyAssessment.objects
-                        .filter(register=prior, level__in=['c', 'e'])
+                        .filter(register__in=all_prior_regs, level__in=['c', 'e'])
                         .select_related('course_competency'))
 
     created_count = 0

@@ -73,7 +73,7 @@
             <div class="col-md-5">
               <label class="form-label">Invoice date</label>
               <input class="form-control"
-                     value="{% if invoice.invoice_date %}{{ invoice.invoice_date|date:'d/m/Y' }}{% else %}{{ today_human }}{% endif %}"
+                     value="{{ today_human }}"
                      readonly>
             </div>
           </div>

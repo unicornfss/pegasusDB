@@ -61,6 +61,7 @@ def globals(request):
         "GOOGLE_MAPS_API_KEY": getattr(settings, "GOOGLE_MAPS_API_KEY", ""),
         "ADMIN_INBOX_EMAIL": getattr(settings, "ADMIN_INBOX_EMAIL", ""),
         "OFFICE_PHONE": getattr(settings, "OFFICE_PHONE", ""),
+        "APP_VERSION": getattr(settings, "APP_VERSION", ""),
     }
 
 def logo_context(request):

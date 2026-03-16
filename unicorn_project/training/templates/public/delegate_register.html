@@ -17,10 +17,6 @@
 {% block content %}
 <h3 class="mb-3">Delegate register</h3>
 
-{% for m in messages %}
-  <div class="alert alert-{{ m.tags|default:'info' }}">{{ m }}</div>
-{% endfor %}
-
 <form method="post" class="card p-3">
   {% csrf_token %}
 
@@ -91,7 +87,7 @@
         <option value="">— Select instructor —</option>
         {% if course %}
           {% for i in instructors %}
-            <option value="{{ i.id }}">{{ i.name }}</option>
+            <option value="{{ i.id }}" {% if instructors|length == 1 %}selected{% endif %}>{{ i.name }}</option>
           {% endfor %}
         {% endif %}
       </select>
@@ -194,6 +190,10 @@
           o.textContent = i.name;
           instSelect.appendChild(o);
         });
+
+        if ((data.instructors || []).length === 1) {
+          instSelect.value = String(data.instructors[0].id);
+        }
       } catch (e) {
         console.error("Failed to load instructors", e);
       }

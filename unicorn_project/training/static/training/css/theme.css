@@ -70,6 +70,20 @@ a {
   color: var(--app-text);
 }
 
+html[data-color-scheme="night"] .card-header.bg-light,
+html[data-color-scheme="night"] .card-header.bg-light * {
+  background: var(--app-surface-2) !important;
+  color: #f5f7fb !important;
+  border-color: var(--app-border) !important;
+}
+
+html[data-color-scheme="night"] #bookingTabsContent h5,
+html[data-color-scheme="night"] #bookingTabsContent .card-title,
+html[data-color-scheme="night"] #bookingTabsContent .fw-semibold,
+html[data-color-scheme="night"] #bookingTabsContent .fw-bold {
+  color: #f5f7fb !important;
+}
+
 .table {
   --bs-table-bg: var(--app-surface);
   --bs-table-color: var(--app-text);

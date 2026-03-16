@@ -25,7 +25,7 @@
     <input type="hidden" name="q" value="{{ q_index }}">
 
     <div class="card-body">
-      <p class="lead mb-3">{{ question.text }}</p>
+      <p class="lead mb-3 exam-question-text">{{ question.text }}</p>
 
       {% if question.image_url %}
         <div class="mb-3">
@@ -41,15 +41,73 @@
         </div>
       {% endif %}
 
-      <div class="list-group">
+      <div class="answer-list d-flex flex-column gap-2">
         {% for a in answers %}
-          <label class="list-group-item list-group-item-action d-flex align-items-center gap-2">
-            <input class="form-check-input me-2" type="radio" name="answer" value="{{ a.id }}"
+          <label class="answer-option d-flex align-items-center gap-3 p-3 rounded border user-select-none"
+                 style="cursor:pointer;">
+            <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="answer" value="{{ a.id }}"
                 {% if selected_pk == a.id %}checked{% endif %}>
-            <span>{{ a.text }}</span>
-        </label>
+            <span class="fs-6">{{ a.text }}</span>
+          </label>
         {% endfor %}
       </div>
+
+      <style>
+        .exam-question-text { color: #1e293b; }
+
+        .answer-option { transition: background .15s, border-color .15s, box-shadow .15s; border-width: 2px !important; }
+        .answer-option:nth-child(odd) { background: #eef3ff; border-left: 6px solid #7fa7ff; }
+        .answer-option:nth-child(even) { background: #e4ecfb; border-left: 6px solid #5f8eea; }
+        .answer-option:hover { background: #d7e4ff; border-color: #3d7bfd !important; box-shadow: 0 0 0 2px rgba(13,110,253,.18); }
+        .answer-option.is-selected { background: #9ec5fe; border-color: #0a58ca !important; border-left-color: #084298; font-weight: 700; box-shadow: 0 0 0 3px rgba(13,110,253,.25); }
+
+        body.night-mode .exam-question-text {
+          color: #f2f7ff;
+          background: #1e2c3f;
+          border: 1px solid #3a4f6f;
+          border-left: 6px solid #7fb1ff;
+          border-radius: .5rem;
+          padding: .75rem .9rem;
+        }
+        body.night-mode .answer-option {
+          color: #e8f0fb;
+        }
+        body.night-mode .answer-option:nth-child(odd) {
+          background: #1f2d40;
+          border-left-color: #4c6f9f;
+        }
+        body.night-mode .answer-option:nth-child(even) {
+          background: #24344a;
+          border-left-color: #5f84b7;
+        }
+        body.night-mode .answer-option:hover {
+          background: #2a3e58;
+          border-color: #7fb1ff !important;
+          box-shadow: 0 0 0 2px rgba(127,177,255,.25);
+        }
+        body.night-mode .answer-option.is-selected {
+          background: #35547a;
+          border-left-color: #9ac2ff;
+          border-color: #9ac2ff !important;
+          color: #ffffff;
+          box-shadow: 0 0 0 3px rgba(154,194,255,.3);
+        }
+      </style>
+      <script>
+        (function(){
+          var opts = document.querySelectorAll('.answer-option');
+          function refresh(){
+            opts.forEach(function(lbl){
+              var inp = lbl.querySelector('input[type=radio]');
+              lbl.classList.toggle('is-selected', inp.checked);
+            });
+          }
+          opts.forEach(function(lbl){
+            lbl.addEventListener('click', function(){ setTimeout(refresh, 10); });
+          });
+          refresh();
+        })();
+      </script>
     </div>
 
     <div class="card-footer d-flex justify-content-between">

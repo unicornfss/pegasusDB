@@ -12,7 +12,7 @@ class DelegateExamStartForm(forms.Form):
                                         queryset=Personnel.objects.order_by("name"))
     exam_date = forms.DateField(label="Exam date",
                                 initial=timezone.localdate,
-                                widget=forms.DateInput(attrs={"type": "date"}))
+                                widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
 
     def clean_name(self):
         n = self.cleaned_data["name"].strip()
