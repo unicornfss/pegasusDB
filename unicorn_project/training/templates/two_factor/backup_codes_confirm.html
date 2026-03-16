@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Regenerate Backup Codes{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <h2 class="mb-3">Regenerate Backup Codes</h2>
+    <div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle me-1"></i>
+      <strong>Warning:</strong> This will permanently replace all your existing backup codes. Any unused codes will no longer work.
+    </div>
+    <form method="post">
+      {% csrf_token %}
+      <div class="d-grid gap-2">
+        <button type="submit" class="btn btn-danger">Generate new backup codes</button>
+        <a href="{% url 'user_profile' %}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

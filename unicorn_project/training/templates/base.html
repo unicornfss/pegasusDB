@@ -527,12 +527,6 @@
           }
         });
       });
-
-      const twoFactorModalEl = document.getElementById('twoFactorReminderModal');
-      if (twoFactorModalEl && window.bootstrap && bootstrap.Modal) {
-        const twoFactorModal = new bootstrap.Modal(twoFactorModalEl);
-        twoFactorModal.show();
-      }
     });
   </script>
 
@@ -546,6 +540,90 @@
     onload="document.dispatchEvent(new Event('gmaps:ready'))">
   </script>
   {% endif %}
+
+  <!-- 2FA Reminder Modal -->
+  <div class="modal fade" id="twoFactorReminderModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header bg-info text-white">
+          <h5 class="modal-title">
+            <i class="bi bi-shield-lock"></i> Secure Your Account with 2FA
+          </h5>
+        </div>
+        <div class="modal-body">
+          <p>We're making <strong>Two-Factor Authentication (2FA) a requirement</strong> for all users in the near future. Setting it up now will help secure your account and ensure you won't experience disruptions when the requirement takes effect.</p>
+          
+          <div class="alert alert-warning small mb-0">
+            <i class="bi bi-exclamation-triangle"></i> <strong>Future requirement:</strong> 2FA will become mandatory. Set it up now to stay ahead and keep your account secure!
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="dismiss2faPromptBtn">Remind me later</button>
+          <a href="{% url 'two_factor_setup' %}" class="btn btn-primary">Set up 2FA now</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Show 2FA reminder modal if needed
+    function show2faModalIfNeeded() {
+      // Get the value with a default of 'false' if not present
+      var show2faPrompt = {{ show_2fa_prompt|lower|default:'false' }};
+      var modalEl = document.getElementById('twoFactorReminderModal');
+      
+      if (!modalEl) {
+        console.log('2FA modal element not found');
+        return;
+      }
+      
+      if (!show2faPrompt) {
+        console.log('2FA prompt disabled');
+        return;
+      }
+      
+      if (!window.bootstrap || !bootstrap.Modal) {
+        console.log('Bootstrap Modal not available');
+        // Retry after a short delay
+        setTimeout(show2faModalIfNeeded, 500);
+        return;
+      }
+      
+      try {
+        var modal = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
+        modal.show();
+        console.log('2FA modal shown');
+      } catch(err) {
+        console.error('Error showing 2FA modal:', err);
+      }
+    }
+    
+    // Show modal when DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', show2faModalIfNeeded);
+    } else {
+      show2faModalIfNeeded();
+    }
+
+    // Dismiss button: clear session flag so modal won't show on next page
+    document.addEventListener('DOMContentLoaded', function() {
+      var dismissBtn = document.getElementById('dismiss2faPromptBtn');
+      if (dismissBtn) {
+        dismissBtn.addEventListener('click', function() {
+          fetch('{% url "dismiss_2fa_prompt" %}', {
+            method: 'POST',
+            headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            credentials: 'same-origin'
+          });
+          var modalEl = document.getElementById('twoFactorReminderModal');
+          if (modalEl) {
+            var modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+          }
+        });
+      }
+    });
+  </script>
 
 </body>
 </html>

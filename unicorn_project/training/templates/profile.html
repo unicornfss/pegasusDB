@@ -185,11 +185,28 @@
                     <div class="card-body">
                         <div class="mb-3">
                             <strong>Two-Factor Authentication (2FA):</strong>
-                            <span class="badge bg-secondary ms-2">Disabled</span>
-                            <div class="form-text mt-2">Two-factor authentication is currently turned off for all users.</div>
+                            {% if has_2fa %}
+                                <span class="badge bg-success ms-2">Enabled</span>
+                                <div class="form-text mt-2">Your account is protected with 2FA. Each login requires a code from your authenticator app.</div>
+                            {% else %}
+                                <span class="badge bg-secondary ms-2">Not enabled</span>
+                                <div class="form-text mt-2">Add an extra layer of security by enabling two-factor authentication.</div>
+                            {% endif %}
                         </div>
 
-                        <div class="d-grid">
+                        <div class="d-grid gap-2">
+                            {% if has_2fa %}
+                                <a href="{% url 'regenerate_backup_codes' %}" class="btn btn-outline-secondary">
+                                    <i class="bi bi-key me-1"></i>View / regenerate backup codes
+                                </a>
+                                <a href="{% url 'two_factor_disable' %}" class="btn btn-outline-danger">
+                                    <i class="bi bi-shield-x me-1"></i>Disable 2FA
+                                </a>
+                            {% else %}
+                                <a href="{% url 'two_factor_setup' %}" class="btn btn-outline-success">
+                                    <i class="bi bi-shield-check me-1"></i>Enable 2FA
+                                </a>
+                            {% endif %}
                             <a href="{% url 'password_change' %}" class="btn btn-outline-secondary">
                                 <i class="bi bi-key me-1"></i>Change password
                             </a>

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Backup Codes{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    {% if just_enabled %}
+      <h2 class="mb-1">2FA Enabled Successfully!</h2>
+      <p class="text-muted mb-3">Your account is now protected. Save these backup codes before continuing.</p>
+    {% else %}
+      <h2 class="mb-1">New Backup Codes</h2>
+      <p class="text-muted mb-3">Your old backup codes have been replaced. Save these new codes immediately.</p>
+    {% endif %}
+
+    <div class="card border-warning mb-4">
+      <div class="card-header bg-warning text-dark fw-bold">
+        <i class="bi bi-exclamation-triangle me-1"></i> Save these codes now — they won't be shown again
+      </div>
+      <div class="card-body">
+        <p class="small mb-3">Each code can only be used <strong>once</strong>. Use them if you lose access to your authenticator app.</p>
+        <div class="row row-cols-2 g-2 mb-3">
+          {% for code in backup_codes %}
+            <div class="col">
+              <code class="d-block text-center p-2 bg-light rounded fw-bold" style="font-size: 1.1em; letter-spacing: 2px;">{{ code }}</code>
+            </div>
+          {% endfor %}
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-outline-secondary btn-sm" onclick="copyBackupCodes()">
+            <i class="bi bi-clipboard me-1"></i>Copy all codes
+          </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="printBackupCodes()">
+            <i class="bi bi-printer me-1"></i>Print
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert alert-info small">
+      <i class="bi bi-info-circle me-1"></i>
+      Store these codes somewhere safe — a password manager or printed copy locked away. <strong>Do not store them on this device only.</strong>
+    </div>
+
+    <a href="{% url 'user_profile' %}" class="btn btn-primary">
+      <i class="bi bi-check-circle me-1"></i>I've saved my codes — continue
+    </a>
+  </div>
+</div>
+
+<script>
+function copyBackupCodes() {
+  var codes = [{% for code in backup_codes %}"{{ code }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+  navigator.clipboard.writeText(codes.join('\n')).then(function() {
+    var btn = event.target.closest('button');
+    var orig = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check me-1"></i>Copied!';
+    setTimeout(function() { btn.innerHTML = orig; }, 2000);
+  });
+}
+function printBackupCodes() {
+  var codes = [{% for code in backup_codes %}"{{ code }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+  var w = window.open('', '_blank');
+  w.document.write('<html><head><title>Backup Codes</title><style>body{font-family:monospace;padding:2em}h2{margin-bottom:1em}ul{list-style:none;padding:0}li{font-size:1.2em;margin:.4em 0}</style></head><body>');
+  w.document.write('<h2>Pegasus Training — 2FA Backup Codes</h2><p>Each code can only be used once.</p><ul>');
+  codes.forEach(function(c) { w.document.write('<li>' + c + '</li>'); });
+  w.document.write('</ul></body></html>');
+  w.document.close();
+  w.print();
+}
+</script>
+{% endblock %}

@@ -232,6 +232,7 @@ class Personnel(models.Model):
 
     # Two-factor authentication
     totp_secret = models.CharField(max_length=32, blank=True, null=True, help_text="TOTP secret for 2FA")
+    totp_backup_codes = models.TextField(blank=True, null=True, help_text="JSON list of hashed one-time backup codes")
 
     @property
     def avatar_initial(self):

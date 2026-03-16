@@ -374,6 +374,7 @@ def user_profile(request):
         "current_avatar_icon": current_avatar_icon,
         "current_avatar_initial": personnel.avatar_initial,
         "current_night_mode": current_night_mode,
+        "has_2fa": bool(personnel.totp_secret),
     })
 
 

@@ -88,6 +88,9 @@ def user_display_name(request):
 
 
 def two_factor_prompt(request):
+    """Return whether to show the 2FA prompt to the user."""
+    show_prompt = request.session.get("show_2fa_prompt", False)
     return {
-        "show_two_factor_prompt": False,
+        "show_two_factor_prompt": show_prompt,
+        "show_2fa_prompt": show_prompt,
     }

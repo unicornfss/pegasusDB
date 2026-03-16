@@ -4,23 +4,147 @@
 <div class="row justify-content-center">
   <div class="col-md-5">
     <h2 class="mb-3">Two-Factor Authentication</h2>
-    <p>Please enter the 6-digit code from your authenticator app.</p>
+
     {% if messages %}
       {% for message in messages %}
         <div class="alert alert-{{ message.tags }}">{{ message }}</div>
       {% endfor %}
     {% endif %}
-    <form method="post" class="card p-3">{% csrf_token %}
-      <div class="mb-3">
-        <label class="form-label" for="id_code">Authentication Code</label>
-        <input class="form-control" type="text" name="code" maxlength="6" pattern="[0-9]{6}" required id="id_code" autofocus>
-        <div class="form-text">Enter the 6-digit code from your authenticator app</div>
+
+    {# ── BACKUP CODE MODE ─────────────────────────────────── #}
+    {% if mode == "backup" %}
+      <p>Enter one of your saved backup codes.</p>
+      <form method="post" class="card p-3">
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="backup">
+        <div class="mb-3">
+          <label class="form-label" for="id_code">Backup Code</label>
+          <input class="form-control form-control-lg text-center" type="text" name="code"
+                 maxlength="9" required id="id_code" autofocus placeholder="XXXX-XXXX" autocomplete="off">
+          <div class="form-text">Format: XXXX-XXXX (case-insensitive)</div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="trust_device" id="id_trust_device">
+          <label class="form-check-label" for="id_trust_device">Trust this device for 7 days</label>
+        </div>
+        <div class="d-grid">
+          <button type="submit" class="btn btn-primary">Verify</button>
+        </div>
+      </form>
+
+    {# ── EMAIL CODE MODE ──────────────────────────────────── #}
+    {% elif mode == "email" %}
+      <p>A 6-digit code was sent to <strong>{{ user_email_masked }}</strong>. Enter it below.</p>
+      <form method="post" class="card p-3">
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="email">
+        <div class="mb-3">
+          <label class="form-label" for="id_code">Email Code</label>
+          <input class="form-control form-control-lg text-center" type="text" name="code"
+                 maxlength="6" pattern="[0-9]{6}" required id="id_code" autofocus
+                 placeholder="000000" autocomplete="off" inputmode="numeric">
+          <div class="form-text">This code expires in 10 minutes</div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="trust_device" id="id_trust_device">
+          <label class="form-check-label" for="id_trust_device">Trust this device for 7 days</label>
+        </div>
+        <div class="d-grid gap-2">
+          <button type="submit" class="btn btn-primary">Verify</button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="resendEmailBtn">
+            Resend code
+          </button>
+        </div>
+      </form>
+
+    {# ── TOTP (DEFAULT) MODE ──────────────────────────────── #}
+    {% else %}
+      <p>Please enter the 6-digit code from your authenticator app.</p>
+      <form method="post" class="card p-3">
+        {% csrf_token %}
+        <input type="hidden" name="mode" value="totp">
+        <div class="mb-3">
+          <label class="form-label" for="id_code">Authentication Code</label>
+          <input class="form-control form-control-lg text-center" type="text" name="code"
+                 maxlength="6" pattern="[0-9]{6}" required id="id_code" autofocus
+                 placeholder="000000" autocomplete="off" inputmode="numeric">
+          <div class="form-text">The code changes every 30 seconds</div>
+        </div>
+        <div class="form-check mb-3">
+          <input class="form-check-input" type="checkbox" name="trust_device" id="id_trust_device">
+          <label class="form-check-label" for="id_trust_device">
+            Trust this device for 7 days <span class="text-muted small">(skip 2FA on this browser)</span>
+          </label>
+        </div>
+        <div class="d-grid">
+          <button type="submit" class="btn btn-primary btn-lg">Verify</button>
+        </div>
+      </form>
+    {% endif %}
+
+    {# ── FALLBACK OPTIONS ─────────────────────────────────── #}
+    <div class="mt-3">
+      <p class="text-muted small mb-1">Can't access your authenticator app?</p>
+      <div class="d-flex flex-wrap gap-2">
+        {% if has_backup_codes and mode != "backup" %}
+          <a href="?mode=backup" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-key me-1"></i>Use a backup code
+          </a>
+        {% endif %}
+        {% if mode != "email" %}
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="sendEmailCodeBtn">
+            <i class="bi bi-envelope me-1"></i>Email me a code
+          </button>
+        {% endif %}
+        {% if mode != "totp" %}
+          <a href="?mode=totp" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-phone me-1"></i>Use authenticator app
+          </a>
+        {% endif %}
       </div>
-      <button class="btn btn-primary">Verify</button>
-      <div class="mt-2">
-        <a href="{% url 'login' %}">Back to login</a>
-      </div>
-    </form>
+    </div>
+
+    <div class="mt-3">
+      <a href="{% url 'login' %}" class="text-muted small">Back to login</a>
+    </div>
   </div>
 </div>
+
+<script>
+(function() {
+  var csrfToken = '{{ csrf_token }}';
+  var emailUrl = '{% url "request_email_2fa_code" %}';
+
+  function sendEmailCode(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending…';
+    fetch(emailUrl, {
+      method: 'POST',
+      headers: { 'X-CSRFToken': csrfToken },
+      credentials: 'same-origin'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        window.location.href = '?mode=email';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-envelope me-1"></i>Email me a code';
+        alert(data.error || 'Could not send email. Please try again.');
+      }
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-envelope me-1"></i>Email me a code';
+      alert('Could not send email. Please try again.');
+    });
+  }
+
+  var sendBtn = document.getElementById('sendEmailCodeBtn');
+  if (sendBtn) sendBtn.addEventListener('click', function() { sendEmailCode(this); });
+
+  var resendBtn = document.getElementById('resendEmailBtn');
+  if (resendBtn) resendBtn.addEventListener('click', function() { sendEmailCode(this); });
+})();
+</script>
 {% endblock %}
