@@ -526,27 +526,22 @@ def instructor_dashboard(request):
     incomplete_registers = Booking.objects.none()
 
     # 3) Missing assessments:
-    # A "missing" assessment means: at least one delegate with Pending / blank / null outcome
-    missing_assessments = (
-        Booking.objects
-        .filter(
-            instructor=personnel,
-            status__in=["in_progress", "awaiting_closure", "completed"],  # prevents future bookings flagging
-        )
-        .annotate(
-            pending_regs=Count(
-                "days__registers",
-                filter=(
-                    Q(days__registers__outcome__isnull=True) |
-                    Q(days__registers__outcome__exact="") |
-                    Q(days__registers__outcome__iexact="pending")
-                ),
-                distinct=True
-            )
-        )
-        .filter(pending_regs__gt=0)
-        .distinct()
+    # A "missing" assessment means: at least one unique delegate with Pending / blank / null outcome.
+    # Use the same deduping logic as the closure view (by name + DOB) to avoid false positives
+    # from multi-day courses with mixed outcomes per day.
+    all_candidate_bookings = Booking.objects.filter(
+        instructor=personnel,
+        status__in=["in_progress", "awaiting_closure", "completed"],  # prevents future bookings flagging
     )
+    missing_assessments = []
+    for booking in all_candidate_bookings:
+        unique_regs = _unique_delegates_for_booking(booking)
+        pending_regs = [
+            r for r in unique_regs
+            if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
+        ]
+        if pending_regs:
+            missing_assessments.append(booking)
 
     # 4) Missing feedback:
     # Your FeedbackResponse model has no direct FK to Booking,

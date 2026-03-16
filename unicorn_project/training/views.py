@@ -137,12 +137,23 @@ def public_delegate_register(request):
     - Instructor list is restricted to instructors who have a booking
       for the selected course and date.
     """
-    # 1) Resolve course from ?ct=<code> or posted course_id
+
+    # 1) Resolve course from ?ct=<code>, POST course_id, or form data
     course = None
+    
+    # First try GET ?ct=<code>
     ct_code = (request.GET.get("ct") or "").strip()
     if ct_code:
         course = CourseType.objects.filter(code__iexact=ct_code).first()
-
+    
+    # If not in GET, try POST course_id (from hidden field in form)
+    if not course and request.method == "POST":
+        course_id = (request.POST.get("course_id") or "").strip()
+        if course_id:
+            try:
+                course = CourseType.objects.get(pk=course_id)
+            except CourseType.DoesNotExist:
+                pass
     # For the dropdown when no QR is used
     course_types = CourseType.objects.order_by("name")
 
