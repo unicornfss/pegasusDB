@@ -1381,11 +1381,24 @@ def _assessment_context(booking, user):
     except Exception:
         levels = (("na", "Not assessed"), ("c", "Competent"))
 
+    opt_slots = selection_ctx["optional_slots"]
+
+    # For completed/closed courses: suppress rows that have no ticks,
+    # but only when at least some ticks exist (avoids blanking out courses
+    # where assessments were never recorded electronically).
+    if booking.status == 'completed':
+        ticked_comp_ids = {
+            cid for (_, cid), a in existing.items() if a.level in ('c', 'e')
+        }
+        if ticked_comp_ids:
+            competencies = [c for c in competencies if c.id in ticked_comp_ids]
+            opt_slots = [s for s in opt_slots if s.get("selected") and s["selected"].id in ticked_comp_ids]
+
     return {
         "delegates": delegates,
         "competencies": competencies,
         "selected_optional_competencies": selected_optional,
-        "optional_slots": selection_ctx["optional_slots"],
+        "optional_slots": opt_slots,
         "optional_pool": selection_ctx["optional_pool"],
         "selected_optional_ids": list(selection_ctx["selected_optional_ids"]),
         "required_optional_count": selection_ctx["required_optional_count"],

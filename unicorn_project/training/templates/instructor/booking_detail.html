@@ -1161,6 +1161,7 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+{% if booking.status != 'completed' %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   const assessmentsTabBtn = document.getElementById("assessments-tab");
@@ -1214,6 +1215,7 @@ document.addEventListener("DOMContentLoaded", function () {
   assessmentsTabBtn.addEventListener("shown.bs.tab", refreshAssessmentsPane);
 });
 </script>
+{% endif %}
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
@@ -1270,6 +1272,22 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 </script>
+
+{% if is_locked %}
+<script>
+// Completed/locked course: intercept Bootstrap modal shows BEFORE they happen.
+// Bootstrap dispatches 'show.bs.modal' as a bubbling, cancelable CustomEvent.
+// Calling preventDefault() here stops the modal entirely - no backdrop is created,
+// so there is nothing to clean up and the page stays interactive.
+(function () {
+  var ALWAYS_ALLOWED = ['twoFactorReminderModal'];
+  document.addEventListener('show.bs.modal', function (e) {
+    if (ALWAYS_ALLOWED.indexOf(e.target.id) !== -1) return;
+    e.preventDefault();
+  }, true);  // capture phase: runs before any other handler
+})();
+</script>
+{% endif %}
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {

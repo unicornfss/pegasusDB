@@ -5,7 +5,7 @@
   {% csrf_token %}
 
   <div class="matrix-wrap">
-    <table class="matrix-table" id="assessment-matrix" aria-describedby="assessment help" data-required-optional="{{ required_optional_count|default:0 }}" data-selected-optional="{{ selected_optional_count|default:0 }}">
+    <table class="matrix-table" id="assessment-matrix" aria-describedby="assessment help" data-required-optional="{{ required_optional_count|default:0 }}" data-selected-optional="{{ selected_optional_count|default:0 }}" data-course-closed="{% if booking.status == 'completed' %}1{% else %}0{% endif %}">
       <colgroup>
         <col class="col-comp">
         {% for _ in delegates %}<col class="col-delegate">{% endfor %}
@@ -48,7 +48,7 @@
                         data-register="{{ d.register_id|default:d.id }}"
                         data-competency="{{ comp.id }}"
                         {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
-                        {% if a and a.is_locked %}disabled title="Carried forward from DNF (locked)"{% endif %}
+                    {% if booking.status == 'completed' %}disabled title="Course is completed (read-only)"{% elif a and a.is_locked %}disabled title="Carried forward from DNF (locked)"{% endif %}
                         aria-label="Mark {{ d.name }} competent for {{ comp.name }}" />
                   {% if a and a.is_locked %}
                     <span class="lock-indicator" aria-hidden="true">🔒</span>
@@ -67,6 +67,7 @@
               <div class="comp-name mb-1">Optional module {{ forloop.counter }}</div>
               <select class="form-select form-select-sm optional-module-select"
                       data-slot="{{ slot.index }}"
+                      {% if booking.status == 'completed' %}disabled{% endif %}
                       aria-label="Choose optional module {{ forloop.counter }}">
                 <option value="">Select optional module</option>
                 {% for opt in optional_pool %}
@@ -93,7 +94,7 @@
                           data-register="{{ d.register_id|default:d.id }}"
                           data-competency="{{ slot.selected.id }}"
                           {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
-                          {% if a and a.is_locked %}disabled title="Carried forward from DNF (locked)"{% endif %}
+                        {% if booking.status == 'completed' %}disabled title="Course is completed (read-only)"{% elif a and a.is_locked %}disabled title="Carried forward from DNF (locked)"{% endif %}
                           aria-label="Mark {{ d.name }} competent for optional module {{ slot.selected.name }}" />
                     {% if a and a.is_locked %}
                       <span class="lock-indicator" aria-hidden="true">🔒</span>
@@ -122,6 +123,7 @@
               <!-- visible selector for manual states (no 'Pass') -->
               <select class="form-select form-select-sm outcome-select"
                       data-register="{{ d.register_id|default:d.id }}"
+                      {% if booking.status == 'completed' %}disabled{% endif %}
                       aria-label="Outcome for {{ d.name }}">
 
                 <option value="pending" {% if d.outcome == 'pending' or not d.outcome %}selected{% endif %}>Pending</option>
@@ -155,6 +157,7 @@
 
 </form>
 
+{% if booking.status != 'completed' %}
 <div class="modal fade" id="optionalModulesPromptModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="true" aria-labelledby="optionalModulesPromptTitle" aria-hidden="true">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -180,6 +183,7 @@
     </div>
   </div>
 </div>
+{% endif %}
 
 <p id="assessment" class="visually-hidden">
   Tick a box when the delegate is competent for that competency. A column auto-sets to “Pass” when every box is ticked.
@@ -337,6 +341,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
   const OUTCOME_URL  = "{% url 'instructor_assessment_outcome_autosave' booking.pk %}";
   const OPTIONAL_URL = "{% url 'instructor_assessment_optional_modules_save' booking.pk %}";
   const requiredOptionalCount = parseInt(table.dataset.requiredOptional || '0', 10) || 0;
+  const isClosedCourse = (table.dataset.courseClosed === '1');
   const optionalPromptModalEl = document.getElementById('optionalModulesPromptModal');
   const optionalSelectedCountEl = document.getElementById('optionalModulesSelectedCount');
   const optionalRequiredCountEl = document.getElementById('optionalModulesRequiredCount');
@@ -390,6 +395,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
   }
 
   function optionalSelectionComplete(){
+    if (isClosedCourse) return true;
     return requiredOptionalCount === 0 || selectedOptionalCount() >= requiredOptionalCount;
   }
 
@@ -438,6 +444,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
   }
 
   function warnOptionalSelectionIfNeeded(){
+    if (isClosedCourse) return;
     if (warningShownInCurrentTabVisit) return;
     if (window.sessionStorage && window.sessionStorage.getItem(SKIP_WARN_ONCE_KEY) === '1') {
       window.sessionStorage.removeItem(SKIP_WARN_ONCE_KEY);
@@ -574,7 +581,10 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     if (outInp) outInp.value = outcome;
 
     const chks = table.querySelectorAll(`td.cell[data-col="${colIndex}"] .lv-chk`);
-    if (outcome === 'dnf' || outcome === 'fail') {
+    if (isClosedCourse) {
+      chks.forEach(chk => { chk.disabled = true; });
+      if (outSel) outSel.disabled = true;
+    } else if (outcome === 'dnf' || outcome === 'fail') {
       chks.forEach(chk => { chk.disabled = true; });
     } else {
       chks.forEach(chk => { chk.disabled = false; });
@@ -646,56 +656,60 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
       const hidden = td.querySelector('.level-input');
       if (hidden) hidden.value = chk.checked ? 'c' : 'na';
     };
-    chk.addEventListener('change', () => {
-      setVal();
-      updateColumnState(td.dataset.col);
-
-      const regId = chk.getAttribute('data-register');
-      const compId = chk.getAttribute('data-competency');
-      autosaveCell(regId, compId, chk.checked).catch((err) => {
-        console.error('Autosave failed:', err && err.message ? err.message : err);
-        chk.checked = !chk.checked;
+    if (!isClosedCourse) {
+      chk.addEventListener('change', () => {
         setVal();
         updateColumnState(td.dataset.col);
-        alert('Saving failed. Please try again.');
+
+        const regId = chk.getAttribute('data-register');
+        const compId = chk.getAttribute('data-competency');
+        autosaveCell(regId, compId, chk.checked).catch((err) => {
+          console.error('Autosave failed:', err && err.message ? err.message : err);
+          chk.checked = !chk.checked;
+          setVal();
+          updateColumnState(td.dataset.col);
+          alert('Saving failed. Please try again.');
+        });
       });
-    });
+    }
     setVal();
   });
 
   table.querySelectorAll('td.outcome-cell .outcome-select').forEach(sel => {
     const colIndex = sel.closest('td.outcome-cell').dataset.col;
-    sel.addEventListener('change', () => {
-      updateColumnState(colIndex);
-
-      const regId = sel.getAttribute('data-register');
-      const outcome = sel.value;
-
-      fetch(OUTCOME_URL, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest',
-          'X-CSRFToken': CSRF,
-          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
-        },
-        body: new URLSearchParams({ register_id: regId, outcome })
-      })
-      .then(async (r) => {
-        let data = null;
-        try { data = await r.json(); } catch(_) {}
-        if (!r.ok || (data && data.ok === false)) {
-          const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
-          throw new Error(msg);
-        }
-        return data || { ok: true };
-      })
-      .catch(err => {
-        console.error('Outcome autosave failed:', err && err.message ? err.message : err);
-        alert('Saving failed. Please try again.');
+    if (!isClosedCourse) {
+      sel.addEventListener('change', () => {
         updateColumnState(colIndex);
+
+        const regId = sel.getAttribute('data-register');
+        const outcome = sel.value;
+
+        fetch(OUTCOME_URL, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': CSRF,
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+          },
+          body: new URLSearchParams({ register_id: regId, outcome })
+        })
+        .then(async (r) => {
+          let data = null;
+          try { data = await r.json(); } catch(_) {}
+          if (!r.ok || (data && data.ok === false)) {
+            const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
+            throw new Error(msg);
+          }
+          return data || { ok: true };
+        })
+        .catch(err => {
+          console.error('Outcome autosave failed:', err && err.message ? err.message : err);
+          alert('Saving failed. Please try again.');
+          updateColumnState(colIndex);
+        });
       });
-    });
+    }
   });
   // ----------------------------------------------------------------------
 
@@ -751,33 +765,38 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
 
   syncOptionalOptionAvailability();
   table.querySelectorAll('.optional-module-select').forEach(sel => {
-    sel.addEventListener('change', () => {
-      syncOptionalOptionAvailability();
-      saveOptionalSelections()
-        .then(() => {
-          if (window.sessionStorage) {
-            window.sessionStorage.setItem(SKIP_WARN_ONCE_KEY, '1');
-          }
-          window.location.hash = 'assessments-tab';
-          window.location.reload();
-        })
-        .catch(err => {
-          console.error('Optional module save failed:', err && err.message ? err.message : err);
-          alert('Saving optional module selections failed. Please try again.');
-        });
-    });
+    if (!isClosedCourse) {
+      sel.addEventListener('change', () => {
+        syncOptionalOptionAvailability();
+        saveOptionalSelections()
+          .then(() => {
+            if (window.sessionStorage) {
+              window.sessionStorage.setItem(SKIP_WARN_ONCE_KEY, '1');
+            }
+            window.location.hash = 'assessments-tab';
+            window.location.reload();
+          })
+          .catch(err => {
+            console.error('Optional module save failed:', err && err.message ? err.message : err);
+            alert('Saving optional module selections failed. Please try again.');
+          });
+      });
+    }
   });
 
   const assessmentsTabBtn = document.getElementById('assessments-tab');
   if (assessmentsTabBtn) {
     if (window.__assessmentOptionalWarnHandler) {
       assessmentsTabBtn.removeEventListener('shown.bs.tab', window.__assessmentOptionalWarnHandler);
+      window.__assessmentOptionalWarnHandler = null;
     }
-    window.__assessmentOptionalWarnHandler = warnOptionalSelectionIfNeeded;
-    assessmentsTabBtn.addEventListener('shown.bs.tab', window.__assessmentOptionalWarnHandler);
-    assessmentsTabBtn.addEventListener('hide.bs.tab', function () {
-      warningShownInCurrentTabVisit = false;
-    });
+    if (!isClosedCourse) {
+      window.__assessmentOptionalWarnHandler = warnOptionalSelectionIfNeeded;
+      assessmentsTabBtn.addEventListener('shown.bs.tab', window.__assessmentOptionalWarnHandler);
+      assessmentsTabBtn.addEventListener('hide.bs.tab', function () {
+        warningShownInCurrentTabVisit = false;
+      });
+    }
   }
   // ----------------------------------------------------------------------
 
