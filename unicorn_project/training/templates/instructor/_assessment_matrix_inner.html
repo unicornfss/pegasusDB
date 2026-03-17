@@ -346,7 +346,9 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
   const optionalSelectedCountEl = document.getElementById('optionalModulesSelectedCount');
   const optionalRequiredCountEl = document.getElementById('optionalModulesRequiredCount');
   const SKIP_WARN_ONCE_KEY = 'assessmentOptionalWarnSkipOnce';
-  let warningShownInCurrentTabVisit = false;
+  if (typeof window.__assessmentOptionalWarnShownInVisit !== 'boolean') {
+    window.__assessmentOptionalWarnShownInVisit = false;
+  }
 
   // --- csrf helper ----------------------------------------------------------
   function getCookie(name){
@@ -445,7 +447,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
 
   function warnOptionalSelectionIfNeeded(){
     if (isClosedCourse) return;
-    if (warningShownInCurrentTabVisit) return;
+    if (window.__assessmentOptionalWarnShownInVisit) return;
     if (window.sessionStorage && window.sessionStorage.getItem(SKIP_WARN_ONCE_KEY) === '1') {
       window.sessionStorage.removeItem(SKIP_WARN_ONCE_KEY);
       return;
@@ -458,7 +460,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     if (optionalPromptModalEl && window.bootstrap && bootstrap.Modal) {
       const modal = bootstrap.Modal.getOrCreateInstance(optionalPromptModalEl, { backdrop: 'static', keyboard: true });
       modal.show();
-      warningShownInCurrentTabVisit = true;
+      window.__assessmentOptionalWarnShownInVisit = true;
     }
   }
 
@@ -793,9 +795,22 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     if (!isClosedCourse) {
       window.__assessmentOptionalWarnHandler = warnOptionalSelectionIfNeeded;
       assessmentsTabBtn.addEventListener('shown.bs.tab', window.__assessmentOptionalWarnHandler);
-      assessmentsTabBtn.addEventListener('hide.bs.tab', function () {
-        warningShownInCurrentTabVisit = false;
-      });
+
+      if (window.__assessmentOptionalWarnResetHandler) {
+        assessmentsTabBtn.removeEventListener('hide.bs.tab', window.__assessmentOptionalWarnResetHandler);
+      }
+      window.__assessmentOptionalWarnResetHandler = function () {
+        window.__assessmentOptionalWarnShownInVisit = false;
+      };
+      assessmentsTabBtn.addEventListener('hide.bs.tab', window.__assessmentOptionalWarnResetHandler);
+
+      // If this partial was injected while Assessments is already the active tab
+      // (AJAX refresh path), the shown.bs.tab event already happened.
+      // Run the warning check once on init so first-open still prompts.
+      const assessmentsPane = document.getElementById('assessments-pane');
+      if (assessmentsPane && assessmentsPane.classList.contains('active') && assessmentsPane.classList.contains('show')) {
+        setTimeout(warnOptionalSelectionIfNeeded, 0);
+      }
     }
   }
   // ----------------------------------------------------------------------
