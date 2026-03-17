@@ -591,9 +591,17 @@
 
     {% if course_exams %}
 
-      <div class="alert alert-info py-2 small" style="font-size:0.85rem;">
-        <strong>Note:</strong> Live exam results refresh automatically when you are not interacting with this section.<br>
-        Move your mouse away from the table to allow refreshing.
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div class="alert alert-info py-2 small mb-0" style="font-size:0.85rem;">
+          <strong>Note:</strong> Live exam results refresh automatically when you are not interacting with this section.<br>
+          Move your mouse away from the table to allow refreshing.
+        </div>
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{% url 'instructor_exams_summary_pdf' booking.id %}"
+           target="_blank" rel="noopener">
+          <i class="bi bi-file-earmark-pdf me-1"></i>
+          Exams summary PDF
+        </a>
       </div>
 
       <div class="accordion" id="examAccordion">
@@ -692,6 +700,12 @@
                                   href="{% url 'instructor_attempt_incorrect' att.id %}?back={{ booking.id }}&tab=exams">
                                   See incorrect & authorise re-test
                                 </a>
+
+                                <a class="btn btn-sm btn-outline-dark"
+                                   href="{% url 'instructor_attempt_response_pdf' att.id %}"
+                                   target="_blank" rel="noopener">
+                                  Export responses PDF
+                                </a>
                               </td>
                             </tr>
                           {% endfor %}
@@ -703,6 +717,88 @@
 
                   </table>
                 </div>
+
+                {% with wrong_rows=exam_wrong_summary_by_seq|get_item:seq %}
+                  {% if wrong_rows %}
+                    <div class="border-top p-3 bg-light-subtle">
+                      <div class="row g-3 align-items-start">
+                        <div class="col-lg-7">
+                          <h6 class="mb-2">Most-missed questions</h6>
+                          <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                              <thead>
+                                <tr>
+                                  <th>Question</th>
+                                  <th class="text-end">Wrong</th>
+                                  <th class="text-end">% of attempts</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {% for row in wrong_rows|slice:":8" %}
+                                  <tr>
+                                    <td>
+                                      <div class="fw-semibold d-flex align-items-center gap-2">
+                                        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                                          {% if forloop.counter0 == 0 %}background:#0d6efd;
+                                          {% elif forloop.counter0 == 1 %}background:#20c997;
+                                          {% elif forloop.counter0 == 2 %}background:#ffc107;
+                                          {% elif forloop.counter0 == 3 %}background:#dc3545;
+                                          {% elif forloop.counter0 == 4 %}background:#6f42c1;
+                                          {% elif forloop.counter0 == 5 %}background:#fd7e14;
+                                          {% elif forloop.counter0 == 6 %}background:#198754;
+                                          {% else %}background:#6c757d;
+                                          {% endif %}"></span>
+                                        Q{{ row.question_order|default:"?" }}
+                                      </div>
+                                      <div class="small text-muted">{{ row.question_text|truncatechars:120 }}</div>
+                                      {% if row.wrong_choices %}
+                                        <div class="small mt-1">
+                                          <span class="text-muted">Most chosen wrong answers:</span>
+                                          {% for choice in row.wrong_choices|slice:":3" %}
+                                            <div>• {{ choice.answer_text|truncatechars:70 }} <span class="text-muted">({{ choice.count }})</span></div>
+                                          {% endfor %}
+                                        </div>
+                                      {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ row.wrong_attempts }}/{{ row.total_attempts }}</td>
+                                    <td class="text-end">{{ row.wrong_pct }}%</td>
+                                  </tr>
+                                {% endfor %}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                        <div class="col-lg-5">
+                          <h6 class="mb-2">Wrong-answer distribution</h6>
+                          <canvas class="exam-wrong-pie"
+                                  width="260"
+                                  height="260"
+                                  data-seq="{{ seq }}"
+                                  data-values="{% for row in wrong_rows|slice:':8' %}{{ row.wrong_attempts }}{% if not forloop.last %},{% endif %}{% endfor %}">
+                          </canvas>
+                          <div class="small mt-2">
+                            {% for row in wrong_rows|slice:":8" %}
+                              <div class="d-flex align-items-center gap-2 mb-1">
+                                <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                                  {% if forloop.counter0 == 0 %}background:#0d6efd;
+                                  {% elif forloop.counter0 == 1 %}background:#20c997;
+                                  {% elif forloop.counter0 == 2 %}background:#ffc107;
+                                  {% elif forloop.counter0 == 3 %}background:#dc3545;
+                                  {% elif forloop.counter0 == 4 %}background:#6f42c1;
+                                  {% elif forloop.counter0 == 5 %}background:#fd7e14;
+                                  {% elif forloop.counter0 == 6 %}background:#198754;
+                                  {% else %}background:#6c757d;
+                                  {% endif %}"></span>
+                                <span>Q{{ row.question_order|default:"?" }} — {{ row.question_text|truncatechars:55 }}</span>
+                              </div>
+                            {% endfor %}
+                          </div>
+                          <div class="small text-muted mt-2">Pie segments represent number of delegates who got each question wrong.</div>
+                        </div>
+                      </div>
+                    </div>
+                  {% endif %}
+                {% endwith %}
               </div>
             </div>
           </div>
@@ -715,6 +811,55 @@
 
   </div>
 {% endif %}
+
+  <script>
+    (function () {
+      function drawPie(canvas, values) {
+        if (!canvas || !values.length) return;
+        const ctx = canvas.getContext('2d');
+        const total = values.reduce((a, b) => a + b, 0);
+        if (!total) return;
+
+        const colors = ['#0d6efd', '#20c997', '#ffc107', '#dc3545', '#6f42c1', '#fd7e14', '#198754', '#6c757d'];
+        const cx = canvas.width / 2;
+        const cy = canvas.height / 2;
+        const r = Math.min(cx, cy) - 8;
+
+        let start = -Math.PI / 2;
+        values.forEach((val, i) => {
+          const angle = (val / total) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.arc(cx, cy, r, start, start + angle);
+          ctx.closePath();
+          ctx.fillStyle = colors[i % colors.length];
+          ctx.fill();
+          start += angle;
+        });
+
+        // Donut center
+        ctx.beginPath();
+        ctx.arc(cx, cy, r * 0.52, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.fillStyle = '#212529';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Wrong', cx, cy - 3);
+        ctx.font = '12px sans-serif';
+        ctx.fillText(String(total), cx, cy + 15);
+      }
+
+      window.drawExamWrongPies = function () {
+        document.querySelectorAll('.exam-wrong-pie').forEach((canvas) => {
+        const raw = (canvas.dataset.values || '').split(',').map((x) => parseInt(x, 10)).filter((x) => Number.isFinite(x) && x > 0);
+        drawPie(canvas, raw);
+        });
+      };
+
+      window.drawExamWrongPies();
+    })();
+  </script>
 
 
     <!-- Pane: Feedback -->
@@ -1186,17 +1331,21 @@ document.addEventListener('DOMContentLoaded', function () {
         var currentSection = examsPane.querySelector('#' + CSS.escape(id));
         if (!currentSection) return;
 
-        var freshTbody = freshSection.querySelector('table tbody');
-        var currTbody  = currentSection.querySelector('table tbody');
+        var freshBody = freshSection.querySelector('.accordion-body');
+        var currBody  = currentSection.querySelector('.accordion-body');
 
-        if (freshTbody && currTbody) {
-          var freshHTML = freshTbody.innerHTML.trim();
-          if (currTbody.innerHTML.trim() !== freshHTML) {
-            currTbody.innerHTML = freshHTML;
+        if (freshBody && currBody) {
+          var freshHTML = freshBody.innerHTML.trim();
+          if (currBody.innerHTML.trim() !== freshHTML) {
+            currBody.innerHTML = freshHTML;
             changed = true;
           }
         }
       });
+
+      if (changed && typeof window.drawExamWrongPies === 'function') {
+        window.drawExamWrongPies();
+      }
 
       console.log('[ExamsRefresh] done' + (changed ? ' (content updated)' : ' (no changes)'));
     } catch (e) {
@@ -1230,92 +1379,6 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) stop();
     else start();
-  });
-});
-</script>
-
-<!-- Script to make exams tab auto refresh -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  var examsTabBtn = document.getElementById('exams-tab');
-  var examsPane   = document.getElementById('exams-pane');
-  var indicator   = document.getElementById('exams-refresh-indicator');
-
-  if (!examsPane) return;
-  var timer = null;
-
-  function isPaneActive() {
-    return examsPane.classList.contains('active') && examsPane.classList.contains('show');
-  }
-  function isUserInteracting() {
-    if (examsPane.matches(':hover')) return true;
-    var ae = document.activeElement;
-    return !!(ae && examsPane.contains(ae));
-  }
-  function showIndicator(on) {
-    if (indicator) indicator.style.opacity = on ? '1' : '0';
-  }
-
-  async function refreshExams() {
-    if (!isPaneActive()) return;
-    if (isUserInteracting()) return;
-    console.log('[ExamsRefresh] refreshing…');
-    showIndicator(true);
-    try {
-      var url = window.location.href.split('#')[0];
-      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
-        cache: 'no-store',
-        headers: { 'X-Requested-With': 'fetch' }
-      });
-      if (!res.ok) return;
-      var html = await res.text();
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      var freshPane = tmp.querySelector('#exams-pane');
-      if (!freshPane) return;
-      var freshSections = freshPane.querySelectorAll('.accordion-collapse[id^="ex-c-"]');
-      freshSections.forEach(function (freshSection) {
-        var id = freshSection.id;
-        var currentSection = examsPane.querySelector('#' + CSS.escape(id));
-        if (!currentSection) return;
-        var freshTbody = freshSection.querySelector('table tbody');
-        var currTbody  = currentSection.querySelector('table tbody');
-        if (freshTbody && currTbody && currTbody.innerHTML.trim() !== freshTbody.innerHTML.trim()) {
-          currTbody.innerHTML = freshTbody.innerHTML;
-        }
-      });
-      console.log('[ExamsRefresh] done');
-    } catch (e) {
-      console.log('[ExamsRefresh] error:', e);
-    } finally {
-      setTimeout(() => showIndicator(false), 300);
-    }
-  }
-
-  function start() {
-    if (!timer) timer = setInterval(refreshExams, 5000);
-  }
-  function stop() {
-    if (timer) { clearInterval(timer); timer = null; }
-  }
-  start();
-  if (examsTabBtn) examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
-    document.addEventListener('visibilitychange', function () {
-    if (document.hidden) stop(); else start();
-  });
-
-  // Restart refresh when mouse leaves the exams pane
-  examsPane.addEventListener('mouseleave', function () {
-    if (isPaneActive()) {
-      console.log('[ExamsRefresh] mouse left exams pane — resuming refresh');
-      start();
-    }
-  });
-
-  // Pause when mouse enters the exams pane
-  examsPane.addEventListener('mouseenter', function () {
-    console.log('[ExamsRefresh] mouse entered exams pane — pausing refresh');
-    stop();
   });
 });
 </script>

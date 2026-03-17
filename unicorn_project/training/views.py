@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_GET, require_POST
 from django.template.loader import render_to_string
+from urllib.parse import urlencode
 from .models import AccidentReport, Business, TrainingLocation, CourseType, Personnel, Booking, BookingDay, DelegateRegister, FeedbackResponse
 from .forms import (
     AccidentReportForm,
@@ -201,8 +202,16 @@ def public_delegate_register(request):
         delegate.booking_day = bd
         delegate.save()
 
-        messages.success(request, "Thank you — you’re on the register.")
-        return redirect(request.get_full_path())
+        # Redirect to a dedicated confirmation screen to avoid accidental duplicate submissions.
+        success_params = {}
+        if course and getattr(course, "code", None):
+            success_params["ct"] = course.code
+        if form.cleaned_data.get("date"):
+            success_params["date"] = form.cleaned_data["date"].isoformat()
+        success_url = reverse("public_delegate_register_success")
+        if success_params:
+            success_url = f"{success_url}?{urlencode(success_params)}"
+        return redirect(success_url)
 
     return render(
         request,
@@ -213,6 +222,27 @@ def public_delegate_register(request):
             "course_types": course_types,
             "instructors": instructors,
         },
+    )
+
+
+def public_delegate_register_success(request):
+    """Confirmation page shown after a successful public delegate registration."""
+    params = {}
+    ct = (request.GET.get("ct") or "").strip()
+    date = (request.GET.get("date") or "").strip()
+    if ct:
+        params["ct"] = ct
+    if date:
+        params["date"] = date
+
+    register_another_url = reverse("public_delegate_register")
+    if params:
+        register_another_url = f"{register_another_url}?{urlencode(params)}"
+
+    return render(
+        request,
+        "public/delegate_register_success.html",
+        {"register_another_url": register_another_url},
     )
 
 @login_required

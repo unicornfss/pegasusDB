@@ -2203,6 +2203,7 @@ def instructor_booking_detail(request, pk):
     # ---------------------------------------------------------
     course_exams = []
     attempts_by_exam = {}
+    exam_wrong_summary_by_seq = {}
     has_exam = False
 
     # All exams for this course type
@@ -2236,9 +2237,12 @@ def instructor_booking_detail(request, pk):
                 tmp[seq].append(att)
 
             attempts_by_exam = dict(tmp)
+            completed_attempts = [a for a in attempts_qs if getattr(a, "finished_at", None)]
+            exam_wrong_summary_by_seq = _booking_exam_wrong_summary(course_exams, completed_attempts)
 
     ctx["course_exams"] = course_exams
     ctx["attempts_by_exam"] = attempts_by_exam
+    ctx["exam_wrong_summary_by_seq"] = exam_wrong_summary_by_seq
     ctx["has_exam"] = has_exam
 
     # If someone manually uses ?tab=exams for a course with no exams, force tab back
@@ -4568,6 +4572,85 @@ def _attempt_header_bits(attempt):
         "result_class": result_class,
     }
 
+
+def _booking_exam_wrong_summary(course_exams, attempts_qs):
+    """Return wrong-answer summary keyed by exam sequence for display/export."""
+    exam_by_id = {ex.id: ex for ex in course_exams}
+    attempts_by_exam_id = defaultdict(int)
+    for att in attempts_qs:
+        attempts_by_exam_id[getattr(att, "exam_id", None)] += 1
+
+    wrong_choices_rows = (
+        ExamAttemptAnswer.objects
+        .filter(attempt__in=attempts_qs, is_correct=False, answer__isnull=False)
+        .values("attempt__exam_id", "question_id", "answer__text")
+        .annotate(choice_count=Count("id"))
+        .order_by("attempt__exam_id", "question_id", "-choice_count", "answer__text")
+    )
+
+    no_answer_rows = (
+        ExamAttemptAnswer.objects
+        .filter(attempt__in=attempts_qs, is_correct=False, answer__isnull=True)
+        .values("attempt__exam_id", "question_id")
+        .annotate(choice_count=Count("id"))
+    )
+
+    wrong_choices_by_question = defaultdict(list)
+    for row in wrong_choices_rows:
+        key = (row["attempt__exam_id"], row["question_id"])
+        wrong_choices_by_question[key].append({
+            "answer_text": row.get("answer__text") or "",
+            "count": int(row.get("choice_count") or 0),
+        })
+
+    for row in no_answer_rows:
+        key = (row["attempt__exam_id"], row["question_id"])
+        wrong_choices_by_question[key].append({
+            "answer_text": "No answer selected",
+            "count": int(row.get("choice_count") or 0),
+        })
+
+    wrong_rows = (
+        ExamAttemptAnswer.objects
+        .filter(attempt__in=attempts_qs, is_correct=False)
+        .values("attempt__exam_id", "question_id", "question__order", "question__text")
+        .annotate(wrong_count=Count("id"), wrong_attempts=Count("attempt", distinct=True))
+        .order_by("attempt__exam_id", "question__order", "question_id")
+    )
+
+    summary_by_seq = defaultdict(list)
+    for row in wrong_rows:
+        exam_id = row["attempt__exam_id"]
+        exam = exam_by_id.get(exam_id)
+        if not exam:
+            continue
+        seq = getattr(exam, "sequence", None) or exam.id
+        total_attempts = max(attempts_by_exam_id.get(exam_id, 0), 1)
+        wrong_attempts = int(row.get("wrong_attempts") or 0)
+        choice_key = (exam_id, row["question_id"])
+        wrong_choices = wrong_choices_by_question.get(choice_key, [])
+        wrong_choices = sorted(wrong_choices, key=lambda x: x["count"], reverse=True)
+        summary_by_seq[seq].append({
+            "question_id": row["question_id"],
+            "question_order": row.get("question__order"),
+            "question_text": row.get("question__text") or "",
+            "wrong_count": int(row.get("wrong_count") or 0),
+            "wrong_attempts": wrong_attempts,
+            "wrong_pct": round((wrong_attempts * 100.0) / total_attempts, 1),
+            "total_attempts": total_attempts,
+            "wrong_choices": wrong_choices,
+        })
+
+    # Order each exam summary by most-frequently-wrong first.
+    for seq in list(summary_by_seq.keys()):
+        summary_by_seq[seq] = sorted(
+            summary_by_seq[seq],
+            key=lambda r: (r["wrong_attempts"], r["wrong_count"], -(r["question_order"] or 0)),
+            reverse=True,
+        )
+
+    return dict(summary_by_seq)
+
 @login_required
 def instructor_attempt_review(request, attempt_id: int):
     """
@@ -4638,7 +4721,7 @@ def instructor_attempt_incorrect(request, attempt_id: int):
             attempt.viva_decided_by = getattr(request.user, "personnel", None)
 
             attempt.save()
-            messages.success(request, f"Viva saved: {outcome.title()} recorded at {attempt.viva_decided_at:%d %b %Y, %H:%M}.")
+            messages.success(request, "Viva decision saved.")
         else:
             messages.error(request, "Viva not saved: invalid outcome posted.")
 
@@ -4768,6 +4851,154 @@ def instructor_attempt_authorize_retake(request, attempt_id: int):
         if hasattr(attempt, "booking_id") and attempt.booking_id
         else reverse("instructor_bookings")
     )
+
+
+@login_required
+def instructor_attempt_response_pdf(request, attempt_id: int):
+    """Export one delegate's full exam responses to PDF."""
+    attempt = get_object_or_404(
+        ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor", "booking"),
+        pk=attempt_id,
+    )
+    if not _can_view_attempt(request.user, attempt):
+        return HttpResponseForbidden("Not allowed.")
+
+    answers = (
+        ExamAttemptAnswer.objects
+        .select_related("question", "answer")
+        .filter(attempt=attempt)
+        .order_by("question__order", "question_id")
+    )
+
+    stats = _attempt_header_stats(attempt)
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    left = 18 * mm
+    y = height - 18 * mm
+
+    def _line(text, size=10, gap=5):
+        nonlocal y
+        if y < 18 * mm:
+            pdf.showPage()
+            y = height - 18 * mm
+        pdf.setFont("Helvetica", size)
+        pdf.drawString(left, y, str(text))
+        y -= gap * mm
+
+    _line("Delegate Exam Response", size=14, gap=7)
+    _line(f"Delegate: {_display_name_for_attempt(attempt)}")
+    _line(f"Exam: {attempt.exam.course_type.name} / {attempt.exam.exam_code}")
+    _line(f"Date of birth: {attempt.date_of_birth:%d %b %Y}")
+    _line(f"Score: {stats['correct_count']}/{stats['total_questions']} ({stats['result_label']})", gap=7)
+
+    for idx, aa in enumerate(answers, start=1):
+        question_text = (aa.question.text or "").strip().replace("\n", " ")
+        chosen_text = (aa.answer.text if aa.answer else "No answer selected")
+        correctness = "Correct" if aa.is_correct else "Incorrect"
+        _line(f"Q{idx}: {question_text}", size=9, gap=4)
+        _line(f"Chosen: {chosen_text}", size=9, gap=4)
+        _line(f"Result: {correctness}", size=9, gap=6)
+
+    pdf.showPage()
+    pdf.save()
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    filename = f"exam-response-attempt-{attempt.pk}.pdf"
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+def instructor_exams_summary_pdf(request, booking_id):
+    """Export exam summary PDF: delegate scores + commonly missed questions."""
+    instr = getattr(request.user, "personnel", None)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "instructor"),
+        pk=booking_id,
+    )
+    if not instr or booking.instructor_id != instr.id:
+        return HttpResponseForbidden("Not allowed.")
+
+    booking_dates = list(BookingDay.objects.filter(booking=booking).values_list("date", flat=True))
+    course_exams = list(Exam.objects.filter(course_type=booking.course_type).order_by("sequence", "id"))
+    attempts_qs = list(
+        ExamAttempt.objects
+        .select_related("exam")
+        .filter(
+            exam__course_type=booking.course_type,
+            instructor=booking.instructor,
+            exam_date__in=booking_dates,
+            finished_at__isnull=False,
+        )
+        .order_by("exam__sequence", "exam_date", "delegate_name")
+    )
+    summary_by_seq = _booking_exam_wrong_summary(course_exams, attempts_qs)
+
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    left = 18 * mm
+    y = height - 18 * mm
+
+    def _line(text, size=10, gap=5):
+        nonlocal y
+        if y < 18 * mm:
+            pdf.showPage()
+            y = height - 18 * mm
+        pdf.setFont("Helvetica", size)
+        pdf.drawString(left, y, str(text))
+        y -= gap * mm
+
+    _line("Exam Summary", size=14, gap=7)
+    _line(f"Course: {booking.course_type.name}")
+    _line(f"Booking ref: {booking.course_reference}", gap=7)
+
+    _line("Delegate scores", size=12, gap=6)
+    if not attempts_qs:
+        _line("No completed attempts yet.")
+    else:
+        for att in attempts_qs:
+            total = max(getattr(att, "total_questions", 0) or 0, 1)
+            pct = round((float(getattr(att, "score_correct", 0) or 0) * 100.0) / total, 1)
+            _line(
+                f"{_display_name_for_attempt(att)} | Exam {getattr(att.exam, 'sequence', '-')}: "
+                f"{att.score_correct}/{att.total_questions} ({pct}%)"
+            )
+
+    _line("", gap=2)
+    _line("Most missed questions", size=12, gap=6)
+    if not summary_by_seq:
+        _line("No incorrect answers recorded yet.")
+    else:
+        for ex in course_exams:
+            seq = getattr(ex, "sequence", None) or ex.id
+            rows = summary_by_seq.get(seq, [])
+            if not rows:
+                continue
+            _line(f"Exam {seq} — {ex.title}", size=11, gap=5)
+            for row in rows[:12]:
+                qtxt = (row["question_text"] or "").strip().replace("\n", " ")
+                qtxt = qtxt[:95] + ("…" if len(qtxt) > 95 else "")
+                _line(
+                    f"Q{row['question_order'] or '?'}: {row['wrong_attempts']}/{row['total_attempts']} "
+                    f"({row['wrong_pct']}%) wrong — {qtxt}",
+                    size=9,
+                    gap=4,
+                )
+            _line("", gap=2)
+
+    pdf.showPage()
+    pdf.save()
+    pdf_bytes = buffer.getvalue()
+    buffer.close()
+
+    filename = f"exam-summary-{booking.course_reference}.pdf"
+    response = HttpResponse(pdf_bytes, content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 @login_required
 @require_POST

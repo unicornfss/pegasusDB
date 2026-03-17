@@ -1,0 +1,54 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}Registration Submitted{% endblock %}
+
+{% block content %}
+<style>
+  .register-success-card {
+    background: #ffffff !important;
+    color: #1f2937 !important;
+    border: 1px solid rgba(15, 23, 42, .14) !important;
+  }
+
+  .register-success-card .text-muted {
+    color: #475569 !important;
+  }
+
+  .register-success-card h3,
+  .register-success-card p,
+  .register-success-card .card-body {
+    color: inherit !important;
+  }
+
+  body.night-mode .register-success-card,
+  html[data-color-scheme="night"] .register-success-card,
+  html[data-color-scheme="night"] body .register-success-card {
+    background: #1c2838 !important;
+    color: #e7effb !important;
+    border: 1px solid #334155 !important;
+  }
+
+  body.night-mode .register-success-card .text-muted,
+  html[data-color-scheme="night"] .register-success-card .text-muted,
+  html[data-color-scheme="night"] body .register-success-card .text-muted {
+    color: #c2cfde !important;
+  }
+</style>
+
+<div class="card shadow-sm register-success-card">
+  <div class="card-body p-4 p-md-5 text-center">
+    <div class="mb-3">
+      <i class="bi bi-check-circle-fill text-success" style="font-size: 2.25rem;"></i>
+    </div>
+    <h3 class="mb-2">Registration submitted</h3>
+    <p class="text-muted mb-4">
+      Thank you. Your details have been recorded successfully.
+    </p>
+
+    <a class="btn btn-primary" href="{{ register_another_url }}">
+      Pass device to next person to register
+    </a>
+  </div>
+</div>
+{% endblock %}

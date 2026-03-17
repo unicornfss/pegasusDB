@@ -150,6 +150,7 @@
 
       function apply(on) {
         document.body.classList.toggle('night-mode', on);
+        document.documentElement.setAttribute('data-color-scheme', on ? 'night' : 'day');
         btn.setAttribute('aria-pressed', on ? 'true' : 'false');
         btn.textContent = on ? 'Night mode: On' : 'Night mode: Off';
       }

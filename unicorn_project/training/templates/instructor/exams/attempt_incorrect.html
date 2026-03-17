@@ -31,15 +31,6 @@
   {% endif %}
 </div>
 
-{# MESSAGES (diagnostic) #}
-{% if messages %}
-  <div class="w-100 mb-3">
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }}">{{ message }}</div>
-    {% endfor %}
-  </div>
-{% endif %}
-
 
   {# Header summary #}
   <div class="alert alert-light border d-flex flex-wrap align-items-center gap-3">

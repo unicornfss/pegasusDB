@@ -66,6 +66,7 @@ urlpatterns = [
 
     # ---------- Public delegate register ----------
     path("register/", views.public_delegate_register, name="public_delegate_register"),
+    path("register/success/", views.public_delegate_register_success, name="public_delegate_register_success"),
     path("register/instructors/", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),
 
     # ---------- Public/API helpers ----------
@@ -227,6 +228,16 @@ urlpatterns = [
         "app/instructor/exams/attempt/<int:attempt_id>/incorrect/",
         views_instructor.instructor_attempt_incorrect,
         name="instructor_attempt_incorrect",
+    ),
+    path(
+        "app/instructor/exams/attempt/<int:attempt_id>/pdf/",
+        views_instructor.instructor_attempt_response_pdf,
+        name="instructor_attempt_response_pdf",
+    ),
+    path(
+        "app/instructor/booking/<uuid:booking_id>/exams/summary.pdf",
+        views_instructor.instructor_exams_summary_pdf,
+        name="instructor_exams_summary_pdf",
     ),
     path(
     "app/instructor/exams/attempt/<int:attempt_id>/authorize-retake/",
