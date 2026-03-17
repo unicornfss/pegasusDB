@@ -186,6 +186,7 @@ urlpatterns = [
     path("app/instructor/booking/<uuid:pk>/assessment/pdf/", instv.instructor_assessment_pdf, name="instructor_assessment_pdf"),
     path("app/instructor/booking/<uuid:pk>/assessments/autosave/", views_instructor.instructor_assessment_autosave,name="instructor_assessment_autosave"),
     path("app/instructor/booking/<uuid:pk>/assessments/outcome/", views_instructor.instructor_assessment_outcome_autosave, name="instructor_assessment_outcome_autosave"),
+    path("app/instructor/booking/<uuid:pk>/assessments/optional-modules/", views_instructor.instructor_assessment_optional_modules_save, name="instructor_assessment_optional_modules_save"),
 
     # ---------- Public Feedback (QR-driven form) ----------
     path("feedback/", views.public_feedback_form, name="public_feedback_form"),

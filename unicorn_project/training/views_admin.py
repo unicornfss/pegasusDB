@@ -397,7 +397,6 @@ CourseCompetencyFormSet = inlineformset_factory(
     parent_model=CourseType,
     model=CourseCompetency,
     form=CourseCompetencyForm,
-    fields=["name", "sort_order"],
     extra=0,           # <-- No automatic blank row
     can_delete=True,
 )
@@ -418,7 +417,31 @@ def course_form(request, pk=None):
         if form.is_valid() and formset.is_valid():
             ct = form.save()
             formset.instance = ct
-            formset.save()
+
+            # Save competencies safely: keep any competency that is still referenced
+            # by assessments instead of raising ProtectedError.
+            competency_forms = formset.save(commit=False)
+            blocked_deletes = []
+
+            for obj in formset.deleted_objects:
+                try:
+                    obj.delete()
+                except ProtectedError:
+                    blocked_deletes.append(obj)
+
+            for obj in competency_forms:
+                obj.course_type = ct
+                obj.save()
+
+            if hasattr(formset, "save_m2m"):
+                formset.save_m2m()
+
+            if blocked_deletes:
+                names = ", ".join([getattr(o, "name", "(unnamed)") for o in blocked_deletes])
+                messages.warning(
+                    request,
+                    f"Some competencies were not deleted because existing assessments depend on them: {names}."
+                )
 
             # ⬇️ REPLACED BLOCK: auto-sync exams (create missing, delete extras, clear if unticked)
             try:
@@ -450,7 +473,7 @@ def course_form(request, pk=None):
 
             messages.success(request, "Course type saved.")
 
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_course_list")
             return redirect("admin_course_edit", pk=ct.pk)
         else:
@@ -1423,7 +1446,7 @@ def admin_user_new(request):
             profile.save()
 
             messages.success(request, "User created.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_user_list")
             return redirect("admin_user_edit", pk=u.pk)
         else:
@@ -1464,7 +1487,7 @@ def admin_user_edit(request, pk: int):
             profile.save()
 
             messages.success(request, "Changes saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_user_list")
             return redirect("admin_user_edit", pk=user.pk)
         else:
@@ -1620,7 +1643,7 @@ def admin_personnel_new(request):
                 inst.user.groups.set(groups)
                 inst.user.save()
 
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_personnel_list")
             return redirect("admin_personnel_edit", pk=inst.pk)
 
@@ -1906,7 +1929,7 @@ def booking_day_registers(request, pk):
                 obj.delete()
 
             messages.success(request, "Registers saved.")
-            if "save_return" in post:
+            if "save_return" in request.POST:
                 return redirect("admin_booking_edit", pk=day.booking_id)
             return redirect("admin_booking_day_registers", pk=day.pk)
         else:

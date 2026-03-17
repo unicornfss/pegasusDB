@@ -1,11 +1,11 @@
 {% load dict_extras %}
 
-{% if delegates and competencies %}
+{% if delegates and competencies or delegates and required_optional_count %}
 <form method="post" action="{% url 'instructor_assessment_save' booking.id %}" id="matrix-form">
   {% csrf_token %}
 
   <div class="matrix-wrap">
-    <table class="matrix-table" id="assessment-matrix" aria-describedby="assessment help">
+    <table class="matrix-table" id="assessment-matrix" aria-describedby="assessment help" data-required-optional="{{ required_optional_count|default:0 }}" data-selected-optional="{{ selected_optional_count|default:0 }}">
       <colgroup>
         <col class="col-comp">
         {% for _ in delegates %}<col class="col-delegate">{% endfor %}
@@ -60,6 +60,54 @@
           </tr>
         {% endfor %}
 
+        {% for slot in optional_slots %}
+          <tr class="{% cycle 'row-odd' 'row-even' %} optional-row" data-optional-slot="{{ slot.index }}">
+            <th class="sticky left comp-cell">
+              <div class="comp-code">O{{ forloop.counter }}</div>
+              <div class="comp-name mb-1">Optional module {{ forloop.counter }}</div>
+              <select class="form-select form-select-sm optional-module-select"
+                      data-slot="{{ slot.index }}"
+                      aria-label="Choose optional module {{ forloop.counter }}">
+                <option value="">Select optional module</option>
+                {% for opt in optional_pool %}
+                  {% if slot.selected and slot.selected.id == opt.id %}
+                    <option value="{{ opt.id }}" selected>{{ opt.name }}</option>
+                  {% elif opt.id not in selected_optional_ids %}
+                    <option value="{{ opt.id }}">{{ opt.name }}</option>
+                  {% endif %}
+                {% endfor %}
+              </select>
+            </th>
+
+            {% for d in delegates %}
+              {% if slot.selected %}
+                {% with key=d.id|pair:slot.selected.id %}
+                  {% with a=existing|get_item:key %}
+                  <td class="cell optional-assess-cell" data-col="{{ forloop.counter0 }}">
+                    <input type="hidden"
+                          name="level_{{ d.id }}_{{ slot.selected.id }}"
+                          value="{% if a and a.level %}{{ a.level }}{% else %}na{% endif %}"
+                          class="level-input" />
+                    <input type="checkbox"
+                          class="lv-chk assess-toggle"
+                          data-register="{{ d.register_id|default:d.id }}"
+                          data-competency="{{ slot.selected.id }}"
+                          {% if a and a.level == 'c' %}checked{% elif a and a.level == 'e' %}checked{% endif %}
+                          {% if a and a.is_locked %}disabled title="Carried forward from DNF (locked)"{% endif %}
+                          aria-label="Mark {{ d.name }} competent for optional module {{ slot.selected.name }}" />
+                    {% if a and a.is_locked %}
+                      <span class="lock-indicator" aria-hidden="true">🔒</span>
+                    {% endif %}
+                  </td>
+                  {% endwith %}
+                {% endwith %}
+              {% else %}
+                <td class="optional-empty-cell" data-col="{{ forloop.counter0 }}">Select module</td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+
         <!-- Outcome row -->
         <tr class="outcome-row">
           <th class="sticky left comp-cell outcome-label">
@@ -106,6 +154,32 @@
 
 
 </form>
+
+<div class="modal fade" id="optionalModulesPromptModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="true" aria-labelledby="optionalModulesPromptTitle" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-info text-white">
+        <h5 class="modal-title" id="optionalModulesPromptTitle">
+          <i class="bi bi-ui-checks-grid me-1"></i> Optional Modules Required
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">
+          Please select all required optional modules before finalising assessment outcomes.
+        </p>
+        <div class="alert alert-warning small mb-0">
+          Selected: <strong id="optionalModulesSelectedCount">0</strong>
+          of
+          <strong id="optionalModulesRequiredCount">0</strong> required.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got it</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <p id="assessment" class="visually-hidden">
   Tick a box when the delegate is competent for that competency. A column auto-sets to “Pass” when every box is ticked.
@@ -261,6 +335,13 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
   // --- endpoints ------------------------------------------------------------
   const AUTOSAVE_URL = "{% url 'instructor_assessment_autosave' booking.pk %}";
   const OUTCOME_URL  = "{% url 'instructor_assessment_outcome_autosave' booking.pk %}";
+  const OPTIONAL_URL = "{% url 'instructor_assessment_optional_modules_save' booking.pk %}";
+  const requiredOptionalCount = parseInt(table.dataset.requiredOptional || '0', 10) || 0;
+  const optionalPromptModalEl = document.getElementById('optionalModulesPromptModal');
+  const optionalSelectedCountEl = document.getElementById('optionalModulesSelectedCount');
+  const optionalRequiredCountEl = document.getElementById('optionalModulesRequiredCount');
+  const SKIP_WARN_ONCE_KEY = 'assessmentOptionalWarnSkipOnce';
+  let warningShownInCurrentTabVisit = false;
 
   // --- csrf helper ----------------------------------------------------------
   function getCookie(name){
@@ -301,6 +382,76 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
       exportBtn.classList.add('disabled');
       exportBtn.setAttribute('aria-disabled','true');
       exportBtn.setAttribute('tabindex','-1');
+    }
+  }
+
+  function selectedOptionalCount(){
+    return Array.from(table.querySelectorAll('.optional-module-select')).filter(sel => !!sel.value).length;
+  }
+
+  function optionalSelectionComplete(){
+    return requiredOptionalCount === 0 || selectedOptionalCount() >= requiredOptionalCount;
+  }
+
+  function syncOptionalOptionAvailability(){
+    const selects = Array.from(table.querySelectorAll('.optional-module-select'));
+    const picked = new Set(selects.map(s => s.value).filter(Boolean));
+
+    selects.forEach(sel => {
+      const own = sel.value;
+      Array.from(sel.options).forEach(opt => {
+        if (!opt.value) {
+          opt.disabled = false;
+          opt.hidden = false;
+          return;
+        }
+        const unavailable = picked.has(opt.value) && opt.value !== own;
+        opt.disabled = unavailable;
+        opt.hidden = unavailable;
+      });
+    });
+  }
+
+  function saveOptionalSelections(){
+    const selectedIds = Array.from(table.querySelectorAll('.optional-module-select'))
+      .map(sel => sel.value)
+      .filter(Boolean);
+
+    return fetch(OPTIONAL_URL, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRFToken': CSRF,
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+      },
+      body: new URLSearchParams(selectedIds.map(v => ['selected_ids', v]))
+    }).then(async (r) => {
+      let data = null;
+      try { data = await r.json(); } catch(_) {}
+      if (!r.ok || (data && data.ok === false)) {
+        const msg = (data && data.error) ? data.error : (r.status + ' ' + r.statusText);
+        throw new Error(msg);
+      }
+      return data || { ok: true };
+    });
+  }
+
+  function warnOptionalSelectionIfNeeded(){
+    if (warningShownInCurrentTabVisit) return;
+    if (window.sessionStorage && window.sessionStorage.getItem(SKIP_WARN_ONCE_KEY) === '1') {
+      window.sessionStorage.removeItem(SKIP_WARN_ONCE_KEY);
+      return;
+    }
+    if (!requiredOptionalCount) return;
+    const count = selectedOptionalCount();
+    if (count >= requiredOptionalCount) return;
+    if (optionalSelectedCountEl) optionalSelectedCountEl.textContent = String(count);
+    if (optionalRequiredCountEl) optionalRequiredCountEl.textContent = String(requiredOptionalCount);
+    if (optionalPromptModalEl && window.bootstrap && bootstrap.Modal) {
+      const modal = bootstrap.Modal.getOrCreateInstance(optionalPromptModalEl, { backdrop: 'static', keyboard: true });
+      modal.show();
+      warningShownInCurrentTabVisit = true;
     }
   }
 
@@ -465,7 +616,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     const outInp = outTd?.querySelector('.outcome-input');
     const manual = outSel ? outSel.value : 'pending';
 
-    const outcome = allChecked ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
+    const outcome = (allChecked && optionalSelectionComplete()) ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
 
     // capture previous BEFORE UI apply
     const prev = (outInp && outInp.value) ? outInp.value : 'pending';
@@ -567,7 +718,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     const outInp = outTd?.querySelector('.outcome-input');
     const manual = outSel ? outSel.value : 'pending';
 
-    const outcome = allChecked ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
+    const outcome = (allChecked && optionalSelectionComplete()) ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
 
     // ✅ NEW: always mirror the computed outcome into the hidden input immediately
     if (outInp) outInp.value = outcome;
@@ -597,6 +748,37 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
 
   refreshExportState();
   updateClosurePaneAssessStatus();
+
+  syncOptionalOptionAvailability();
+  table.querySelectorAll('.optional-module-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      syncOptionalOptionAvailability();
+      saveOptionalSelections()
+        .then(() => {
+          if (window.sessionStorage) {
+            window.sessionStorage.setItem(SKIP_WARN_ONCE_KEY, '1');
+          }
+          window.location.hash = 'assessments-tab';
+          window.location.reload();
+        })
+        .catch(err => {
+          console.error('Optional module save failed:', err && err.message ? err.message : err);
+          alert('Saving optional module selections failed. Please try again.');
+        });
+    });
+  });
+
+  const assessmentsTabBtn = document.getElementById('assessments-tab');
+  if (assessmentsTabBtn) {
+    if (window.__assessmentOptionalWarnHandler) {
+      assessmentsTabBtn.removeEventListener('shown.bs.tab', window.__assessmentOptionalWarnHandler);
+    }
+    window.__assessmentOptionalWarnHandler = warnOptionalSelectionIfNeeded;
+    assessmentsTabBtn.addEventListener('shown.bs.tab', window.__assessmentOptionalWarnHandler);
+    assessmentsTabBtn.addEventListener('hide.bs.tab', function () {
+      warningShownInCurrentTabVisit = false;
+    });
+  }
   // ----------------------------------------------------------------------
 
 })();

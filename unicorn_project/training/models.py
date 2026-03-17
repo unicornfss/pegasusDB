@@ -100,6 +100,11 @@ class CourseType(models.Model):
         help_text="Required if 'This course contains theoretical exam(s)' is ticked.",
         validators=[MinValueValidator(1)],
     )
+    optional_modules_required = models.PositiveSmallIntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(5)],
+        help_text="How many optional competencies must be selected in the assessment matrix (0-5).",
+    )
 
     onedrive_folder_link = models.URLField(
     blank=True,
@@ -407,7 +412,8 @@ class Booking(models.Model):
     start_time  = models.TimeField(null=True, blank=True, default=None)
     booking_notes = models.TextField(blank=True)
 
-    # Optional modules selected for this specific booking (choose 2)
+    # Optional modules selected for this specific booking.
+    # Required count is controlled by CourseType.optional_modules_required.
     optional_modules = models.ManyToManyField(
         "CourseCompetency",
         blank=True,

@@ -340,23 +340,43 @@ class CourseTypeForm(forms.ModelForm):
             "name", "code", "duration_days",
             "certificate_duration", "onedrive_folder_link",
             "default_course_fee", "default_instructor_fee",
-            "has_exam", "number_of_exams",
+            "has_exam", "number_of_exams", "optional_modules_required",
         ]
+        widgets = {
+            "optional_modules_required": forms.Select(
+                choices=[(i, str(i)) for i in range(0, 6)],
+                attrs={"class": "form-select"},
+            ),
+        }
 
 class CourseCompetencyForm(forms.ModelForm):
+    do_not_use = forms.BooleanField(required=False)
+
     class Meta:
         model = CourseCompetency
-        fields = ["name", "sort_order"]  # ONLY these two
+        fields = ["name", "sort_order", "is_optional"]
 
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control", "placeholder": "Competency"}),
             "sort_order": forms.NumberInput(attrs={"class": "form-control", "style": "max-width:7rem"}),
+            "is_optional": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["name"].label = "Competency"
         self.fields["sort_order"].label = "Order"
+        self.fields["is_optional"].label = "Optional competency"
+        self.fields["do_not_use"].label = "Do not use this competency"
+        self.fields["do_not_use"].widget.attrs.update({"class": "form-check-input"})
+        self.fields["do_not_use"].initial = not getattr(self.instance, "is_active", True)
+
+    def save(self, commit=True):
+        obj = super().save(commit=False)
+        obj.is_active = not bool(self.cleaned_data.get("do_not_use"))
+        if commit:
+            obj.save()
+        return obj
 
 
 CourseCompetencyFormSet = inlineformset_factory(

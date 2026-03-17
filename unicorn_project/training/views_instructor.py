@@ -1276,6 +1276,79 @@ def _unique_delegates_for_booking(booking):
     return unique
 
 
+def _assessment_selection_context(booking, delegates=None):
+    """
+    Build competency selection state for a booking matrix.
+
+    Rules:
+    - Mandatory competencies: non-optional competencies that are active,
+      plus any already assessed for this booking (historic preservation).
+    - Optional competencies: selected via Booking.optional_modules.
+    - Required optional count comes from CourseType.optional_modules_required.
+    """
+    if delegates is None:
+        delegates = _unique_delegates_for_booking(booking)
+
+    existing_comp_ids = set()
+    if delegates:
+        existing_comp_ids = set(
+            CompetencyAssessment.objects
+            .filter(register__in=delegates)
+            .values_list("course_competency_id", flat=True)
+        )
+
+    required_optional_count = int(getattr(booking.course_type, "optional_modules_required", 0) or 0)
+
+    mandatory_competencies = list(
+        CourseCompetency.objects
+        .filter(course_type=booking.course_type, is_optional=False)
+        .filter(Q(is_active=True) | Q(id__in=existing_comp_ids))
+        .order_by("sort_order", "name", "id")
+    )
+
+    selected_optional = list(
+        booking.optional_modules
+        .filter(course_type=booking.course_type, is_optional=True)
+        .filter(Q(is_active=True) | Q(id__in=existing_comp_ids))
+        .order_by("sort_order", "name", "id")
+    )
+    if required_optional_count >= 0:
+        selected_optional = selected_optional[:required_optional_count]
+
+    selected_ids = {c.id for c in selected_optional}
+    optional_pool = list(
+        CourseCompetency.objects
+        .filter(course_type=booking.course_type, is_optional=True, is_active=True)
+        .order_by("sort_order", "name", "id")
+    )
+    for comp in selected_optional:
+        if comp.id not in {c.id for c in optional_pool}:
+            optional_pool.append(comp)
+
+    optional_slots = []
+    for idx in range(required_optional_count):
+        optional_slots.append({
+            "index": idx,
+            "selected": selected_optional[idx] if idx < len(selected_optional) else None,
+        })
+
+    required_competencies = mandatory_competencies + selected_optional
+    required_competency_ids = {c.id for c in required_competencies}
+
+    return {
+        "mandatory_competencies": mandatory_competencies,
+        "selected_optional": selected_optional,
+        "optional_slots": optional_slots,
+        "optional_pool": optional_pool,
+        "required_optional_count": required_optional_count,
+        "selected_optional_count": len(selected_optional),
+        "required_competencies": required_competencies,
+        "required_competency_ids": required_competency_ids,
+        "existing_comp_ids": existing_comp_ids,
+        "selected_optional_ids": selected_ids,
+    }
+
+
 
 def _assessment_context(booking, user):
     # permissions: staff or assigned instructor (match the guard used in the view)
@@ -1287,18 +1360,16 @@ def _assessment_context(booking, user):
     # --- Delegates: unique by (name + DOB) for the whole booking ---
     delegates = _unique_delegates_for_booking(booking)
 
-    # --- Competencies: all for this course type ---
-    competencies = list(
-        CourseCompetency.objects
-        .filter(course_type=booking.course_type)
-        .order_by("sort_order", "name", "id")
-    )
+    selection_ctx = _assessment_selection_context(booking, delegates)
+    competencies = selection_ctx["mandatory_competencies"]
+    selected_optional = selection_ctx["selected_optional"]
+    required_competencies = selection_ctx["required_competencies"]
 
     existing = {}
-    if delegates and competencies:
+    if delegates and required_competencies:
         qs = (
             CompetencyAssessment.objects
-            .filter(register__in=delegates, course_competency__in=competencies)
+            .filter(register__in=delegates, course_competency__in=required_competencies)
             .select_related("register", "course_competency")
         )
         for a in qs:
@@ -1313,6 +1384,12 @@ def _assessment_context(booking, user):
     return {
         "delegates": delegates,
         "competencies": competencies,
+        "selected_optional_competencies": selected_optional,
+        "optional_slots": selection_ctx["optional_slots"],
+        "optional_pool": selection_ctx["optional_pool"],
+        "selected_optional_ids": list(selection_ctx["selected_optional_ids"]),
+        "required_optional_count": selection_ctx["required_optional_count"],
+        "selected_optional_count": selection_ctx["selected_optional_count"],
         "existing": existing,
         "levels": levels,
     }
@@ -2454,6 +2531,13 @@ def instructor_assessment_autosave(request, pk):
     except CourseCompetency.DoesNotExist:
         return JsonResponse({"ok": False, "error": "Competency not found"}, status=404)
 
+    allowed_ids = _assessment_selection_context(reg.booking_day.booking)["required_competency_ids"]
+    if comp.id not in allowed_ids:
+        return JsonResponse(
+            {"ok": False, "error": "This competency is not enabled for this course assessment."},
+            status=400,
+        )
+
     # we must store an Instructor instance, not a User
     instr = Personnel.objects.filter(user=request.user).first()
     if not instr:
@@ -2500,6 +2584,73 @@ def instructor_assessment_autosave(request, pk):
         pass
 
     return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+def instructor_assessment_optional_modules_save(request, pk):
+    instr = _get_instructor(request.user)
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type", "instructor"),
+        pk=pk,
+    )
+
+    if not instr or booking.instructor_id != getattr(instr, "id", None):
+        return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
+
+    if getattr(booking, "status", "") == "completed":
+        return JsonResponse(
+            {"ok": False, "error": "Course is closed — only Invoicing is editable."},
+            status=400,
+        )
+
+    required = int(getattr(booking.course_type, "optional_modules_required", 0) or 0)
+    raw_ids = request.POST.getlist("selected_ids[]") or request.POST.getlist("selected_ids")
+
+    cleaned_ids = []
+    seen = set()
+    for raw in raw_ids:
+        val = (raw or "").strip()
+        if not val or val in seen:
+            continue
+        seen.add(val)
+        cleaned_ids.append(val)
+
+    if len(cleaned_ids) > required:
+        return JsonResponse(
+            {"ok": False, "error": f"Only {required} optional module(s) can be selected."},
+            status=400,
+        )
+
+    if required == 0 and cleaned_ids:
+        return JsonResponse(
+            {"ok": False, "error": "This course does not allow optional module selections."},
+            status=400,
+        )
+
+    valid_qs = CourseCompetency.objects.filter(
+        id__in=cleaned_ids,
+        course_type=booking.course_type,
+        is_optional=True,
+        is_active=True,
+    )
+    valid_ids = {str(c.id) for c in valid_qs}
+    if len(valid_ids) != len(cleaned_ids):
+        return JsonResponse(
+            {"ok": False, "error": "One or more selected optional modules are invalid."},
+            status=400,
+        )
+
+    booking.optional_modules.set(valid_qs)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "required": required,
+            "selected_count": len(cleaned_ids),
+            "selected_ids": cleaned_ids,
+        }
+    )
 
 @login_required
 def instructor_day_registers_poll(request, pk: int):
@@ -3219,7 +3370,18 @@ def instructor_assessment_save(request, pk):
     # Deduplicate delegates by (name + DOB)
     delegates = _unique_delegates_for_booking(booking)
 
-    comps = list(CourseCompetency.objects.filter(course_type=booking.course_type).only("id"))
+    selection_ctx = _assessment_selection_context(booking, delegates)
+    comps = list(selection_ctx["required_competencies"])
+    required_optional_count = selection_ctx["required_optional_count"]
+    selected_optional_count = selection_ctx["selected_optional_count"]
+
+    if required_optional_count and selected_optional_count < required_optional_count:
+        messages.error(
+            request,
+            f"Please select all required optional modules ({selected_optional_count}/{required_optional_count}) before saving outcomes.",
+        )
+        return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
+
     reg_map = {str(r.id): r for r in delegates}
     comp_ids = [str(c.id) for c in comps]
 
@@ -3262,7 +3424,7 @@ def instructor_assessment_save(request, pk):
         if posted_outcome not in valid_outcomes:
             posted_outcome = "pending"
 
-        all_competent = True
+        all_competent = selected_optional_count >= required_optional_count
         for cid in comp_ids:
             if request.POST.get(f"level_{rid}_{cid}", "na") not in {"c", "e"}:
                 all_competent = False
@@ -3313,11 +3475,7 @@ def instructor_assessment_pdf(request, pk):
         messages.error(request, "All delegates must have an outcome before exporting.")
         return redirect(f"{reverse('instructor_booking_detail', kwargs={'pk': booking.id})}#assessments-tab")
 
-    competencies = list(
-        CourseCompetency.objects
-        .filter(course_type=booking.course_type, is_active=True)
-        .order_by("sort_order", "name")
-    )
+    competencies = _assessment_selection_context(booking, delegates)["required_competencies"]
 
     assess_map = {
         (rid, cid): lvl
