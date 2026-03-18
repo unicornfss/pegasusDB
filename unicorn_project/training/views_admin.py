@@ -7,6 +7,7 @@ from decimal import Decimal
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.auth import login
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.contrib.auth.models import User, Group
 from django.core.exceptions import PermissionDenied
@@ -109,6 +110,63 @@ def admin_required(view_func):
 def _ensure_core_groups():
     for gname in ("admin", "instructor"):
         Group.objects.get_or_create(name=gname)
+
+
+IMPERSONATOR_SESSION_KEY = "impersonator_user_id"
+IMPERSONATED_SESSION_KEY = "impersonated_user_id"
+
+
+def _login_backend_for(user):
+    return getattr(user, "backend", None) or settings.AUTHENTICATION_BACKENDS[0]
+
+
+@login_required
+@require_http_methods(["POST"])
+def admin_impersonate_user(request, pk: int):
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
+    target = get_object_or_404(User, pk=pk, is_active=True)
+
+    if target.pk == request.user.pk:
+        messages.info(request, "You are already signed in as this user.")
+        return redirect(request.POST.get("next") or "admin_personnel_list")
+
+    if target.is_superuser:
+        messages.error(request, "For safety, superuser-to-superuser impersonation is disabled.")
+        return redirect(request.POST.get("next") or "admin_personnel_list")
+
+    original_superuser_id = request.session.get(IMPERSONATOR_SESSION_KEY) or request.user.pk
+
+    login(request, target, backend=_login_backend_for(request.user))
+    request.session[IMPERSONATOR_SESSION_KEY] = original_superuser_id
+    request.session[IMPERSONATED_SESSION_KEY] = target.pk
+
+    messages.warning(request, f"Impersonation mode enabled: viewing as {target.username}.")
+    return redirect(request.POST.get("next") or "home")
+
+
+@login_required
+@require_http_methods(["POST"])
+def admin_stop_impersonation(request):
+    original_superuser_id = request.session.get(IMPERSONATOR_SESSION_KEY)
+    if not original_superuser_id:
+        messages.info(request, "Impersonation mode is not active.")
+        return redirect(request.POST.get("next") or "home")
+
+    original = User.objects.filter(pk=original_superuser_id, is_active=True, is_superuser=True).first()
+    if not original:
+        request.session.pop(IMPERSONATOR_SESSION_KEY, None)
+        request.session.pop(IMPERSONATED_SESSION_KEY, None)
+        messages.error(request, "Could not restore the original superuser session.")
+        return redirect(request.POST.get("next") or "home")
+
+    login(request, original, backend=_login_backend_for(request.user))
+    request.session.pop(IMPERSONATOR_SESSION_KEY, None)
+    request.session.pop(IMPERSONATED_SESSION_KEY, None)
+
+    messages.success(request, "Returned to your superuser account.")
+    return redirect(request.POST.get("next") or "app_admin_dashboard")
 
 def _make_local_aware(local_date, local_time):
     """

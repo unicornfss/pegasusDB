@@ -297,6 +297,21 @@
     <div class="flex-grow-1 d-flex flex-column">
 
       <main class="flex-grow-1 p-3">
+        {% if request.session.impersonator_user_id %}
+          <div class="alert alert-warning d-flex align-items-center justify-content-between gap-3" role="alert">
+            <div>
+              <i class="bi bi-person-bounding-box me-1"></i>
+              You are viewing the site as <strong>{{ request.user.username }}</strong> (impersonation mode).
+            </div>
+            <form method="post" action="{% url 'admin_stop_impersonation' %}" class="m-0">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="{{ request.get_full_path }}">
+              <button type="submit" class="btn btn-sm btn-outline-dark">
+                Stop impersonating
+              </button>
+            </form>
+          </div>
+        {% endif %}
         {% if messages %}
           {% for m in messages %}
             <div class="alert alert-{{ m.tags }}">{{ m }}</div>

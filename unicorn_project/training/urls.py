@@ -143,6 +143,8 @@ urlpatterns = [
     path("app/admin/users/", app_admin.admin_user_list, name="admin_user_list"),
     path("app/admin/users/new/", app_admin.admin_user_new, name="admin_user_new"),
     path("app/admin/users/<int:pk>/", app_admin.admin_user_edit, name="admin_user_edit"),
+    path("app/admin/users/<int:pk>/impersonate/", app_admin.admin_impersonate_user, name="admin_impersonate_user"),
+    path("app/impersonation/stop/", app_admin.admin_stop_impersonation, name="admin_stop_impersonation"),
 
     # Registers (admin)
     path("app/admin/booking-days/<int:pk>/registers/", app_admin.booking_day_registers, name="admin_booking_day_registers"),

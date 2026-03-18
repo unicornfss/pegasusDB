@@ -20,6 +20,15 @@
       <td>{{ i.email|default:"—" }}</td>
       <td>{{ i.telephone|default:"—" }}</td>
       <td class="text-end">
+        {% if request.user.is_superuser and i.user and not i.user.is_superuser %}
+          <form method="post" action="{% url 'admin_impersonate_user' i.user.pk %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{% url 'admin_personnel_list' %}">
+            <button type="submit" class="btn btn-sm btn-outline-warning" title="View site as this user">
+              <i class="bi bi-person-bounding-box"></i> View as user
+            </button>
+          </form>
+        {% endif %}
         <a class="btn btn-sm btn-outline-primary" href="{% url 'admin_personnel_edit' i.pk %}">
           <i class="bi bi-pencil-square"></i> Edit
         </a>
