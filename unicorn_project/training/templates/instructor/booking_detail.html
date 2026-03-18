@@ -66,7 +66,7 @@
       {% for ex, d in dummy_exam_day_pairs %}
         {% if d %}
           <a class="btn btn-outline-primary btn-sm"
-             href="{% url 'delegate_exam_start' %}?examcode={{ ex.exam_code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+               href="{% url 'delegate_exam_start' %}?examcode={{ ex.exam_code }}&exam_date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
              target="_blank" rel="noopener">
             <i class="bi bi-pencil-square me-1"></i>Exam {{ ex.sequence }} - Day {{ forloop.counter }}
           </a>

@@ -129,7 +129,8 @@ def delegate_exam_start(request):
         # if form invalid, the form will show its field errors; no banner needed
     else:
         initial_exam_date = timezone.localdate()
-        raw_date = request.GET.get("exam_date", "")
+        # Backward-compatible: accept both exam_date (current) and date (legacy links).
+        raw_date = request.GET.get("exam_date", "") or request.GET.get("date", "")
         if raw_date:
             try:
                 from datetime import date as _date
