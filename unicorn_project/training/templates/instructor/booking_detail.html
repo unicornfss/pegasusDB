@@ -627,6 +627,7 @@
                         <th>Delegate</th>
                         <th style="width: 120px;">DOB</th>
                         <th style="width: 90px;">Attempt</th>
+                        <th style="width: 120px;" class="text-center">Time left</th>
                         <th style="width: 110px;" class="text-center">Score</th>
                         <th style="width: 90px;"  class="text-center">%</th>
                         <th style="width: 120px;">Result</th>
@@ -647,6 +648,15 @@
                                 {% endif %}
                               </td>
                               <td>{{ att.attempt_number|default:"1" }}</td>
+
+                              <td class="text-center">
+                                {% if att.finished_at %}
+                                  <span class="text-muted">Submitted</span>
+                                {% else %}
+                                  <span class="badge text-bg-secondary exam-time-left"
+                                        data-expires-ms="{{ att.expires_at|date:'U' }}000">--:--</span>
+                                {% endif %}
+                              </td>
 
                               <!-- Score (only when finished) -->
                               <td class="text-center">
@@ -710,7 +720,7 @@
                             </tr>
                           {% endfor %}
                         {% else %}
-                          <tr><td colspan="7" class="text-muted p-3">No attempts yet for this exam.</td></tr>
+                          <tr><td colspan="8" class="text-muted p-3">No attempts yet for this exam.</td></tr>
                         {% endif %}
                       {% endwith %}
                     </tbody>
@@ -1303,6 +1313,43 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   var timer = null;
+  var liveCountdownTimer = null;
+
+  function formatRemaining(seconds) {
+    if (seconds <= 0) return '0:00';
+    var h = Math.floor(seconds / 3600);
+    var m = Math.floor((seconds % 3600) / 60);
+    var s = seconds % 60;
+    if (h > 0) {
+      return h + ':' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+    }
+    return m + ':' + String(s).padStart(2, '0');
+  }
+
+  function startExamCountdowns() {
+    if (liveCountdownTimer) {
+      clearInterval(liveCountdownTimer);
+      liveCountdownTimer = null;
+    }
+
+    function tick() {
+      var now = Date.now();
+      var nodes = examsPane.querySelectorAll('.exam-time-left[data-expires-ms]');
+      nodes.forEach(function (el) {
+        var expiresMs = parseInt(el.dataset.expiresMs, 10);
+        if (!Number.isFinite(expiresMs)) return;
+        var left = Math.max(0, Math.floor((expiresMs - now) / 1000));
+        el.textContent = formatRemaining(left);
+        el.classList.remove('text-bg-secondary', 'text-bg-warning', 'text-bg-danger');
+        if (left <= 60) el.classList.add('text-bg-danger');
+        else if (left <= 300) el.classList.add('text-bg-warning');
+        else el.classList.add('text-bg-secondary');
+      });
+    }
+
+    tick();
+    liveCountdownTimer = setInterval(tick, 1000);
+  }
 
   function isPaneActive() {
     return examsPane.classList.contains('active') && examsPane.classList.contains('show');
@@ -1364,6 +1411,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (changed && typeof window.drawExamWrongPies === 'function') {
         window.drawExamWrongPies();
       }
+      if (changed) {
+        startExamCountdowns();
+      }
 
       console.log('[ExamsRefresh] done' + (changed ? ' (content updated)' : ' (no changes)'));
     } catch (e) {
@@ -1386,9 +1436,14 @@ document.addEventListener('DOMContentLoaded', function () {
       clearInterval(timer);
       timer = null;
     }
+    if (liveCountdownTimer) {
+      clearInterval(liveCountdownTimer);
+      liveCountdownTimer = null;
+    }
   }
 
   start();
+  startExamCountdowns();
 
   if (examsTabBtn) {
     examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
