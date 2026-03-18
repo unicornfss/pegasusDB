@@ -1196,6 +1196,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   async function refreshAssessmentsPane() {
     if (assessmentsRefreshing) return;
+    if (document.body.classList.contains('modal-open') || document.querySelector('#optionalModulesPromptModal.show')) return;
     assessmentsRefreshing = true;
 
     try {
@@ -1212,6 +1213,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
       var freshPane = tmp.querySelector('#assessments-pane');
       if (!freshPane) return;
+
+      // Do not replace the pane while a modal is visible; replacing modal DOM
+      // mid-transition can orphan the backdrop and lock the page.
+      if (document.body.classList.contains('modal-open') || document.querySelector('#optionalModulesPromptModal.show')) return;
 
       assessmentsPane.innerHTML = freshPane.innerHTML;
       runInlineScripts(assessmentsPane);
