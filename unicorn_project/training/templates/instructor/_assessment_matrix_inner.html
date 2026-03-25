@@ -136,6 +136,23 @@
 
           {% endfor %}
         </tr>
+
+        <tr class="bulk-row">
+          <th class="sticky left comp-cell outcome-label">
+            <div class="comp-code">+</div>
+            <div class="comp-name"><strong>Quick action</strong></div>
+          </th>
+          {% for d in delegates %}
+            <td class="bulk-cell" data-col="{{ forloop.counter0 }}">
+              <button type="button"
+                      class="btn btn-outline-success btn-sm mark-all-visible-btn"
+                      data-col="{{ forloop.counter0 }}"
+                      {% if booking.status == 'completed' %}disabled{% endif %}>
+                Mark all visible achieved
+              </button>
+            </td>
+          {% endfor %}
+        </tr>
       </tbody>
     </table>
   </div>
@@ -245,6 +262,18 @@
 .matrix-table tr.outcome-row .outcome-cell {
   background: #f8f9fb;
   border-top: 2px solid #e3e7ec;
+}
+
+.matrix-table tr.bulk-row .bulk-cell {
+  background: #f8fafc;
+  border-top: 1px solid #e3e7ec;
+}
+
+.mark-all-visible-btn {
+  white-space: normal;
+  line-height: 1.1;
+  font-size: .75rem;
+  padding: .3rem .45rem;
 }
 
 /* Sticky (inherit zebra for left column; header stays white) */
@@ -592,6 +621,23 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
       chks.forEach(chk => { chk.disabled = false; });
     }
 
+    const bulkBtn = table.querySelector(`.mark-all-visible-btn[data-col="${colIndex}"]`);
+    if (bulkBtn) {
+      if (isClosedCourse) {
+        bulkBtn.disabled = true;
+        bulkBtn.title = 'Course is completed (read-only).';
+      } else if (outcome === 'dnf' || outcome === 'fail') {
+        bulkBtn.disabled = true;
+        bulkBtn.title = 'Set outcome back to Pending to bulk-mark competencies.';
+      } else {
+        const hasUntickedEnabled = Array.from(chks).some(chk => !chk.checked && !chk.disabled);
+        bulkBtn.disabled = !hasUntickedEnabled;
+        bulkBtn.title = hasUntickedEnabled
+          ? 'Mark all visible competencies as achieved for this delegate.'
+          : 'All visible competencies are already achieved.';
+      }
+    }
+
     if (outcome === 'pending') { 
       refreshExportState();
       updateClosurePaneAssessStatus();
@@ -713,6 +759,49 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
       });
     }
   });
+
+  table.querySelectorAll('.mark-all-visible-btn').forEach(btn => {
+    if (isClosedCourse) return;
+
+    btn.addEventListener('click', function () {
+      const colIndex = btn.getAttribute('data-col');
+      const targets = Array.from(table.querySelectorAll(`td.cell[data-col="${colIndex}"] .lv-chk`))
+        .filter(chk => !chk.checked && !chk.disabled);
+
+      if (!targets.length) {
+        updateColumnState(colIndex);
+        return;
+      }
+
+      targets.forEach(chk => {
+        chk.checked = true;
+        const hidden = chk.closest('td.cell')?.querySelector('.level-input');
+        if (hidden) hidden.value = 'c';
+      });
+      updateColumnState(colIndex);
+
+      Promise.all(
+        targets.map(chk => {
+          const regId = chk.getAttribute('data-register');
+          const compId = chk.getAttribute('data-competency');
+          return autosaveCell(regId, compId, true)
+            .then(() => ({ ok: true, chk }))
+            .catch(() => ({ ok: false, chk }));
+        })
+      ).then(results => {
+        const failed = results.filter(r => !r.ok);
+        if (!failed.length) return;
+
+        failed.forEach(({ chk }) => {
+          chk.checked = false;
+          const hidden = chk.closest('td.cell')?.querySelector('.level-input');
+          if (hidden) hidden.value = 'na';
+        });
+        updateColumnState(colIndex);
+        alert(`Saved with ${failed.length} error(s). Some competencies were not updated.`);
+      });
+    });
+  });
   // ----------------------------------------------------------------------
 
   // --- initial paint + persist (this is the important bit) ----------------
@@ -732,6 +821,7 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
     const outSel = outTd?.querySelector('.outcome-select');
     const outInp = outTd?.querySelector('.outcome-input');
+    const prevOutcome = outInp ? (outInp.value || 'pending') : 'pending';
     const manual = outSel ? outSel.value : 'pending';
 
     const outcome = (allChecked && optionalSelectionComplete()) ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
@@ -739,17 +829,16 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     // ✅ NEW: always mirror the computed outcome into the hidden input immediately
     if (outInp) outInp.value = outcome;
 
-    return { outcome, outInp };
+    return { outcome, outInp, prevOutcome };
   }
 
 
-  function persistOutcomeIfChanged(colIndex, outInp, outcome){
-    const prev = outInp ? outInp.value : 'pending';
+  function persistOutcomeIfChanged(colIndex, outInp, outcome, prevOutcome){
     applyOutcomeClasses(colIndex, outcome);
     if (outInp) outInp.value = outcome;
 
     const regId = getRegisterIdForColumn(colIndex);
-    if (regId && outcome !== prev) {
+    if (regId && outcome !== prevOutcome) {
       autosaveOutcome(regId, outcome).catch(err => {
         console.error('Initial outcome persist failed:', err && err.message ? err.message : err);
       });
@@ -758,8 +847,8 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
 
   Array.from(table.querySelectorAll('thead th.top')).forEach(th => {
     const col = th.dataset.col;
-    const { outcome, outInp } = computeOutcomeForCol(col);
-    persistOutcomeIfChanged(col, outInp, outcome);
+    const { outcome, outInp, prevOutcome } = computeOutcomeForCol(col);
+    persistOutcomeIfChanged(col, outInp, outcome, prevOutcome);
   });
 
   refreshExportState();

@@ -536,11 +536,7 @@ def instructor_dashboard(request):
     )
     missing_assessments = []
     for booking in all_candidate_bookings:
-        unique_regs = _unique_delegates_for_booking(booking)
-        pending_regs = [
-            r for r in unique_regs
-            if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
-        ]
+        pending_regs = _pending_assessment_delegates_for_booking(booking)
         if pending_regs:
             missing_assessments.append(booking)
 
@@ -1349,6 +1345,54 @@ def _assessment_selection_context(booking, delegates=None):
     }
 
 
+def _pending_assessment_delegates_for_booking(booking):
+    """
+    Return delegates that should still be treated as pending for closure checks.
+
+    Pending when outcome is blank/null/pending, or when outcome is pass but
+    required competencies are not all achieved.
+    """
+    delegates = _unique_delegates_for_booking(booking)
+    if not delegates:
+        return []
+
+    required_competencies = _assessment_selection_context(booking, delegates)["required_competencies"]
+    required_comp_ids = {c.id for c in required_competencies}
+
+    achieved_pairs = set()
+    if required_comp_ids:
+        achieved_pairs = set(
+            CompetencyAssessment.objects
+            .filter(
+                register__in=delegates,
+                course_competency_id__in=required_comp_ids,
+                level__in=("c", "e"),
+            )
+            .values_list("register_id", "course_competency_id")
+        )
+
+    pending = []
+    for reg in delegates:
+        outcome = (str(reg.outcome).strip().lower() if reg.outcome is not None else "")
+
+        if outcome in ("", "pending"):
+            pending.append(reg)
+            continue
+
+        if outcome in ("fail", "dnf"):
+            continue
+
+        if outcome == "pass":
+            has_all_required = all((reg.id, cid) in achieved_pairs for cid in required_comp_ids)
+            if not has_all_required:
+                pending.append(reg)
+            continue
+
+        pending.append(reg)
+
+    return pending
+
+
 
 def _assessment_context(booking, user):
     # permissions: staff or assigned instructor (match the guard used in the view)
@@ -1554,10 +1598,7 @@ def instructor_booking_detail(request, pk):
             # Keep closure checks aligned with the assessments matrix delegate set
             # (deduped by name + DOB), otherwise duplicates across days appear as
             # false extra pending outcomes.
-            pending_outcome_regs = [
-                r for r in _unique_delegates_for_booking(booking)
-                if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
-            ]
+            pending_outcome_regs = _pending_assessment_delegates_for_booking(booking)
 
             if missing_delegate_days and not reg_manual:
                 day_labels = ", ".join(d.date.strftime("%d %b %Y") for d in missing_delegate_days)
@@ -2232,10 +2273,7 @@ def instructor_booking_detail(request, pk):
         len({d.delegate_count or 0 for d in closure_day_counts_qs}) > 1
         if len(closure_day_counts_qs) > 1 else False
     )
-    closure_pending_outcomes = [
-        r for r in _unique_delegates_for_booking(booking)
-        if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
-    ]
+    closure_pending_outcomes = _pending_assessment_delegates_for_booking(booking)
     closure_feedback_count = FeedbackResponse.objects.filter(booking=booking).count()
     closure_missing_feedback = closure_feedback_count <= 0
 

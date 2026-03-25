@@ -1,5 +1,6 @@
 @echo off
 setlocal
+cd /d "%~dp0"
 REM Activate venv (create if missing)
 if not exist .venv (
   py -m venv .venv

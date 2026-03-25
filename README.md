@@ -17,5 +17,25 @@ python manage.py runserver
 ```
 Open: http://127.0.0.1:8000/
 
+## Global Diagnostics
+Run a broad health check to highlight broken features:
+
+```
+python manage.py global_test
+```
+
+Windows shortcut:
+
+```
+global_test.bat
+```
+
+Useful flags:
+
+```
+python manage.py global_test --allow-warnings
+python manage.py global_test --skip-migration-check
+```
+
 ### Roles
 Create groups `admin` and `instructor` in Django admin, then add users to them. Link an `Instructor` row to a user to show their bookings.
