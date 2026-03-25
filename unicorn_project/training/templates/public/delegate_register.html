@@ -19,6 +19,9 @@
 
 <form method="post" class="card p-3">
   {% csrf_token %}
+  {% if day_code %}
+    <input type="hidden" name="day_code" value="{{ day_code }}">
+  {% endif %}
 
   <div class="row g-3">
 
@@ -87,10 +90,11 @@
         <option value="">— Select instructor —</option>
         {% if course %}
           {% for i in instructors %}
-            <option value="{{ i.id }}" {% if instructors|length == 1 %}selected{% endif %}>{{ i.name }}</option>
+            <option value="{{ i.id }}" {% if form.data.instructor == i.id|stringformat:'s' or instructors|length == 1 %}selected{% endif %}>{{ i.name }}</option>
           {% endfor %}
         {% endif %}
       </select>
+      {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
 
     {# HEALTH DECLARATION #}

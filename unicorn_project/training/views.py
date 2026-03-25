@@ -139,8 +139,22 @@ def public_delegate_register(request):
       for the selected course and date.
     """
 
-    # 1) Resolve course from ?ct=<code>, POST course_id, or form data
+    # 0) Optional exact day binding (used by dummy/test booking quick links)
+    day_code = (request.GET.get("day") or request.POST.get("day_code") or "").strip()
+    selected_day = None
+    if day_code:
+        selected_day = (
+            BookingDay.objects
+            .select_related("booking__course_type", "booking__instructor", "instructor")
+            .filter(day_code=day_code)
+            .first()
+        )
+
+    # 1) Resolve course from exact day, ?ct=<code>, POST course_id, or form data
     course = None
+
+    if selected_day and selected_day.booking and selected_day.booking.course_type:
+        course = selected_day.booking.course_type
     
     # First try GET ?ct=<code>
     ct_code = (request.GET.get("ct") or "").strip()
@@ -158,9 +172,11 @@ def public_delegate_register(request):
     # For the dropdown when no QR is used
     course_types = CourseType.objects.order_by("name")
 
-    # 2) Initial date (from querystring if present, else today)
+    # 2) Initial date (from exact day, querystring, or today)
     initial = {}
-    if request.GET.get("date"):
+    if selected_day:
+        initial["date"] = selected_day.date
+    elif request.GET.get("date"):
         initial["date"] = request.GET["date"]              # 'YYYY-MM-DD'
     else:
         initial["date"] = timezone.localdate()             # today (date obj)
@@ -170,7 +186,11 @@ def public_delegate_register(request):
     # 3) Build instructors list (depends on course + date)
     instructors = []
     bound_date = form.data.get("date") if form.is_bound else initial.get("date")
-    if course and bound_date:
+    if selected_day:
+        possible_ids = [selected_day.instructor_id, selected_day.booking.instructor_id]
+        instructor_ids = [pid for pid in possible_ids if pid]
+        instructors = Personnel.objects.filter(pk__in=instructor_ids).distinct().order_by("name")
+    elif course and bound_date:
         instructors = (
             Personnel.objects
             .filter(
@@ -189,29 +209,43 @@ def public_delegate_register(request):
 
         inst = delegate.instructor
         bd = None
-        if course and inst and form.cleaned_data.get("date"):
+        if selected_day:
+            allowed_ids = {selected_day.instructor_id, selected_day.booking.instructor_id}
+            allowed_ids.discard(None)
+            if inst and inst.id in allowed_ids:
+                bd = selected_day
+            else:
+                form.add_error("instructor", "Please select the instructor for this course session.")
+        elif course and inst and form.cleaned_data.get("date"):
             bd = (
                 BookingDay.objects
                 .filter(
                     booking__course_type=course,
-                    booking__instructor=inst,
                     date=form.cleaned_data["date"],
                 )
+                .filter(Q(booking__instructor=inst) | Q(instructor=inst))
+                .order_by("id")
                 .first()
             )
-        delegate.booking_day = bd
-        delegate.save()
+            if not bd:
+                form.add_error("date", "No matching course session was found for that course, date, and instructor.")
 
-        # Redirect to a dedicated confirmation screen to avoid accidental duplicate submissions.
-        success_params = {}
-        if course and getattr(course, "code", None):
-            success_params["ct"] = course.code
-        if form.cleaned_data.get("date"):
-            success_params["date"] = form.cleaned_data["date"].isoformat()
-        success_url = reverse("public_delegate_register_success")
-        if success_params:
-            success_url = f"{success_url}?{urlencode(success_params)}"
-        return redirect(success_url)
+        if not form.errors and bd:
+            delegate.booking_day = bd
+            delegate.save()
+
+            # Redirect to a dedicated confirmation screen to avoid accidental duplicate submissions.
+            success_params = {}
+            if course and getattr(course, "code", None):
+                success_params["ct"] = course.code
+            if form.cleaned_data.get("date"):
+                success_params["date"] = form.cleaned_data["date"].isoformat()
+            if day_code:
+                success_params["day"] = day_code
+            success_url = reverse("public_delegate_register_success")
+            if success_params:
+                success_url = f"{success_url}?{urlencode(success_params)}"
+            return redirect(success_url)
 
     return render(
         request,
@@ -221,6 +255,7 @@ def public_delegate_register(request):
             "course": course,
             "course_types": course_types,
             "instructors": instructors,
+            "day_code": day_code,
         },
     )
 
@@ -230,10 +265,13 @@ def public_delegate_register_success(request):
     params = {}
     ct = (request.GET.get("ct") or "").strip()
     date = (request.GET.get("date") or "").strip()
+    day = (request.GET.get("day") or "").strip()
     if ct:
         params["ct"] = ct
     if date:
         params["date"] = date
+    if day:
+        params["day"] = day
 
     register_another_url = reverse("public_delegate_register")
     if params:

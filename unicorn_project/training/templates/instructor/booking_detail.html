@@ -57,7 +57,7 @@
 
       {% for d in days %}
         <a class="btn btn-outline-primary btn-sm"
-           href="{% url 'public_delegate_register' %}?ct={{ booking.course_type.code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+           href="{% url 'public_delegate_register' %}?ct={{ booking.course_type.code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}&day={{ d.day_code|urlencode }}"
            target="_blank" rel="noopener">
           <i class="bi bi-people me-1"></i>Register - Day {{ forloop.counter }}
         </a>

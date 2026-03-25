@@ -821,7 +821,6 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     const outTd  = table.querySelector(`td.outcome-cell[data-col="${colIndex}"]`);
     const outSel = outTd?.querySelector('.outcome-select');
     const outInp = outTd?.querySelector('.outcome-input');
-    const prevOutcome = outInp ? (outInp.value || 'pending') : 'pending';
     const manual = outSel ? outSel.value : 'pending';
 
     const outcome = (allChecked && optionalSelectionComplete()) ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
@@ -829,16 +828,17 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     // ✅ NEW: always mirror the computed outcome into the hidden input immediately
     if (outInp) outInp.value = outcome;
 
-    return { outcome, outInp, prevOutcome };
+    return { outcome, outInp };
   }
 
 
-  function persistOutcomeIfChanged(colIndex, outInp, outcome, prevOutcome){
+  function persistOutcomeIfChanged(colIndex, outInp, outcome){
+    const prev = outInp ? outInp.value : 'pending';
     applyOutcomeClasses(colIndex, outcome);
     if (outInp) outInp.value = outcome;
 
     const regId = getRegisterIdForColumn(colIndex);
-    if (regId && outcome !== prevOutcome) {
+    if (regId && outcome !== prev) {
       autosaveOutcome(regId, outcome).catch(err => {
         console.error('Initial outcome persist failed:', err && err.message ? err.message : err);
       });
@@ -847,8 +847,8 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
 
   Array.from(table.querySelectorAll('thead th.top')).forEach(th => {
     const col = th.dataset.col;
-    const { outcome, outInp, prevOutcome } = computeOutcomeForCol(col);
-    persistOutcomeIfChanged(col, outInp, outcome, prevOutcome);
+    const { outcome, outInp } = computeOutcomeForCol(col);
+    persistOutcomeIfChanged(col, outInp, outcome);
   });
 
   refreshExportState();
