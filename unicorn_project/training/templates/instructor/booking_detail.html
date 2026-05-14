@@ -3,6 +3,16 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
+<style>
+  #id_booking_notes {
+    min-height: 170px;
+    max-height: 240px;
+    resize: vertical;
+  }
+  .telegram-box-card {
+    margin-top: 1rem;
+  }
+</style>
 <h3 class="mb-2 d-flex align-items-center gap-2">
   {{ booking.course_type.name }}
   {% if booking.course_reference %}
@@ -298,8 +308,7 @@
           </div>
 
           <div class="card-body">
-            <form id="booking-notes-form" method="post" class="h-100 d-flex flex-column">
-              {% csrf_token %}
+      <form id="booking-notes-form" method="post" class="d-flex flex-column">
 
               <input type="hidden" name="action" id="id_precise_action" value="">
               <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.precise_lat }}">
@@ -337,6 +346,70 @@
 
       </div>
 </div>
+
+{% if telegram_service_configured %}
+<div class="card shadow-sm mb-3 telegram-box-card">
+  <div class="card-header bg-light d-flex align-items-center">
+    <i class="bi bi-telegram me-2"></i>
+    <strong>Telegram Notifications</strong>
+  </div>
+  <div class="card-body">
+    {% if has_telegram_linked %}
+      <div class="mb-3">
+        <div class="text-success small">
+          <i class="bi bi-check-circle-fill me-1"></i>
+          Your Telegram account is linked
+        </div>
+      </div>
+
+      <form method="post" class="mb-3">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="send_telegram_notification">
+        <button type="submit" class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-send me-1"></i> Send Notification
+        </button>
+      </form>
+
+      {% if telegram_notifications %}
+        <div class="mt-3">
+          <div class="text-muted small mb-2">Notification History</div>
+          <div class="small">
+            {% for notification in telegram_notifications %}
+              <div class="mb-2 p-2 bg-light rounded">
+                <div class="d-flex justify-content-between">
+                  <span>{{ notification.sent_at|date:"d/m/Y H:i" }}</span>
+                  <span class="badge bg-secondary">{{ notification.get_notification_type_display }}</span>
+                </div>
+                {% if notification.sent_by %}
+                  <div class="text-muted">Sent by: {{ notification.sent_by.get_full_name }}</div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% else %}
+        <div class="text-muted small">No notifications sent yet</div>
+      {% endif %}
+    {% else %}
+      <div class="text-warning small">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+        Telegram account not linked. Please contact admin to set up notifications.
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var notes = document.getElementById('id_booking_notes');
+    if (notes) {
+      notes.style.minHeight = '170px';
+      notes.style.maxHeight = '240px';
+      notes.style.resize = 'vertical';
+    }
+  });
+</script>
 
 <ul class="nav nav-tabs mt-3" id="bookingTabs" role="tablist">
   <li class="nav-item" role="presentation">

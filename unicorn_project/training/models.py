@@ -239,6 +239,26 @@ class Personnel(models.Model):
     totp_secret = models.CharField(max_length=32, blank=True, null=True, help_text="TOTP secret for 2FA")
     totp_backup_codes = models.TextField(blank=True, null=True, help_text="JSON list of hashed one-time backup codes")
 
+    # Telegram integration
+    telegram_chat_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Telegram chat ID for sending notifications"
+    )
+    telegram_username = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Telegram username for reference"
+    )
+
+    # Telegram notification preferences
+    notify_new_bookings = models.BooleanField(default=False, help_text="Notify for new bookings")
+    notify_booking_changes = models.BooleanField(default=False, help_text="Notify for booking changes and cancellations")
+    notify_reminders = models.BooleanField(default=False, help_text="Reminder messages 24 hours prior to booking")
+    notify_service_updates = models.BooleanField(default=False, help_text="Service updates")
+
     @property
     def avatar_initial(self):
         source = (self.name or self.email or "?").strip()
@@ -1248,3 +1268,51 @@ class Resource(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class TelegramNotification(models.Model):
+    """
+    Tracks Telegram notifications sent to instructors for bookings.
+    """
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="telegram_notifications"
+    )
+    instructor = models.ForeignKey(
+        Personnel,
+        on_delete=models.CASCADE,
+        related_name="telegram_notifications"
+    )
+    sent_at = models.DateTimeField(auto_now_add=True)
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sent_telegram_notifications"
+    )
+    message_text = models.TextField(help_text="The message that was sent")
+    telegram_message_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Telegram message ID for reference"
+    )
+    notification_type = models.CharField(
+        max_length=20,
+        choices=[
+            ("admin_send", "Sent by admin"),
+            ("instructor_resend", "Resent by instructor"),
+            ("system", "System notification"),
+        ],
+        default="admin_send"
+    )
+
+    class Meta:
+        ordering = ["-sent_at"]
+        verbose_name = "Telegram Notification"
+        verbose_name_plural = "Telegram Notifications"
+
+    def __str__(self):
+        return f"Telegram to {self.instructor.name} for {self.booking.course_reference} at {self.sent_at}"

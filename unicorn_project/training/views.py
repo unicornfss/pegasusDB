@@ -417,6 +417,12 @@ def user_profile(request):
             if full_name:
                 profile.name = full_name
 
+            # Save Telegram notification preferences explicitly
+            profile.notify_new_bookings = pform.cleaned_data.get("notify_new_bookings", False)
+            profile.notify_booking_changes = pform.cleaned_data.get("notify_booking_changes", False)
+            profile.notify_reminders = pform.cleaned_data.get("notify_reminders", False)
+            profile.notify_service_updates = pform.cleaned_data.get("notify_service_updates", False)
+
             profile.save()
 
             update_session_auth_hash(request, user)

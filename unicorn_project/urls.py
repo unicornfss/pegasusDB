@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
 from unicorn_project.training.views_auth import ForcePasswordChangeView, forgot_password, custom_login, two_factor_auth, two_factor_setup, two_factor_verify, two_factor_disable, dismiss_2fa_prompt, regenerate_backup_codes, request_email_2fa_code
+from unicorn_project.training import views_telegram
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -21,6 +22,9 @@ urlpatterns = [
     path('accounts/forgot-password/', forgot_password, name='forgot_password'),
     # All other auth views (login/logout/etc.)
     path('accounts/', include('django.contrib.auth.urls')),
+
+    # Telegram webhook
+    path('telegram/webhook/', views_telegram.telegram_webhook, name='telegram_webhook'),
 
     # Your app
     path('', include('unicorn_project.training.urls')),

@@ -20,7 +20,7 @@ from .models import (
     Personnel, Booking, BookingDay, Attendance, CourseCompetency,
     FeedbackResponse, Invoice, InvoiceItem, MetaSetting,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
-    LogoOverride
+    LogoOverride, TelegramNotification
 )
 
 Instructor = Personnel
@@ -109,15 +109,138 @@ class TrainingLocationAdmin(admin.ModelAdmin):
 @admin.register(Instructor)
 class InstructorAdmin(ImportExportModelAdmin):
     resource_class = InstructorResource
-    list_display = ("name", "email", "user")
-    search_fields = ("name", "email", "user__username")
+    list_display = ("name", "email", "user", "telegram_status")
+    search_fields = ("name", "email", "user__username", "telegram_username")
+    readonly_fields = ("telegram_chat_id", "telegram_username")
+
+    def telegram_status(self, obj):
+        if obj.telegram_chat_id:
+            return format_html('<span style="color: green;">✅ Linked</span>')
+        else:
+            return format_html('<span style="color: red;">❌ Not linked</span>')
+
+    telegram_status.short_description = "Telegram"
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
-    list_display = ("course_date", "course_type", "business", "training_location", "course_reference")
+    list_display = ("course_date", "course_type", "business", "training_location", "course_reference", "instructor", "telegram_actions")
     list_filter = ("course_type", "business")
     search_fields = ("course_reference", "business__name", "training_location__name", "course_type__name")
     inlines = [BookingDayInline]
+    readonly_fields = ("telegram_notifications_list", "telegram_send_button")
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        fieldsets.append(
+            ("Telegram notifications", {
+                "fields": ("telegram_send_button", "telegram_notifications_list"),
+            })
+        )
+        return fieldsets
+
+    def telegram_actions(self, obj):
+        """Display Telegram notification actions for the booking"""
+        if not obj.instructor or not obj.instructor.telegram_chat_id:
+            return "No Telegram linked"
+
+        # Check if notification was already sent
+        recent_notifications = obj.telegram_notifications.filter(
+            instructor=obj.instructor
+        ).order_by('-sent_at')[:1]
+
+        if recent_notifications.exists():
+            last_sent = recent_notifications[0].sent_at.strftime('%d/%m/%Y %H:%M')
+            return format_html(
+                '<span style="color: green;">Sent: {}</span> '
+                '<a class="button" href="{}">Send Again</a>',
+                last_sent,
+                f'/admin/training/booking/{obj.id}/send_telegram_notification/'
+            )
+        else:
+            return format_html(
+                '<a class="button" href="{}">Send Notification</a>',
+                f'/admin/training/booking/{obj.id}/send_telegram_notification/'
+            )
+
+    telegram_actions.short_description = "Telegram"
+
+    def telegram_notifications_list(self, obj):
+        """Display list of all Telegram notifications for this booking"""
+        notifications = obj.telegram_notifications.select_related('instructor', 'sent_by').order_by('-sent_at')
+        if not notifications:
+            return "No notifications sent"
+
+        html = '<ul style="margin: 0; padding-left: 20px;">'
+        for notification in notifications:
+            sent_by = notification.sent_by.get_full_name() if notification.sent_by else "System"
+            html += format_html(
+                '<li><strong>{}</strong> - {} ({})</li>',
+                notification.sent_at.strftime('%d/%m/%Y %H:%M'),
+                sent_by,
+                notification.get_notification_type_display()
+            )
+        html += '</ul>'
+        return format_html(html)
+
+    telegram_notifications_list.short_description = "Notification History"
+
+    def telegram_send_button(self, obj):
+        if not obj or not obj.pk:
+            return ""
+        if not obj.instructor or not obj.instructor.telegram_chat_id:
+            return "No Telegram linked"
+        return format_html(
+            '<a class="button" href="{}">Send Telegram</a>',
+            f'/admin/training/booking/{obj.id}/send_telegram_notification/'
+        )
+
+    telegram_send_button.short_description = "Send Telegram"
+
+    def get_urls(self):
+        from django.urls import path
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<int:booking_id>/send_telegram_notification/',
+                self.admin_site.admin_view(self.send_telegram_notification),
+                name='send_telegram_notification'
+            ),
+        ]
+        return custom_urls + urls
+
+    def send_telegram_notification(self, request, booking_id):
+        """Handle sending Telegram notification for a booking"""
+        from django.shortcuts import get_object_or_404, redirect
+        from django.contrib import messages
+        from .services.telegram_service import telegram_service
+
+        booking = get_object_or_404(Booking, id=booking_id)
+
+        if not telegram_service.is_configured():
+            messages.error(request, "Telegram bot is not configured. Please set TELEGRAM_BOT_TOKEN in settings.")
+            return redirect(f'/admin/training/booking/{booking_id}/change/')
+
+        if not booking.instructor:
+            messages.error(request, "No instructor assigned to this booking.")
+            return redirect(f'/admin/training/booking/{booking_id}/change/')
+
+        if not booking.instructor.telegram_chat_id:
+            messages.error(request, f"Instructor {booking.instructor.name} does not have a Telegram account linked.")
+            return redirect(f'/admin/training/booking/{booking_id}/change/')
+
+        # Send the notification
+        success = telegram_service.send_course_notification(
+            booking=booking,
+            sent_by=request.user,
+            notification_type="admin_send"
+        )
+
+        if success:
+            messages.success(request, f"Telegram notification sent to {booking.instructor.name}")
+        else:
+            messages.error(request, f"Failed to send Telegram notification to {booking.instructor.name}")
+
+        return redirect(f'/admin/training/booking/{booking_id}/change/')
 
 @admin.register(BookingDay)
 class BookingDayAdmin(admin.ModelAdmin):
@@ -151,6 +274,14 @@ class InvoiceAdmin(admin.ModelAdmin):
         b = getattr(getattr(obj.booking, "business", None), "name", None)
         return b or "—"
     business_name.short_description = "Business"
+
+@admin.register(TelegramNotification)
+class TelegramNotificationAdmin(admin.ModelAdmin):
+    list_display = ("booking", "instructor", "sent_at", "notification_type", "sent_by")
+    list_filter = ("notification_type", "sent_at")
+    search_fields = ("booking__course_reference", "instructor__name", "message_text")
+    readonly_fields = ("sent_at", "message_text", "telegram_message_id")
+    date_hierarchy = "sent_at"
 
 # ----- Exam / Attempt admin -----
 

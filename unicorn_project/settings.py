@@ -36,6 +36,7 @@ else:
 
 # ----- APIs ------------------------
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 
 # --- Apps / Middleware ---------------------------------------

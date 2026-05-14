@@ -32,6 +32,11 @@ from .utils.emailing import send_admin_email
 from .utils.invoice_html import render_invoice_pdf_from_html, resolve_admin_email
 from .utils.locks import guard_unlocked
 from .utils.course_docs import email_all_course_docs_to_admin
+from .services.booking_status import auto_update_booking_statuses
+try:
+    from .services.telegram_service import telegram_service
+except ImportError:
+    telegram_service = None
 from io import BytesIO
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
@@ -460,6 +465,7 @@ def _closed_guard(request, booking):
 
 @login_required
 def instructor_dashboard(request):
+    auto_update_booking_statuses()
     user = request.user
     personnel = getattr(user, "personnel", None)
 
@@ -770,6 +776,7 @@ def instructor_calendar(request):
 
 @login_required
 def instructor_calendar_events(request):
+    auto_update_booking_statuses()
     inst = _get_instructor(request.user)
     if not inst:
         return JsonResponse({"detail": "Forbidden"}, status=403)
@@ -2198,6 +2205,32 @@ def instructor_booking_detail(request, pk):
                 f"{reverse('instructor_booking_detail', kwargs={'pk': pk})}?tab=invoicing"
             )
 
+        # ------------------------------------------------------
+        # SEND TELEGRAM NOTIFICATION (Instructor)
+        # ------------------------------------------------------
+        if request.POST.get("action") == "send_telegram_notification":
+            if not telegram_service.is_configured():
+                messages.error(request, "Telegram notifications are not configured.")
+                return redirect("instructor_booking_detail", pk=pk)
+
+            if not instr.telegram_chat_id:
+                messages.error(request, "Your Telegram account is not linked. Please contact admin to set up Telegram notifications.")
+                return redirect("instructor_booking_detail", pk=pk)
+
+            # Send the notification
+            success = telegram_service.send_course_notification(
+                booking=booking,
+                sent_by=request.user,
+                notification_type="instructor_resend"
+            )
+
+            if success:
+                messages.success(request, "Telegram notification sent successfully.")
+            else:
+                messages.error(request, "Failed to send Telegram notification.")
+
+            return redirect("instructor_booking_detail", pk=pk)
+
     # ------------------------------------------------------------------
     # Build context (your unchanged blocks)
     # ------------------------------------------------------------------
@@ -2512,6 +2545,12 @@ def instructor_booking_detail(request, pk):
 
     ctx["gcal_links"] = gcal_links
     ctx["notes_form"] = BookingNotesForm(instance=booking)
+
+    # Telegram notifications
+    telegram_notifications = booking.telegram_notifications.select_related('sent_by').order_by('-sent_at')
+    ctx["telegram_notifications"] = telegram_notifications
+    ctx["has_telegram_linked"] = bool(instr.telegram_chat_id)
+    ctx["telegram_service_configured"] = bool(telegram_service and telegram_service.is_configured())
 
     return render(request, "instructor/booking_detail.html", ctx)
 

@@ -25,7 +25,7 @@ class UserProfileForm(forms.ModelForm):
 
 
 class PersonnelProfileForm(forms.ModelForm):
-    """Updates the Personnel model fields (address, phone, bank)."""
+    """Updates the Personnel model fields (address, phone, bank, and Telegram)."""
 
     class Meta:
         model = Personnel
@@ -34,6 +34,12 @@ class PersonnelProfileForm(forms.ModelForm):
             "town",
             "postcode",
             "telephone",
+            "telegram_username",
+            "telegram_chat_id",
+            "notify_new_bookings",
+            "notify_booking_changes",
+            "notify_reminders",
+            "notify_service_updates",
             "dyslexia_mode",
             "night_mode",
             "pastel_background",
@@ -44,11 +50,25 @@ class PersonnelProfileForm(forms.ModelForm):
             "bank_account_number",
             "name_on_account",
         ]
+        labels = {
+            "telegram_username": "Telegram username",
+            "telegram_chat_id": "Telegram chat ID",
+            "notify_new_bookings": "Notify for new bookings",
+            "notify_booking_changes": "Notify for booking changes and cancellations",
+            "notify_reminders": "Reminder messages 24 hours prior to booking",
+            "notify_service_updates": "Service updates",
+        }
         widgets = {
             "address_line": forms.TextInput(attrs={"class": "form-control"}),
             "town": forms.TextInput(attrs={"class": "form-control"}),
             "postcode": forms.TextInput(attrs={"class": "form-control"}),
             "telephone": forms.TextInput(attrs={"class": "form-control"}),
+            "telegram_username": forms.TextInput(attrs={"class": "form-control"}),
+            "telegram_chat_id": forms.TextInput(attrs={"class": "form-control"}),
+            "notify_new_bookings": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_booking_changes": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_reminders": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_service_updates": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "dyslexia_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "night_mode": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "pastel_background": forms.Select(attrs={"class": "form-select"}),
