@@ -417,6 +417,15 @@ def user_profile(request):
             if full_name:
                 profile.name = full_name
 
+            # Handle Telegram link/unlink actions
+            if "link_telegram" in request.POST:
+                import secrets
+                profile.telegram_link_token = secrets.token_urlsafe(32)
+            elif "unlink_telegram" in request.POST:
+                profile.telegram_chat_id = None
+                profile.telegram_username = None
+                profile.telegram_link_token = None
+
             # Save Telegram notification preferences explicitly
             profile.notify_new_bookings = pform.cleaned_data.get("notify_new_bookings", False)
             profile.notify_booking_changes = pform.cleaned_data.get("notify_booking_changes", False)

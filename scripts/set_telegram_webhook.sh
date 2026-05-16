@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # Usage: ./set_telegram_webhook.sh <bot_token> <webhook_url>
 BOT_TOKEN=$1
 WEBHOOK_URL=$2

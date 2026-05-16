@@ -228,47 +228,49 @@
             <div class="col-12">
                 <div class="card shadow-sm mt-4">
                     <div class="card-header bg-info text-white">
-                        <h5 class="card-title mb-0"><i class="bi bi-telegram me-2"></i>Telegram Notification Preferences</h5>
+                        <h5 class="card-title mb-0"><i class="bi bi-telegram me-2"></i>Telegram Account</h5>
                     </div>
                     <div class="card-body">
-                        <div class="mb-3">
-                            <label for="{{ pform.telegram_username.id_for_label }}" class="form-label fw-bold">Telegram Username</label>
-                            {{ pform.telegram_username }}
-                            {% for err in pform.telegram_username.errors %}
-                                <div class="text-danger small">{{ err }}</div>
-                            {% endfor %}
-                        </div>
-                        <div class="mb-3">
-                            <label for="{{ pform.telegram_chat_id.id_for_label }}" class="form-label fw-bold">Telegram Chat ID</label>
-                            {{ pform.telegram_chat_id }}
-                            {% for err in pform.telegram_chat_id.errors %}
-                                <div class="text-danger small">{{ err }}</div>
-                            {% endfor %}
-                        </div>
-                        <div class="form-check">
-                            {{ pform.notify_new_bookings }}
-                            <label class="form-check-label" for="{{ pform.notify_new_bookings.id_for_label }}">
-                                Notify for new bookings
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            {{ pform.notify_booking_changes }}
-                            <label class="form-check-label" for="{{ pform.notify_booking_changes.id_for_label }}">
-                                Notify for booking changes and cancellations
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            {{ pform.notify_reminders }}
-                            <label class="form-check-label" for="{{ pform.notify_reminders.id_for_label }}">
-                                Reminder messages 24 hours prior to booking
-                            </label>
-                        </div>
-                        <div class="form-check">
-                            {{ pform.notify_service_updates }}
-                            <label class="form-check-label" for="{{ pform.notify_service_updates.id_for_label }}">
-                                Service updates
-                            </label>
-                        </div>
+                        {% if pform.instance.telegram_chat_id %}
+                            <p><strong>Your Telegram account is linked.</strong></p>
+                            <form method="post" action="{% url 'unlink_telegram' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger mb-3">Unlink Telegram Account</button>
+                            </form>
+                            <h6>Notification Preferences</h6>
+                            <div class="form-check">
+                                {{ pform.notify_new_bookings }}
+                                <label class="form-check-label" for="{{ pform.notify_new_bookings.id_for_label }}">
+                                    Notify for new bookings
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                {{ pform.notify_booking_changes }}
+                                <label class="form-check-label" for="{{ pform.notify_booking_changes.id_for_label }}">
+                                    Notify for booking changes and cancellations
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                {{ pform.notify_reminders }}
+                                <label class="form-check-label" for="{{ pform.notify_reminders.id_for_label }}">
+                                    Reminder messages 24 hours prior to booking
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                {{ pform.notify_service_updates }}
+                                <label class="form-check-label" for="{{ pform.notify_service_updates.id_for_label }}">
+                                    Service updates
+                                </label>
+                            </div>
+                        {% else %}
+                            <p>Your Telegram account is not linked.</p>
+                            <button type="button" class="btn btn-primary" id="show-telegram-qr">Link Telegram Account</button>
+                            <div id="telegram-qr-container" style="display:none; margin-top: 15px;">
+                                <p>Scan this QR code with Telegram to link your account:</p>
+                                <img id="telegram-qr-code" src="" alt="Telegram QR Code" />
+                                <p>After scanning, send the <code>/start <token></code> command to the bot.</p>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
             </div>

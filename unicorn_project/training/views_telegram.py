@@ -1,5 +1,6 @@
 import json
 import logging
+import secrets
 from django.views.decorators.csrf import csrf_exempt
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_POST
@@ -11,39 +12,36 @@ from .models import Personnel
 logger = logging.getLogger(__name__)
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN)
 
-@csrf_exempt
-@require_POST
-def telegram_webhook(request):
-    try:
-        update = Update.de_json(json.loads(request.body), bot)
-    except Exception as e:
-        logger.error(f"Failed to parse Telegram update: {e}")
-        return HttpResponseBadRequest("Invalid update")
+from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+import qrcode
+import io
+import base64
 
-    message = update.message
-    if not message:
-        return JsonResponse({"ok": True})
+@login_required
+def telegram_link_token(request):
+    personnel = request.user.personnel
+    if not personnel.telegram_link_token:
+        import secrets
+        personnel.telegram_link_token = secrets.token_urlsafe(32)
+        personnel.save(update_fields=["telegram_link_token"])
 
-    chat_id = message.chat.id
-    username = message.from_user.username or ""
-    text = message.text or ""
+    # Generate a Telegram deep link with the token
+    bot_username = "YourBotUsername"  # Replace with your actual bot username
+    deep_link = f"https://t.me/{bot_username}?start={personnel.telegram_link_token}"
 
-    if text.strip().lower() == "/start":
-        # Link the chat ID to the Personnel record by username
-        try:
-            personnel = Personnel.objects.get(telegram_username__iexact=username)
-            personnel.telegram_chat_id = str(chat_id)
-            personnel.save(update_fields=["telegram_chat_id"])
-            logger.info(f"Linked Telegram chat ID {chat_id} to user {username}")
-        except Personnel.DoesNotExist:
-            logger.warning(f"Telegram username {username} not found in Personnel")
-        except Exception as e:
-            logger.error(f"Error linking Telegram chat ID: {e}")
+    # Generate QR code image
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(deep_link)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
 
-        # Optionally send a welcome message
-        try:
-            bot.send_message(chat_id=chat_id, text="Your Telegram account has been linked successfully.")
-        except TelegramError as e:
-            logger.error(f"Failed to send welcome message: {e}")
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    img_str = base64.b64encode(buffered.getvalue()).decode()
 
-    return JsonResponse({"ok": True})
+    qr_code_url = f"data:image/png;base64,{img_str}"
+
+    return JsonResponse({"qr_code_url": qr_code_url})

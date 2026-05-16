@@ -253,6 +253,13 @@ class Personnel(models.Model):
         help_text="Telegram username for reference"
     )
 
+    telegram_link_token = models.CharField(
+        max_length=64,
+        blank=True,
+        null=True,
+        unique=True,
+        help_text="Unique token for linking Telegram account via QR code"
+    )
     # Telegram notification preferences
     notify_new_bookings = models.BooleanField(default=False, help_text="Notify for new bookings")
     notify_booking_changes = models.BooleanField(default=False, help_text="Notify for booking changes and cancellations")
