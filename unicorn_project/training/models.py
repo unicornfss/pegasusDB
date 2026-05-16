@@ -1248,3 +1248,55 @@ class Resource(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class TelegramAccount(models.Model):
+    """
+    Stores Telegram account linkage for Personnel.
+    Each Personnel can have at most one linked Telegram account.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    personnel = models.OneToOneField(
+        Personnel,
+        on_delete=models.CASCADE,
+        related_name="telegram_account",
+        help_text="The Personnel account linked to Telegram"
+    )
+    telegram_id = models.BigIntegerField(
+        unique=True,
+        help_text="Unique Telegram user ID"
+    )
+    telegram_username = models.CharField(
+        max_length=32,
+        blank=True,
+        null=True,
+        help_text="Telegram username (if available)"
+    )
+    first_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Telegram first name"
+    )
+    last_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Telegram last name"
+    )
+    linked_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the account was linked"
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        help_text="Last time this record was updated"
+    )
+
+    class Meta:
+        verbose_name = "Telegram Account"
+        verbose_name_plural = "Telegram Accounts"
+        ordering = ["-linked_at"]
+
+    def __str__(self):
+        return f"{self.personnel.name} (Telegram: {self.telegram_username or self.telegram_id})"

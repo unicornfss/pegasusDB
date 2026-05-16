@@ -20,7 +20,7 @@ from .models import (
     Personnel, Booking, BookingDay, Attendance, CourseCompetency,
     FeedbackResponse, Invoice, InvoiceItem, MetaSetting,
     Exam, ExamAttempt, ExamAttemptAnswer, ExamQuestion, ExamAnswer,
-    LogoOverride
+    LogoOverride, TelegramAccount
 )
 
 Instructor = Personnel
@@ -634,3 +634,16 @@ class ResourceAdmin(admin.ModelAdmin):
     list_display = ("title", "course_type", "category", "is_active")
     list_filter = ("course_type", "category", "is_active")
     search_fields = ("title", "description")
+
+
+@admin.register(TelegramAccount)
+class TelegramAccountAdmin(admin.ModelAdmin):
+    list_display = ("personnel", "telegram_id", "telegram_username", "first_name", "linked_at")
+    list_filter = ("linked_at",)
+    search_fields = ("personnel__name", "telegram_username", "telegram_id", "first_name", "last_name")
+    readonly_fields = ("linked_at", "updated_at", "telegram_id")
+    fieldsets = (
+        ("Personnel", {"fields": ("personnel",)}),
+        ("Telegram Details", {"fields": ("telegram_id", "telegram_username", "first_name", "last_name")}),
+        ("Timestamps", {"fields": ("linked_at", "updated_at"), "classes": ("collapse",)}),
+    )

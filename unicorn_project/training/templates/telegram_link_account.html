@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Telegram Account{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0">
+                        <i class="bi bi-telegram"></i> Telegram Account Management
+                    </h3>
+                </div>
+                <div class="card-body">
+                    {% if linked %}
+                        <!-- Already Linked -->
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> Your account is linked to Telegram
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <strong>Linked Account:</strong>
+                            <ul class="mb-0 mt-2">
+                                {% if telegram_account.first_name %}
+                                    <li><strong>Name:</strong> {{ telegram_account.first_name }} {% if telegram_account.last_name %}{{ telegram_account.last_name }}{% endif %}</li>
+                                {% endif %}
+                                {% if telegram_account.telegram_username %}
+                                    <li><strong>Username:</strong> @{{ telegram_account.telegram_username }}</li>
+                                {% endif %}
+                                <li><strong>Telegram ID:</strong> {{ telegram_account.telegram_id }}</li>
+                                <li><strong>Linked on:</strong> {{ telegram_account.linked_at|date:"d M Y H:i" }}</li>
+                            </ul>
+                        </div>
+
+                        <form method="post" action="{% url 'telegram_unlink_account' %}" class="mt-4">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to unlink your Telegram account?')">
+                                <i class="bi bi-unlink"></i> Unlink Telegram Account
+                            </button>
+                        </form>
+
+                        <hr class="my-4">
+                        <p class="text-muted small">
+                            To link a different Telegram account, unlink this one first and then scan the new QR code.
+                        </p>
+
+                    {% else %}
+                        <!-- Not Linked - Show QR Code -->
+                        <p class="lead">Link your Telegram account to receive messages and notifications.</p>
+                        
+                        <div class="instructions mb-4 p-3 bg-light border">
+                            <strong>How to link:</strong>
+                            <ol class="mb-0 mt-2">
+                                <li>Scan the QR code below with your Telegram app or phone camera</li>
+                                <li>This will open the bot in Telegram</li>
+                                <li>Tap the "Start" button</li>
+                                <li>Your account will be automatically linked</li>
+                            </ol>
+                        </div>
+
+                        <div class="text-center qr-code-container">
+                            <img src="data:image/png;base64,{{ qr_code_base64 }}" alt="Telegram QR Code" class="img-fluid" style="max-width: 300px; border: 1px solid #ddd; padding: 10px;">
+                        </div>
+
+                        <div class="text-center mt-4">
+                            <p class="text-muted">
+                                Can't scan? Open this link instead:<br>
+                                <a href="{{ deep_link }}" target="_blank" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-telegram"></i> Open Telegram Bot
+                                </a>
+                            </p>
+                        </div>
+
+                        <div class="alert alert-warning mt-4 small">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>Privacy Note:</strong> Only your name will be shared with the bot for identification purposes. Your password is never shared.
+                        </div>
+                    {% endif %}
+
+                    <div class="mt-4">
+                        <a href="{% url 'profile' %}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Back to Profile
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .qr-code-container {
+        margin: 20px 0;
+        padding: 20px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+    }
+    
+    .instructions ol {
+        margin-left: 20px;
+    }
+</style>
+{% endblock %}

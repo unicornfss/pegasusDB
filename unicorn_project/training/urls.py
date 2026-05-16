@@ -10,6 +10,7 @@ from . import views_inspector as inspv
 from . import views_instructor as instv
 from . import views_instructor
 from . import views_public
+from . import views_telegram
 
 from .views_public import (
     delegate_exam_start,      # start (enter details / match register)
@@ -274,6 +275,11 @@ urlpatterns = [
 
     path("app/admin/meta-settings/", meta_settings_list, name="admin_meta_settings"),
     path("app/admin/meta-settings/<int:pk>/", meta_settings_edit, name="admin_meta_settings_edit"),
+
+    # Telegram
+    path("app/telegram/link/", views_telegram.telegram_link_account, name="telegram_link_account"),
+    path("app/telegram/unlink/", views_telegram.telegram_unlink_account, name="telegram_unlink_account"),
+    path("telegram/webhook/", views_telegram.telegram_webhook, name="telegram_webhook"),
 
 ]
 
