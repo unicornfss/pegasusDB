@@ -25,8 +25,8 @@
         {% endif %}
 
         <div class="row g-4">
-            <div class="col-lg-8">
-                <div class="card shadow-sm h-100">
+            <div class="col-lg-8 d-flex flex-column gap-4">
+                <div class="card shadow-sm">
                     <div class="card-header bg-primary text-white">
                         <h5 class="card-title mb-0"><i class="bi bi-person-circle me-2"></i>Personal, Contact & Banking Information</h5>
                     </div>
@@ -97,9 +97,68 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="row g-4">
+                    {% if pform.default_dashboard_role %}
+                    <div class="col-md-6 d-flex">
+                        <div class="card shadow-sm flex-fill h-100">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="card-title mb-0"><i class="bi bi-speedometer2 me-2"></i>Default dashboard</h5>
+                            </div>
+                            <div class="card-body">
+                                <label class="form-label fw-bold" for="{{ pform.default_dashboard_role.id_for_label }}">When I log in, open</label>
+                                {{ pform.default_dashboard_role }}
+                                <div class="form-text mt-2">
+                                    You have access to more than one role. Choose which dashboard opens by default after login.
+                                    Leave as automatic to keep the usual order (Admin, then Instructor, and so on).
+                                </div>
+                                {% for err in pform.default_dashboard_role.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="col-md-{% if pform.default_dashboard_role %}6{% else %}12{% endif %} d-flex">
+                        <div class="card shadow-sm flex-fill h-100">
+                            <div class="card-header bg-secondary text-white">
+                                <h5 class="card-title mb-0"><i class="bi bi-shield-check me-2"></i>Security</h5>
+                            </div>
+                            <div class="card-body d-flex flex-column">
+                                <div class="mb-3">
+                                    <strong>Two-Factor Authentication (2FA):</strong>
+                                    {% if has_2fa %}
+                                        <span class="badge bg-success ms-2">Enabled</span>
+                                        <div class="form-text mt-2">Your account is protected with 2FA. Each login requires a code from your authenticator app.</div>
+                                    {% else %}
+                                        <span class="badge bg-secondary ms-2">Not enabled</span>
+                                        <div class="form-text mt-2">Add an extra layer of security by enabling two-factor authentication.</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="d-grid gap-2 mt-auto">
+                                    {% if has_2fa %}
+                                        <a href="{% url 'regenerate_backup_codes' %}" class="btn btn-outline-secondary">
+                                            <i class="bi bi-key me-1"></i>View / regenerate backup codes
+                                        </a>
+                                        <a href="{% url 'two_factor_disable' %}" class="btn btn-outline-danger">
+                                            <i class="bi bi-shield-x me-1"></i>Disable 2FA
+                                        </a>
+                                    {% else %}
+                                        <a href="{% url 'two_factor_setup' %}" class="btn btn-outline-success">
+                                            <i class="bi bi-shield-check me-1"></i>Enable 2FA
+                                        </a>
+                                    {% endif %}
+                                    <a href="{% url 'password_change' %}" class="btn btn-outline-secondary">
+                                        <i class="bi bi-key me-1"></i>Change password
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
-            <div class="col-lg-4 d-flex flex-column gap-4">
+            <div class="col-lg-4">
                 <div class="card shadow-sm">
                     <div class="card-header bg-info text-white">
                         <h5 class="card-title mb-0"><i class="bi bi-palette me-2"></i>Appearance & Accessibility</h5>
@@ -174,42 +233,6 @@
                             {{ pform.pastel_background }}
                             <div class="form-text">Only used when dyslexia-friendly mode is turned on.</div>
                             {% for err in pform.pastel_background.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-                        </div>
-                    </div>
-                </div>
-
-                <div class="card shadow-sm">
-                    <div class="card-header bg-secondary text-white">
-                        <h5 class="card-title mb-0"><i class="bi bi-shield-check me-2"></i>Security</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <strong>Two-Factor Authentication (2FA):</strong>
-                            {% if has_2fa %}
-                                <span class="badge bg-success ms-2">Enabled</span>
-                                <div class="form-text mt-2">Your account is protected with 2FA. Each login requires a code from your authenticator app.</div>
-                            {% else %}
-                                <span class="badge bg-secondary ms-2">Not enabled</span>
-                                <div class="form-text mt-2">Add an extra layer of security by enabling two-factor authentication.</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="d-grid gap-2">
-                            {% if has_2fa %}
-                                <a href="{% url 'regenerate_backup_codes' %}" class="btn btn-outline-secondary">
-                                    <i class="bi bi-key me-1"></i>View / regenerate backup codes
-                                </a>
-                                <a href="{% url 'two_factor_disable' %}" class="btn btn-outline-danger">
-                                    <i class="bi bi-shield-x me-1"></i>Disable 2FA
-                                </a>
-                            {% else %}
-                                <a href="{% url 'two_factor_setup' %}" class="btn btn-outline-success">
-                                    <i class="bi bi-shield-check me-1"></i>Enable 2FA
-                                </a>
-                            {% endif %}
-                            <a href="{% url 'password_change' %}" class="btn btn-outline-secondary">
-                                <i class="bi bi-key me-1"></i>Change password
-                            </a>
                         </div>
                     </div>
                 </div>

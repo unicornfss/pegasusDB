@@ -565,27 +565,18 @@ def instructor_dashboard(request):
 
 @login_required
 def post_login(request):
-    user = request.user
+    from .utils.user_roles import (
+        dashboard_url_name_for_role,
+        resolve_active_role,
+        set_active_role,
+    )
 
-    # ---- 1. ADMIN users ----
-    # superuser OR member of admin group
-    if user.is_superuser or user.groups.filter(name__iexact="admin").exists():
-        return redirect("app_admin_dashboard")
+    role = resolve_active_role(request.user, request.session)
+    if not role:
+        return redirect("no_roles")
 
-    # ---- 2. INSTRUCTOR ----
-    if user.groups.filter(name__iexact="instructor").exists():
-        return redirect("instructor_dashboard")
-
-    # ---- 3. ENGINEER ----
-    if user.groups.filter(name__iexact="engineer").exists():
-        return redirect("engineer_dashboard")
-
-    # ---- 4. INSPECTOR ----
-    if user.groups.filter(name__iexact="inspector").exists():
-        return redirect("inspector_dashboard")
-
-    # ---- 5. NO ROLES ----
-    return redirect("no_roles")
+    set_active_role(request.session, role)
+    return redirect(dashboard_url_name_for_role(role))
 
 @login_required
 def booking_fee(request, pk):

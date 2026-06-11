@@ -230,6 +230,13 @@ class Personnel(models.Model):
         choices=AVATAR_ICON_CHOICES,
         default="initials",
     )
+
+    default_dashboard_role = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Preferred dashboard when logging in (for users with multiple roles).",
+    )
   
     is_active = models.BooleanField(default=True)
     can_login = models.BooleanField(default=True)
