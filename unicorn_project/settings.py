@@ -22,13 +22,40 @@ elif _register_show_date in ("0", "false", "no"):
 else:
     REGISTER_SHOW_DATE = DEBUG
 
-ALLOWED_HOSTS = ["*"] if DEBUG else [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
+def _env_host_list(*keys: str) -> list[str]:
+    hosts: list[str] = []
+    for key in keys:
+        for h in os.getenv(key, "").split(","):
+            h = h.strip()
+            if h and h not in hosts:
+                hosts.append(h)
+    return hosts
+
+
+RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+
+if DEBUG:
+    ALLOWED_HOSTS = ["*"]
+else:
+    ALLOWED_HOSTS = _env_host_list("ALLOWED_HOSTS", "DJANGO_ALLOWED_HOSTS")
+    if RENDER_EXTERNAL_HOSTNAME and RENDER_EXTERNAL_HOSTNAME not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+    for host in ("unicorn.adminforge.co.uk",):
+        if host not in ALLOWED_HOSTS:
+            ALLOWED_HOSTS.append(host)
 
 # CSRF trusted origins (env list) + Render convenience
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if o.strip()]
-RENDER_EXTERNAL_HOSTNAME = os.getenv("RENDER_EXTERNAL_HOSTNAME")
 if RENDER_EXTERNAL_HOSTNAME:
-    CSRF_TRUSTED_ORIGINS.append(f"https://{RENDER_EXTERNAL_HOSTNAME}")
+    origin = f"https://{RENDER_EXTERNAL_HOSTNAME}"
+    if origin not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(origin)
+for host in ALLOWED_HOSTS:
+    if host == "*":
+        continue
+    for origin in (f"https://{host}", f"http://{host}"):
+        if origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(origin)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # --- Database -------------------------------------------------

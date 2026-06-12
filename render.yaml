@@ -18,12 +18,14 @@ services:
       - key: GOOGLE_MAPS_API_KEY
         sync: false
       - key: ALLOWED_HOSTS
-        value: "unicorn-django-starter.onrender.com,localhost,127.0.0.1"
+        value: "unicorn.adminforge.co.uk,unicorn-django-starter.onrender.com,localhost,127.0.0.1"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://unicorn.adminforge.co.uk,https://unicorn-django-starter.onrender.com"
+      - key: SITE_URL
+        value: "https://unicorn.adminforge.co.uk"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: TELEGRAM_BOT_USERNAME
-        sync: false
-      - key: SITE_URL
         sync: false
       - key: BOOKING_SCHEDULER_ENABLED
         value: "true"
@@ -55,6 +57,6 @@ services:
       - key: TELEGRAM_BOT_USERNAME
         sync: false
       - key: SITE_URL
-        sync: false
+        value: "https://unicorn.adminforge.co.uk"
       - key: BOOKING_SCHEDULER_ENABLED
         value: "false"
