@@ -568,11 +568,11 @@
 
     locationsMap: BUSINESS_LOCATIONS,
 
-    createUrl: "{% url 'admin_location_create_ajax' %}",
+    createUrl: "/app/admin/locations/create-ajax/",
 
-    updateUrlTemplate: "{% url 'admin_location_update_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+    updateUrlTemplate: "/app/admin/locations/{id}/update-ajax/",
 
-    deleteUrlTemplate: "{% url 'admin_location_delete_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+    deleteUrlTemplate: "/app/admin/locations/{id}/delete-ajax/",
 
     unarchiveUrlTemplate: "/app/admin/locations/{id}/unarchive-ajax/",
 

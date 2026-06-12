@@ -1604,9 +1604,9 @@ function sortBusinessDropdownAndAddOption() {
     AdminLocationModal.init({
       getBusinessId: getSelectedBusinessId,
       getLocationsMap: () => LOCATIONS,
-      createUrl: "{% url 'admin_location_create_ajax' %}",
-      updateUrlTemplate: "{% url 'admin_location_update_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
-      deleteUrlTemplate: "{% url 'admin_location_delete_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+      createUrl: "/app/admin/locations/create-ajax/",
+      updateUrlTemplate: "/app/admin/locations/{id}/update-ajax/",
+      deleteUrlTemplate: "/app/admin/locations/{id}/delete-ajax/",
       unarchiveUrlTemplate: "/app/admin/locations/{id}/unarchive-ajax/",
       onSaved: function (location) {
         LOCATIONS[location.id] = location;

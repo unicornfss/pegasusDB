@@ -2536,7 +2536,10 @@ def instructor_booking_detail(request, pk):
     ctx["notes_form"] = BookingNotesForm(
         initial={"booking_notes": user_editable_booking_notes(booking)},
     )
-    ctx["communication_log_entries"] = communication_log_entries(booking)
+    try:
+        ctx["communication_log_entries"] = communication_log_entries(booking)
+    except Exception:
+        ctx["communication_log_entries"] = []
 
     return render(request, "instructor/booking_detail.html", ctx)
 

@@ -18,7 +18,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if not (settings.TELEGRAM_BOT_TOKEN or "").strip():
-            self.stderr.write(self.style.ERROR("TELEGRAM_BOT_TOKEN is not set."))
+            self.stdout.write(
+                self.style.WARNING("TELEGRAM_BOT_TOKEN is not set; skipping webhook setup.")
+            )
             return
 
         if options["clear"]:
@@ -33,7 +35,9 @@ class Command(BaseCommand):
             return
 
         if not (settings.TELEGRAM_WEBHOOK_SECRET or "").strip():
-            self.stderr.write(self.style.ERROR("TELEGRAM_WEBHOOK_SECRET is not set."))
+            self.stdout.write(
+                self.style.WARNING("TELEGRAM_WEBHOOK_SECRET is not set; skipping webhook setup.")
+            )
             return
 
         url = asyncio.run(set_production_webhook())

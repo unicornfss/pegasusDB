@@ -11,14 +11,14 @@
     {% if booking.instructor.telegram_chat_id %}
       {% if inside_booking_form %}
       <button type="submit"
-              formaction="{% url send_url_name booking.pk %}"
+              formaction="{% if send_url_name == 'admin_booking_telegram_send' %}/app/admin/bookings/{{ booking.pk }}/telegram-send/{% else %}/app/instructor/booking/{{ booking.pk }}/telegram-send/{% endif %}"
               formmethod="post"
               formnovalidate
               class="btn btn-outline-primary btn-sm">
         <i class="bi bi-send me-1"></i>Resend notification via Telegram
       </button>
       {% else %}
-      <form method="post" action="{% url send_url_name booking.pk %}">
+      <form method="post" action="{% if send_url_name == 'admin_booking_telegram_send' %}/app/admin/bookings/{{ booking.pk }}/telegram-send/{% else %}/app/instructor/booking/{{ booking.pk }}/telegram-send/{% endif %}">
         {% csrf_token %}
         <button type="submit" class="btn btn-outline-primary btn-sm">
           <i class="bi bi-send me-1"></i>Resend notification via Telegram

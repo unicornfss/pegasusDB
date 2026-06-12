@@ -1527,7 +1527,10 @@ def booking_form(request, pk=None):
         ctx.update(_admin_invoice_context(obj))
         from .utils.communication_log import communication_log_entries
 
-        ctx["communication_log_entries"] = communication_log_entries(obj)
+        try:
+            ctx["communication_log_entries"] = communication_log_entries(obj)
+        except Exception:
+            ctx["communication_log_entries"] = []
 
     return render(request, "admin/form_booking.html", ctx)
 
