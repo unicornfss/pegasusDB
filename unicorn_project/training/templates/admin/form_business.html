@@ -574,7 +574,7 @@
 
     deleteUrlTemplate: "{% url 'admin_location_delete_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
 
-    unarchiveUrlTemplate: "{% url 'admin_location_unarchive_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+    unarchiveUrlTemplate: "/app/admin/locations/{id}/unarchive-ajax/",
 
     onSaved: function () { window.location.reload(); },
 

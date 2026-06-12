@@ -99,7 +99,7 @@
         <button
           type="submit"
           class="btn btn-outline-success ms-auto"
-          formaction="{% url 'admin_location_unarchive' form.instance.pk %}"
+          formaction="/app/admin/locations/{{ form.instance.pk }}/unarchive/"
           formmethod="post"
           formnovalidate
           onclick="return confirm('Restore this location so it can be used for new bookings again?');">
