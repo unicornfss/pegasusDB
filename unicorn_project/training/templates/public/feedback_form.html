@@ -1,345 +1,603 @@
 {% extends "public/base_public.html" %}
 {% load static %}
 
-{# Browser/tab title only #}
 {% block title %}
   {% if course_type %}{{ course_type.name }} — Course Feedback{% else %}Course Feedback{% endif %}
 {% endblock %}
 
-{# Replace the header so it shows logo + company name (no page title here) #}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  .feedback-page {
+    max-width: 42rem;
+    margin-inline: auto;
+  }
+  .feedback-intro {
+    text-align: center;
+    margin-bottom: 1.25rem;
+  }
+  .feedback-intro p {
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 0;
+    font-size: 0.95rem;
+  }
+  .feedback-brand-name {
+    font-size: clamp(1rem, 3vw, 1.15rem);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .feedback-brand-subtitle {
+    font-size: clamp(0.85rem, 2.5vw, 0.95rem);
+    line-height: 1.35;
+    margin-top: 0.15rem;
+    color: var(--app-muted, #6b7280);
+  }
+  .feedback-logo {
+    height: clamp(56px, 14vw, 80px);
+    width: auto;
+  }
+  .feedback-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 1rem;
+    background: var(--app-surface, #fff);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .feedback-section {
+    padding: 1.25rem 1.25rem 0.25rem;
+  }
+  .feedback-section + .feedback-section {
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    margin-top: 0.25rem;
+    padding-top: 1.25rem;
+  }
+  .feedback-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 1rem;
+  }
+  .feedback-course-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--app-surface-2, #f8fafc);
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+  }
+  .feedback-course-pill .course-icon {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.65rem;
+    display: grid;
+    place-items: center;
+    background: rgba(139, 0, 0, .1);
+    color: var(--unicorn-red, #8B0000);
+    font-size: 1.1rem;
+  }
+  .feedback-course-pill .course-name {
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .feedback-course-pill .course-code {
+    font-size: 0.85rem;
+    color: var(--app-muted, #6b7280);
+  }
+  .feedback-field label.form-label {
+    font-weight: 600;
+    font-size: 0.92rem;
+    margin-bottom: 0.35rem;
+  }
+  .feedback-question {
+    margin-bottom: 1.1rem;
+  }
+  .feedback-question > .form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .choice-list {
+    display: grid;
+    gap: 0.65rem;
+  }
+  .choice-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .12));
+    border-radius: 0.75rem;
+    background: var(--app-surface, #fff);
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .choice-card:hover {
+    border-color: rgba(139, 0, 0, .35);
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .choice-card:has(input:checked) {
+    border-color: var(--unicorn-red, #8B0000);
+    box-shadow: 0 0 0 3px rgba(139, 0, 0, .12);
+    background: rgba(139, 0, 0, .04);
+  }
+  .choice-card input {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+  }
+  .choice-card span {
+    line-height: 1.45;
+    font-size: 0.95rem;
+  }
+  .instructor-readonly {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--app-surface-2, #f8fafc);
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    font-weight: 600;
+  }
+  .instructor-readonly i {
+    color: var(--unicorn-red, #8B0000);
+    font-size: 1.25rem;
+  }
+  .feedback-empty-note {
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--app-surface-2, #f8fafc);
+    color: var(--app-muted, #6b7280);
+    font-size: 0.92rem;
+  }
+  .dev-date-banner {
+    font-size: 0.82rem;
+    color: #856404;
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .rating-scale ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+  .rating-scale li {
+    margin: 0;
+    padding: 0;
+    flex: 0 0 4.85rem;
+  }
+  .rating-scale label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.2rem;
+    margin: 0;
+    padding: 0.45rem 0.35rem;
+    width: 4.85rem;
+    height: 4.1rem;
+    box-sizing: border-box;
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .12));
+    border-radius: 0.65rem;
+    background: var(--app-surface, #fff);
+    cursor: pointer;
+    line-height: 1.2;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .rating-scale .scale-num {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--unicorn-red, #8B0000);
+    flex-shrink: 0;
+  }
+  .rating-scale .scale-word {
+    font-size: 0.58rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--app-muted, #6b7280);
+    text-align: center;
+    width: 100%;
+    line-height: 1.15;
+    min-height: 2.3em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow-wrap: anywhere;
+  }
+  .rating-scale label:hover {
+    border-color: rgba(139, 0, 0, .35);
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .rating-scale input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .rating-scale label:has(input:checked) {
+    border-color: var(--unicorn-red, #8B0000);
+    box-shadow: 0 0 0 3px rgba(139, 0, 0, .12);
+    background: rgba(139, 0, 0, .04);
+  }
+  .rating-scale label:has(input:checked) .scale-num {
+    color: var(--unicorn-red, #8B0000);
+  }
+  .opt-flag {
+    color: var(--app-muted, #6b7280);
+    font-weight: 400;
+    font-size: 0.85rem;
+  }
+  .feedback-footer {
+    padding: 1.25rem;
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .feedback-submit {
+    min-height: 3rem;
+    font-weight: 600;
+    font-size: 1rem;
+    background: var(--unicorn-red, #8B0000);
+    border-color: var(--unicorn-red, #8B0000);
+  }
+  .feedback-submit:hover,
+  .feedback-submit:focus {
+    background: #6f0000;
+    border-color: #6f0000;
+  }
+  .callback-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .12));
+    border-radius: 0.75rem;
+    background: var(--app-surface, #fff);
+    cursor: pointer;
+  }
+  .callback-card:has(input:checked) {
+    border-color: var(--unicorn-red, #8B0000);
+    box-shadow: 0 0 0 3px rgba(139, 0, 0, .12);
+    background: rgba(139, 0, 0, .04);
+  }
+  .callback-card input {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+  }
+  body.night-mode .feedback-card {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+  }
+  body.night-mode .feedback-course-pill,
+  body.night-mode .feedback-footer,
+  body.night-mode .instructor-readonly,
+  body.night-mode .feedback-empty-note {
+    background: #161d27 !important;
+  }
+  body.night-mode .choice-card:hover {
+    background: #161d27 !important;
+  }
+  body.night-mode .choice-card:has(input:checked) {
+    background: rgba(139, 0, 0, .18) !important;
+  }
+  body.night-mode .dev-date-banner {
+    color: #ffe082;
+    background: #3d3200;
+    border-color: #665500;
+  }
+  body.night-mode .rating-scale label {
+    background: #1f2d40 !important;
+    border-color: #3f536f !important;
+    color: #e7effb !important;
+  }
+  body.night-mode .rating-scale label:hover,
+  body.night-mode .rating-scale label:has(input:checked) {
+    background: rgba(139, 0, 0, .18) !important;
+  }
+  body.night-mode .callback-card {
+    background: #1f2d40 !important;
+    border-color: #3f536f !important;
+    color: #e7effb !important;
+  }
+</style>
+{% endblock %}
+
 {% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
+  <div class="d-flex align-items-center gap-3">
+    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" class="feedback-logo">
+    <div>
+      <div class="feedback-brand-name">Unicorn Fire &amp; Safety Solutions</div>
+      <div class="feedback-brand-subtitle">
+        {% if course_type %}{{ course_type.name }} — course feedback{% else %}Course feedback{% endif %}
+      </div>
+    </div>
   </div>
 {% endblock %}
 
 {% block content %}
+<div class="feedback-page">
+  <div class="feedback-intro">
+    <p>Your feedback helps us improve our training. Ratings are anonymous unless you choose to leave contact details.</p>
+  </div>
 
-<style>
-/* Bigger, clearer emoji radios */
-.emoji-scale .form-check-label{
-  font-size: 1.6rem;
-  line-height: 1.1;
-  display: inline-flex;
-  align-items: center;
-  gap: .35rem;
-}
-.emoji-scale .form-check{ margin-right: .6rem; }
-.emoji-scale input[type="radio"]{ transform: scale(1.25); margin-right: .25rem; }
-@media (max-width: 576px){
-  .emoji-scale .form-check-label{ font-size: 1.4rem; }
-  .emoji-scale input[type="radio"]{ transform: scale(1.15); }
-}
-/* small helper for optional hint */
-.opt-flag { color:#6c757d; font-weight:400; font-size:.9rem; }
+  <form method="post" novalidate id="feedback-form" class="feedback-card">
+    {% csrf_token %}
 
-/* Night mode readability tuning for feedback page */
-body.night-mode #feedback-form,
-body.night-mode #feedback-form label,
-body.night-mode #feedback-form .form-label,
-body.night-mode #feedback-form .form-check-label,
-body.night-mode #feedback-form .form-text,
-body.night-mode #feedback-form h5,
-body.night-mode #feedback-form h2 {
-  color: #e7effb !important;
-}
-body.night-mode #feedback-form hr {
-  border-color: #4a5d79;
-  opacity: 1;
-}
-body.night-mode #feedback-form .emoji-scale .form-check {
-  background: #1f2d40;
-  border: 1px solid #3f536f;
-  border-radius: .45rem;
-  padding: .25rem .45rem;
-  margin-bottom: .3rem;
-}
-body.night-mode #feedback-form .emoji-scale .num,
-body.night-mode #feedback-form .opt-flag {
-  color: #c6d5ea !important;
-}
-body.night-mode #feedback-form textarea,
-body.night-mode #feedback-form input[type="text"],
-body.night-mode #feedback-form input[type="email"],
-body.night-mode #feedback-form input[type="tel"],
-body.night-mode #feedback-form input[type="date"],
-body.night-mode #feedback-form select {
-  background: #1f2d40 !important;
-  color: #eef5ff !important;
-  border-color: #4b6282 !important;
-}
-body.night-mode #feedback-form textarea::placeholder,
-body.night-mode #feedback-form input::placeholder {
-  color: #b8c8dd !important;
-}
-body.night-mode #feedback-form .invalid-feedback {
-  color: #ffb4b4;
-}
-</style>
+    {% if course_type %}
+      <input type="hidden"
+             id="id_course_type"
+             name="{{ form.course_type.html_name }}"
+             value="{{ form.course_type.value|default:course_type.id }}"
+             data-code="{{ course_type.code }}">
+      <div class="feedback-section">
+        <div class="feedback-section-title">Course</div>
+        <div class="feedback-course-pill">
+          <div class="course-icon"><i class="bi bi-mortarboard"></i></div>
+          <div>
+            <div class="course-name">{{ course_type.name }}</div>
+            <div class="course-code">{{ course_type.code }}</div>
+          </div>
+        </div>
+      </div>
+    {% else %}
+      <div class="feedback-section">
+        <div class="feedback-section-title">Course</div>
+        <div class="feedback-field">
+          <label class="form-label" for="courseSelect">Select course</label>
+          <select name="course_type" id="courseSelect" class="form-select" required>
+            <option value="">— Select course —</option>
+            {% for c in course_types %}
+              <option value="{{ c.id }}" data-code="{{ c.code }}" {% if form.course_type.value|stringformat:"s" == c.id|stringformat:"s" %}selected{% endif %}>{{ c.name }} ({{ c.code }})</option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Scanning a course QR code will select this automatically.</div>
+        </div>
+      </div>
+    {% endif %}
 
-<div class="mb-3">
-  <h2 class="mb-1">
-    {% if course_type %}{{ course_type.name }} — Course Feedback{% else %}Course Feedback{% endif %}
-  </h2>
+    {% if show_feedback_date %}
+    <div class="feedback-section">
+      <div class="feedback-section-title">Course date <span class="fw-normal text-lowercase">(development)</span></div>
+      <div class="dev-date-banner">
+        <i class="bi bi-tools"></i> Visible in development only — change this to test instructor matching on other days.
+      </div>
+      <div class="feedback-field mb-0">
+        <label class="form-label" for="id_date">Date</label>
+        {{ form.date }}
+      </div>
+    </div>
+    {% else %}
+      {{ form.date }}
+    {% endif %}
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Instructor</div>
+      <div id="instructor-content">
+        {% if single_instructor %}
+          {% if instructor_fallback %}
+            <p class="form-text mb-2">No instructor is scheduled for this course on the selected date.</p>
+          {% endif %}
+          <div class="instructor-readonly">
+            <i class="bi bi-person-badge" aria-hidden="true"></i>
+            <span>{{ single_instructor.name }}</span>
+          </div>
+          {{ form.instructor }}
+        {% elif instructors|length > 1 %}
+          {% if instructor_fallback %}
+            <p class="form-text mb-2">No instructor is scheduled for this course on the selected date. Please select your instructor below.</p>
+          {% endif %}
+          <div class="choice-list">
+            {% for radio in form.instructor %}
+              <label class="choice-card">
+                {{ radio.tag }}
+                <span>{{ radio.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% elif course_type %}
+          <div class="feedback-empty-note">No instructors are scheduled for <strong>{{ course_type.code }}</strong> on the selected date.</div>
+          {% if instructor_dev_hint %}
+            <div class="form-text mt-2"><i class="bi bi-info-circle"></i> {{ instructor_dev_hint }}</div>
+          {% endif %}
+        {% else %}
+          <div class="feedback-empty-note">Select a course to see available instructors.</div>
+        {% endif %}
+      </div>
+      {% for err in form.instructor.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Knowledge levels</div>
+      <div class="row g-3">
+        <div class="col-md-6 feedback-question">
+          <label class="form-label">Knowledge before the course</label>
+          <div class="rating-scale">{{ form.prior_knowledge }}</div>
+        </div>
+        <div class="col-md-6 feedback-question">
+          <label class="form-label">Knowledge after the course</label>
+          <div class="rating-scale">{{ form.post_knowledge }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Course objectives &amp; content</div>
+      <div class="feedback-question">
+        <label class="form-label">Purpose and objectives were clearly explained</label>
+        <div class="rating-scale">{{ form.q_purpose_clear }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">Course met my personal training needs</label>
+        <div class="rating-scale">{{ form.q_personal_needs }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">The exercises were relevant and useful</label>
+        <div class="rating-scale">{{ form.q_exercises_useful }}</div>
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Course presentation</div>
+      <div class="feedback-question">
+        <label class="form-label">Sessions were well structured and logical</label>
+        <div class="rating-scale">{{ form.q_structure }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">The sessions were suitably paced</label>
+        <div class="rating-scale">{{ form.q_pace }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">Content and language were easy to understand</label>
+        <div class="rating-scale">{{ form.q_content_clear }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">The instructor was knowledgeable</label>
+        <div class="rating-scale">{{ form.q_instructor_knowledge }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">Training materials and equipment were of good standard</label>
+        <div class="rating-scale">{{ form.q_materials_quality }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">Course books and handouts were of good standard</label>
+        <div class="rating-scale">{{ form.q_books_quality }}</div>
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Venue</div>
+      <div class="feedback-question mb-0">
+        <label class="form-label">The venue was suitable and comfortable</label>
+        <div class="rating-scale">{{ form.q_venue_suitable }}</div>
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Summary</div>
+      <div class="feedback-question">
+        <label class="form-label">The training will be beneficial to me at work</label>
+        <div class="rating-scale">{{ form.q_benefit_at_work }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">The training will be beneficial to me outside of work</label>
+        <div class="rating-scale">{{ form.q_benefit_outside }}</div>
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Overall</div>
+      <div class="feedback-question mb-0">
+        <label class="form-label">Overall, I would rate this course as</label>
+        <div class="rating-scale">{{ form.overall_rating }}</div>
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Comments</div>
+      <div class="feedback-field mb-0">
+        <label class="form-label" for="id_comments">Anything else you would like to tell us?</label>
+        {{ form.comments }}
+      </div>
+    </div>
+
+    <div class="feedback-section">
+      <div class="feedback-section-title">Follow-up</div>
+      <label class="callback-card mb-3" for="id_wants_callback">
+        {{ form.wants_callback }}
+        <span>I would like to speak to you about my experience</span>
+      </label>
+
+      <div id="contact-block" class="row g-3">
+        <div class="col-md-4 feedback-field">
+          <label class="form-label" for="id_contact_name">Name <span class="opt-flag" id="opt-name">(optional)</span></label>
+          {{ form.contact_name }}
+          <div class="invalid-feedback" id="name-feedback">Please enter your name.</div>
+        </div>
+        <div class="col-md-4 feedback-field">
+          <label class="form-label" for="id_contact_email">Email <span class="opt-flag" id="opt-email">(optional)</span></label>
+          {{ form.contact_email }}
+          <div class="invalid-feedback" id="email-or-phone-feedback">Please provide email or telephone.</div>
+        </div>
+        <div class="col-md-4 feedback-field">
+          <label class="form-label" for="id_contact_phone">Telephone <span class="opt-flag" id="opt-phone">(optional)</span></label>
+          {{ form.contact_phone }}
+        </div>
+      </div>
+    </div>
+
+    <div class="feedback-footer">
+      {% include "legal/_inline_notice_feedback.html" %}
+      <button type="submit" class="btn btn-primary feedback-submit w-100 mt-3">Submit feedback</button>
+    </div>
+  </form>
 </div>
 
-<form method="post" novalidate id="feedback-form">
-  {% csrf_token %}
-
-  {% if course_type %}
-    <input type="hidden"
-           id="id_course_type"
-           name="{{ form.course_type.html_name }}"
-           value="{{ form.course_type.value|default:course_type.id }}"
-           data-code="{{ course_type.code }}">
-    <div class="row g-3 align-items-end mb-3">
-      <div class="col-md-4">
-        <label class="form-label" for="id_date">Date</label>
-        {{ form.date }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label" for="id_instructor">Instructor (shown if more than one possible that day)</label>
-        {{ form.instructor }}
-        <div class="form-text">If this is blank, please select your instructor.</div>
-      </div>
-    </div>
-  {% else %}
-    <div class="row g-3 align-items-end mb-3">
-      <div class="col-md-4">
-        <label class="form-label" for="id_course_type">Course type</label>
-        {{ form.course_type }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label" for="id_date">Date</label>
-        {{ form.date }}
-      </div>
-      <div class="col-md-4">
-        <label class="form-label" for="id_instructor">Instructor (shown if more than one possible that day)</label>
-        {{ form.instructor }}
-        <div class="form-text">If this is blank, please select your instructor.</div>
-      </div>
-    </div>
-  {% endif %}
-    <div>{% include "legal/_inline_notice_feedback.html" %}</div>
-  <hr>
-  <h5>Knowledge levels</h5>
-  <div class="row g-3">
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Level of knowledge prior to course</label>
-      {{ form.prior_knowledge }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Level of knowledge post course</label>
-      {{ form.post_knowledge }}
-    </div>
-  </div>
-
-  <hr>
-  <h5>Course objectives and content</h5>
-  <div class="row g-3">
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Purpose & objectives were clearly explained</label>
-      {{ form.q_purpose_clear }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Course met my personal training needs</label>
-      {{ form.q_personal_needs }}
-    </div>
-    <div class="col-md-12 emoji-scale">
-      <label class="form-label">The exercises were relevant and useful</label>
-      {{ form.q_exercises_useful }}
-    </div>
-  </div>
-
-  <hr>
-  <h5>Course presentation</h5>
-  <div class="row g-3">
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Sessions were well structured / logical</label>
-      {{ form.q_structure }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">The sessions were suitably paced</label>
-      {{ form.q_pace }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Content & language easy to understand</label>
-      {{ form.q_content_clear }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">The instructor was knowledgeable</label>
-      {{ form.q_instructor_knowledge }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Training materials / equipment were of good standard</label>
-      {{ form.q_materials_quality }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">Course books / handouts were a good standard</label>
-      {{ form.q_books_quality }}
-    </div>
-  </div>
-
-  <hr>
-  <h5>Venue</h5>
-  <div class="mb-3 emoji-scale">
-    <label class="form-label">The venue was suitable and comfortable</label>
-    {{ form.q_venue_suitable }}
-  </div>
-
-  <hr>
-  <h5>Summary</h5>
-  <div class="row g-3">
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">The training will be beneficial to me at work</label>
-      {{ form.q_benefit_at_work }}
-    </div>
-    <div class="col-md-6 emoji-scale">
-      <label class="form-label">The training will be beneficial to me outside of work</label>
-      {{ form.q_benefit_outside }}
-    </div>
-  </div>
-
-  <hr>
-  <h5>Overall</h5>
-  <div class="mb-3 emoji-scale">
-    <label class="form-label">Overall, I would rate this course as</label>
-    {{ form.overall_rating }}
-  </div>
-
-  <hr>
-  <div class="mb-3">
-    <label class="form-label">Comments</label>
-    {{ form.comments }}
-  </div>
-
-  <div class="form-check mb-2">
-    {{ form.wants_callback }} <label class="form-check-label" for="id_wants_callback">I would like to speak to you about my experience</label>
-  </div>
-
-  {# Contact details are ALWAYS visible. Optional hints toggle with the checkbox. #}
-  <div id="contact-block" class="row g-3">
-    <div class="col-md-4">
-      <label class="form-label" for="id_contact_name">Name <span class="opt-flag" id="opt-name">(optional)</span></label>
-      {{ form.contact_name }}
-      <div class="invalid-feedback" id="name-feedback">Please enter your name.</div>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label" for="id_contact_email">Email <span class="opt-flag" id="opt-email">(optional)</span></label>
-      {{ form.contact_email }}
-      <div class="invalid-feedback" id="email-or-phone-feedback">Please provide email or telephone.</div>
-    </div>
-    <div class="col-md-4">
-      <label class="form-label" for="id_contact_phone">Telephone <span class="opt-flag" id="opt-phone">(optional)</span></label>
-      {{ form.contact_phone }}
-    </div>
-  </div>
-
-  <div class="mt-3 d-flex gap-2">
-    <button class="btn btn-primary">Submit feedback</button>
-  </div>
-</form>
-
 <script>
-  // YYYY-MM-DD helpers
-  function todayISO(){
-    const d = new Date();
-    const m = String(d.getMonth()+1).padStart(2,"0");
-    const day = String(d.getDate()).padStart(2,"0");
-    return `${d.getFullYear()}-${m}-${day}`;
+  const showFeedbackDate = {{ show_feedback_date|yesno:"true,false" }};
+
+  const courseSelect = document.getElementById('courseSelect');
+  if (courseSelect) {
+    courseSelect.addEventListener('change', function(){
+      const opt = this.selectedOptions[0];
+      if (opt && opt.dataset.code){
+        const params = new URLSearchParams(window.location.search);
+        params.set('course', opt.dataset.code);
+        if (!showFeedbackDate) params.delete('date');
+        window.location.search = params.toString();
+      }
+    });
   }
-  function toISODate(str) {
-    if (!str) return "";
-    if (str.includes("/")) {
-      const [dd, mm, yyyy] = str.split("/");
-      if (yyyy && mm && dd) return `${yyyy}-${String(mm).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
-    }
-    return str;
+
+  const feedbackDateEl = document.getElementById('id_date');
+  if (feedbackDateEl && showFeedbackDate && feedbackDateEl.type !== 'hidden') {
+    feedbackDateEl.addEventListener('change', function(){
+      const params = new URLSearchParams(window.location.search);
+      if (this.value) params.set('date', this.value);
+      window.location.search = params.toString();
+    });
   }
 
-  // Reload instructors on course/date changes
   (function(){
-    const courseEl = document.getElementById("id_course_type");
-    const dateEl   = document.getElementById("id_date");
-    const instEl   = document.getElementById("id_instructor");
-    if (dateEl && !dateEl.value) dateEl.value = todayISO();
+    const scaleWords = {
+      "1": "Very poor",
+      "2": "Poor",
+      "3": "Fair",
+      "4": "Good",
+      "5": "Excellent"
+    };
 
-    async function loadInstructors(){
-      if(!instEl) return;
-      let courseParam = "";
-      if (courseEl) courseParam = courseEl.dataset.code || courseEl.value || "";
-      const rawDate = dateEl && dateEl.value ? dateEl.value : todayISO();
-      const dateISO = toISODate(rawDate);
-
-      const url = new URL("{% url 'public_feedback_instructors_api' %}", window.location.origin);
-      if (courseParam) url.searchParams.set("course", courseParam);
-      if (dateISO)     url.searchParams.set("date",   dateISO);
-
-      try{
-        const res  = await fetch(url.toString(), {headers: {"X-Requested-With":"fetch"}});
-        const data = await res.json();
-
-        instEl.innerHTML = "";
-        const ph = document.createElement("option");
-        ph.value = "";
-        ph.textContent = "Select instructor…";
-        instEl.appendChild(ph);
-
-        (data.options || []).forEach(opt => {
-          const o = document.createElement("option");
-          o.value = opt.id;
-          o.textContent = opt.name;
-          instEl.appendChild(o);
-        });
-
-        if ((data.options || []).length === 1) {
-          instEl.value = data.options[0].id;
-        }
-      }catch(e){ /* ignore */ }
-    }
-
-    if (courseEl) courseEl.addEventListener("change", loadInstructors);
-    if (dateEl)   dateEl.addEventListener("change", loadInstructors);
-    loadInstructors();
-  })();
-
-  // ✅ Emoji labels for any 1–5 radios (preserve input so it stays clickable)
-  (function(){
-    const map = { "1":"😞", "2":"🙁", "3":"😐", "4":"🙂", "5":"😄" };
-
-    document.querySelectorAll('.emoji-scale').forEach(group => {
+    document.querySelectorAll('.rating-scale').forEach(group => {
       group.querySelectorAll('label').forEach(lbl => {
         const input = lbl.querySelector('input[type="radio"]');
         if (!input) return;
 
         const val = String(input.value);
-        const emoji = map[val];
-        if (!emoji) return;
+        const word = scaleWords[val];
+        if (!word) return;
 
-        // Remove everything *after* the input so we keep the input element itself
         while (input.nextSibling) lbl.removeChild(input.nextSibling);
 
-        const eSpan = document.createElement('span');
-        eSpan.className = 'emoji';
-        eSpan.textContent = emoji;
+        const numSpan = document.createElement('span');
+        numSpan.className = 'scale-num';
+        numSpan.textContent = val;
 
-        const nSpan = document.createElement('span');
-        nSpan.className = 'num';
-        nSpan.textContent = ' ' + val;
-        nSpan.style.fontSize = '.95rem';
-        nSpan.style.color = '#6c757d';
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'scale-word';
+        wordSpan.textContent = word;
 
-        lbl.appendChild(eSpan);
-        lbl.appendChild(nSpan);
+        lbl.appendChild(numSpan);
+        lbl.appendChild(wordSpan);
       });
     });
   })();
 
-  // Contact fields logic: always visible; when wants_callback is checked,
-  // - Name required
-  // - At least one of Email or Telephone required
-  // - Remove "(optional)" flags; add them back when unchecked
   (function(){
     const form   = document.getElementById('feedback-form');
     const speak  = document.getElementById('id_wants_callback');

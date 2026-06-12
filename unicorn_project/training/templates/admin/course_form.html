@@ -343,67 +343,97 @@
     </div>
   </div>
 
-  {# ── Delegate registration ── #}
-  {% if register_links %}
-  <div class="admin-form-card">
-    <div class="card-header">
-      <i class="bi bi-qr-code"></i> Delegate registration link
-    </div>
-    <div class="card-body">
-      {% if object.is_suspended %}
-      <div class="alert alert-warning">
-        This course type is suspended. Links and QR codes below will not accept new delegate registrations until it is reactivated.
-      </div>
-      {% endif %}
-      <p class="text-muted mb-3 mb-md-4">
-        Share this short link or QR code with delegates. They go straight to the register form with this course pre-selected.
-      </p>
-      <div class="register-row">
-        <div class="register-links-panel">
+  {# ── Delegate registration & feedback links ── #}
+  <div class="row g-3">
+    <div class="col-lg-6">
+      {% if register_links %}
+      <div class="admin-form-card h-100">
+        <div class="card-header">
+          <i class="bi bi-qr-code"></i> Delegate registration
+        </div>
+        <div class="card-body">
+          {% if object.is_suspended %}
+          <div class="alert alert-warning py-2 px-3 small">
+            Suspended — registration links will not accept new delegates until reactivated.
+          </div>
+          {% endif %}
+          <p class="text-muted small mb-3">
+            Short link or QR — opens the register form with this course pre-selected.
+          </p>
           <div class="mb-3">
-            <label class="form-label fw-semibold">Short link</label>
-            <div class="input-group">
+            <label class="form-label fw-semibold small">Short link</label>
+            <div class="input-group input-group-sm">
               <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.short_url }}" id="register-short-url">
-              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-short-url">
-                <i class="bi bi-clipboard"></i> Copy
+              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-short-url" title="Copy">
+                <i class="bi bi-clipboard"></i>
               </button>
-              <a class="btn btn-outline-primary" href="{{ register_links.short_url }}" target="_blank" rel="noopener">
-                <i class="bi bi-box-arrow-up-right"></i> Open
+              <a class="btn btn-outline-primary" href="{{ register_links.short_url }}" target="_blank" rel="noopener" title="Open">
+                <i class="bi bi-box-arrow-up-right"></i>
               </a>
             </div>
           </div>
-          <div class="mb-0">
-            <label class="form-label fw-semibold">Full URL</label>
-            <div class="input-group">
-              <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.full_url }}" id="register-full-url">
-              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-full-url">
-                <i class="bi bi-clipboard"></i> Copy
-              </button>
+          <div class="text-center">
+            <div class="register-qr-wrap d-inline-block mb-2">
+              <img src="{{ register_links.qr_url }}" alt="Registration QR for {{ object.code }}" class="img-fluid" style="max-width: 140px;">
+            </div>
+            <div>
+              <a class="btn btn-sm btn-outline-primary" href="{{ register_links.qr_url }}" download="{{ register_links.download_name }}">
+                <i class="bi bi-download"></i> Download QR
+              </a>
             </div>
           </div>
         </div>
-        <div class="register-qr-panel text-center text-xl-start mt-3 mt-xl-0">
-          <label class="form-label fw-semibold d-block">QR code</label>
-          <div class="register-qr-wrap mb-2">
-            <img src="{{ register_links.qr_url }}" alt="Registration QR for {{ object.code }}" class="img-fluid" style="max-width: 180px;">
+      </div>
+      {% elif not is_new_course %}
+      <div class="admin-form-card h-100">
+        <div class="card-header"><i class="bi bi-qr-code"></i> Delegate registration</div>
+        <div class="card-body text-muted small mb-0">Save this course type to generate links.</div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="col-lg-6">
+      {% if feedback_links %}
+      <div class="admin-form-card h-100">
+        <div class="card-header">
+          <i class="bi bi-chat-left-text"></i> Course feedback
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-3">
+            Short link or QR — opens the feedback form with this course pre-selected.
+          </p>
+          <div class="mb-3">
+            <label class="form-label fw-semibold small">Short link</label>
+            <div class="input-group input-group-sm">
+              <input type="text" class="form-control js-copy-source" readonly value="{{ feedback_links.short_url }}" id="feedback-short-url">
+              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#feedback-short-url" title="Copy">
+                <i class="bi bi-clipboard"></i>
+              </button>
+              <a class="btn btn-outline-primary" href="{{ feedback_links.short_url }}" target="_blank" rel="noopener" title="Open">
+                <i class="bi bi-box-arrow-up-right"></i>
+              </a>
+            </div>
           </div>
-          <a class="btn btn-sm btn-outline-primary" href="{{ register_links.qr_url }}" download="{{ register_links.download_name }}">
-            <i class="bi bi-download"></i> Download PNG
-          </a>
+          <div class="text-center">
+            <div class="register-qr-wrap d-inline-block mb-2">
+              <img src="{{ feedback_links.qr_url }}" alt="Feedback QR for {{ object.code }}" class="img-fluid" style="max-width: 140px;">
+            </div>
+            <div>
+              <a class="btn btn-sm btn-outline-primary" href="{{ feedback_links.qr_url }}" download="{{ feedback_links.download_name }}">
+                <i class="bi bi-download"></i> Download QR
+              </a>
+            </div>
+          </div>
         </div>
       </div>
+      {% elif not is_new_course %}
+      <div class="admin-form-card h-100">
+        <div class="card-header"><i class="bi bi-chat-left-text"></i> Course feedback</div>
+        <div class="card-body text-muted small mb-0">Save this course type to generate links.</div>
+      </div>
+      {% endif %}
     </div>
   </div>
-  {% elif not is_new_course %}
-  <div class="admin-form-card">
-    <div class="card-header">
-      <i class="bi bi-qr-code"></i> Delegate registration link
-    </div>
-    <div class="card-body text-muted mb-0">
-      Save this course type to generate the registration short link and QR code.
-    </div>
-  </div>
-  {% endif %}
 
   {# ── Competencies & exams ── #}
   <div class="row g-3">

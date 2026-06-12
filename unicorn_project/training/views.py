@@ -22,6 +22,7 @@ from .forms import (
     DelegateRegisterForm,
     PublicDelegateRegisterForm,
     FeedbackForm,
+    PublicFeedbackForm,
     delivery_personnel_queryset,
 )
 from .forms_profile import UserProfileForm, PersonnelProfileForm
@@ -256,6 +257,32 @@ def public_register_short_qr(request, code):
     if not course:
         return HttpResponse(status=404)
     png = qr_png_bytes(course_register_short_url(request, course.code))
+    return HttpResponse(png, content_type="image/png")
+
+
+def _course_type_by_code(code: str):
+    return CourseType.objects.filter(code__iexact=(code or "").strip()).first()
+
+
+@require_GET
+def public_feedback_short(request, code):
+    """Short URL for course feedback: /f/<course_code>/ → /feedback/?course=…"""
+    course = _course_type_by_code(code)
+    if not course:
+        return HttpResponse("Course not found.", status=404)
+    target = f"{reverse('public_feedback_form')}?{urlencode({'course': course.code})}"
+    return redirect(target)
+
+
+@require_GET
+def public_feedback_short_qr(request, code):
+    """PNG QR code encoding the short feedback URL for a course type."""
+    from .utils.feedback_links import course_feedback_short_url, qr_png_bytes
+
+    course = _course_type_by_code(code)
+    if not course:
+        return HttpResponse(status=404)
+    png = qr_png_bytes(course_feedback_short_url(request, course.code))
     return HttpResponse(png, content_type="image/png")
 
 
@@ -840,31 +867,61 @@ def public_feedback_form(request):
     and automatically links the feedback to the matching Booking
     (by course_type + course_date + instructor) where possible.
     """
-    # --- 1) Resolve course from query (?course=code or UUID) ---
-    course_q = request.GET.get("course") or ""
+    course_q = request.GET.get("course") or request.GET.get("ct") or ""
     prefilled_course = _resolve_course_type(course_q)
 
-    # --- 2) Initial values: date + (optional) instructor from query ---
-    init = {
-        "date": _parse_flexible_date(request.GET.get("date") or "") or timezone.localdate()
-    }
+    show_feedback_date = getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
+    feedback_date = timezone.localdate()
+    if show_feedback_date:
+        if request.method == "POST":
+            parsed = _parse_flexible_date((request.POST.get("date") or "").strip())
+            if parsed:
+                feedback_date = parsed
+        elif request.GET.get("date"):
+            parsed = _parse_flexible_date(request.GET.get("date").strip())
+            if parsed:
+                feedback_date = parsed
 
+    init = {"date": feedback_date}
     inst_q = request.GET.get("instructor") or ""
     if inst_q:
         try:
             init["instructor"] = Personnel.objects.get(pk=inst_q)
         except Personnel.DoesNotExist:
-            # If the UUID doesn't match a Personnel row, just skip prefill
             pass
 
-    form = FeedbackForm(request.POST or None, initial=init)
+    course = prefilled_course
+    if not course and request.method == "POST":
+        posted_course = (request.POST.get("course_type") or "").strip()
+        if posted_course:
+            try:
+                course = CourseType.objects.get(pk=posted_course)
+            except (CourseType.DoesNotExist, ValueError):
+                course = _resolve_course_type(posted_course)
 
-    # If course isn’t prefilled, user must choose it; otherwise keep field but pre-set it
+    instructors = []
+    instructor_fallback = False
+    if course:
+        instructors, instructor_fallback = _resolve_public_register_instructors(course, feedback_date)
+
+    form = PublicFeedbackForm(
+        request.POST or None,
+        initial=init,
+        instructors=instructors,
+        show_feedback_date=show_feedback_date,
+    )
+
     form.fields["course_type"].required = not bool(prefilled_course)
     if prefilled_course:
         form.fields["course_type"].initial = prefilled_course.id
 
-    # --- 3) Handle submission ---
+    single_instructor = instructors[0] if len(instructors) == 1 else None
+    instructor_dev_hint = (
+        _dev_instructor_register_hint(course, feedback_date)
+        if course and not instructor_fallback and not instructors
+        else ""
+    )
+
     if request.method == "POST" and form.is_valid():
         cd = form.cleaned_data
 
@@ -872,7 +929,6 @@ def public_feedback_form(request):
         the_date = cd.get("date")
         inst = cd.get("instructor")
 
-        # --- 3a) Try to find the matching Booking for linking ---
         booking = None
         if course and the_date and inst:
             booking = (
@@ -889,14 +945,12 @@ def public_feedback_form(request):
                 .first()
             )
 
-        # --- 3b) Create the feedback row (now linked to Booking if found) ---
         FeedbackResponse.objects.create(
             booking     = booking,
             course_type = course,
             date        = the_date,
             instructor  = inst,
 
-            # ratings
             overall_rating         = cd.get("overall_rating"),
             prior_knowledge        = cd.get("prior_knowledge"),
             post_knowledge         = cd.get("post_knowledge"),
@@ -913,7 +967,6 @@ def public_feedback_form(request):
             q_benefit_at_work      = cd.get("q_benefit_at_work"),
             q_benefit_outside      = cd.get("q_benefit_outside"),
 
-            # free text + contact
             comments       = cd.get("comments") or "",
             wants_callback = cd.get("wants_callback") or False,
             contact_name   = cd.get("contact_name") or "",
@@ -924,11 +977,21 @@ def public_feedback_form(request):
         messages.success(request, "Thanks for your feedback!")
         return redirect("public_feedback_thanks")
 
-    # --- 4) Render form on GET or invalid POST ---
+    from .utils.course_types import bookable_course_types
+
     return render(
         request,
         "public/feedback_form.html",
-        {"form": form, "course_type": prefilled_course},
+        {
+            "form": form,
+            "course_type": prefilled_course,
+            "course_types": bookable_course_types(),
+            "instructors": instructors,
+            "single_instructor": single_instructor,
+            "show_feedback_date": show_feedback_date,
+            "instructor_fallback": instructor_fallback,
+            "instructor_dev_hint": instructor_dev_hint,
+        },
     )
 
 

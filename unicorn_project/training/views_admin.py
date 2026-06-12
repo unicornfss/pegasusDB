@@ -673,10 +673,15 @@ def course_form(request, pk=None):
         formset = CourseCompetencyFormSet(instance=ct, prefix="comps")
 
     register_links = None
+    feedback_links = None
     if pk and (ct.code or "").strip():
         from .utils.register_links import (
             course_register_full_url,
             course_register_short_url,
+        )
+        from .utils.feedback_links import (
+            course_feedback_full_url,
+            course_feedback_short_url,
         )
 
         register_links = {
@@ -684,6 +689,12 @@ def course_form(request, pk=None):
             "full_url": course_register_full_url(request, ct.code),
             "qr_url": reverse("public_register_short_qr", kwargs={"code": ct.code}),
             "download_name": f"register-{ct.code}.png",
+        }
+        feedback_links = {
+            "short_url": course_feedback_short_url(request, ct.code),
+            "full_url": course_feedback_full_url(request, ct.code),
+            "qr_url": reverse("public_feedback_short_qr", kwargs={"code": ct.code}),
+            "download_name": f"feedback-{ct.code}.png",
         }
 
     course_code_preview_url = ""
@@ -699,6 +710,7 @@ def course_form(request, pk=None):
         "formset": formset,
         "object": ct,
         "register_links": register_links,
+        "feedback_links": feedback_links,
         "cancel_url": reverse("admin_course_list"),
         "is_new_course": pk is None,
         "course_code_preview_url": course_code_preview_url,

@@ -1,8 +1,50 @@
 {% extends "public/base_public.html" %}
-{% block title %}Thanks!{% endblock %}
+{% load static %}
+
+{% block title %}Thank you{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  .feedback-thanks-page {
+    max-width: 28rem;
+    margin-inline: auto;
+    text-align: center;
+  }
+  .feedback-thanks-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 1rem;
+    background: var(--app-surface, #fff);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    padding: 2.5rem 1.5rem;
+  }
+  .feedback-thanks-icon {
+    width: 3.5rem;
+    height: 3.5rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    margin: 0 auto 1rem;
+    background: rgba(139, 0, 0, .1);
+    color: var(--unicorn-red, #8B0000);
+    font-size: 1.75rem;
+  }
+</style>
+{% endblock %}
+
+{% block header %}
+  <div class="d-flex align-items-center gap-3">
+    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="72">
+    <div class="fs-5 fw-semibold m-0">Unicorn Fire &amp; Safety Solutions</div>
+  </div>
+{% endblock %}
+
 {% block content %}
-<div class="text-center py-5">
-  <h3>Thank you for your feedback</h3>
-  <p class="text-muted">We appreciate your time.</p>
+<div class="feedback-thanks-page py-4">
+  <div class="feedback-thanks-card">
+    <div class="feedback-thanks-icon"><i class="bi bi-check-lg"></i></div>
+    <h2 class="h4 mb-2">Thank you for your feedback</h2>
+    <p class="text-muted mb-0">We appreciate you taking the time to help us improve our training.</p>
+  </div>
 </div>
 {% endblock %}

@@ -962,10 +962,50 @@ class FeedbackForm(forms.ModelForm):
             "overall_rating":         forms.RadioSelect(choices=RATING_CHOICES),
 
             # the rest are normal inputs/textarea/checkbox:
-            "comments":       forms.Textarea(attrs={"rows": 4}),
-            "wants_callback": forms.CheckboxInput(),
-            "date":           forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
+            "comments":       forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
+            "wants_callback": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "date":           forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
+            "course_type":    forms.Select(attrs={"class": "form-select"}),
+            "instructor":     forms.Select(attrs={"class": "form-select"}),
+            "contact_name":   forms.TextInput(attrs={"class": "form-control"}),
+            "contact_email":  forms.EmailInput(attrs={"class": "form-control"}),
+            "contact_phone":  forms.TextInput(attrs={"class": "form-control"}),
         }
+
+
+class PublicFeedbackForm(FeedbackForm):
+    """Public feedback: hidden course date (today in production), instructor like register."""
+
+    def __init__(self, *args, instructors=None, show_feedback_date=False, **kwargs):
+        self.show_feedback_date = show_feedback_date
+        super().__init__(*args, **kwargs)
+
+        if not show_feedback_date:
+            self.fields["date"].widget = forms.HiddenInput()
+
+        if not self.is_bound:
+            self.initial.setdefault("date", timezone.localdate())
+
+        instructors = instructors or []
+        if len(instructors) == 1:
+            self.fields["instructor"].widget = forms.HiddenInput()
+            if not self.is_bound:
+                self.initial["instructor"] = instructors[0].pk
+            self.fields["instructor"].required = True
+        elif len(instructors) > 1:
+            self.fields["instructor"].widget = forms.RadioSelect()
+            self.fields["instructor"].queryset = Personnel.objects.filter(
+                pk__in=[i.pk for i in instructors]
+            ).order_by("name")
+            self.fields["instructor"].empty_label = None
+            self.fields["instructor"].required = True
+            self.fields["instructor"].error_messages = {
+                "required": "Please select your instructor.",
+            }
+        else:
+            self.fields["instructor"].queryset = Personnel.objects.none()
+            self.fields["instructor"].required = False
+
 
 class ExamForm(forms.ModelForm):
     class Meta:
