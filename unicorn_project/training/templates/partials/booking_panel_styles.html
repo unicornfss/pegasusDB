@@ -63,6 +63,46 @@
   .booking-new-form-body {
     padding: 1.25rem 1.35rem 1.35rem;
   }
+  .booking-course-info--compact {
+    padding: 0.75rem 1rem 0.85rem;
+  }
+  .booking-course-info--compact .form-label {
+    margin-bottom: 0.2rem;
+    font-size: 0.875rem;
+  }
+  .booking-course-info-compact {
+    --bs-gutter-x: 0.65rem;
+    --bs-gutter-y: 0.55rem;
+  }
+  .booking-course-info-compact > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+  }
+  .booking-course-info-compact .form-label {
+    display: block;
+    width: 100%;
+  }
+  .booking-course-info-compact .form-control,
+  .booking-course-info-compact .form-select {
+    width: 100%;
+  }
+  .booking-course-info-compact .form-control.bg-light {
+    min-height: calc(1.5em + 0.75rem + 2px);
+    padding-top: 0.375rem;
+    padding-bottom: 0.375rem;
+  }
+  .booking-course-info-compact .form-text {
+    font-size: 0.8rem;
+  }
+  .booking-panel-card--information .booking-panel-header {
+    padding: 0.5rem 1rem;
+  }
+  .booking-panel-card--information .booking-panel-icon {
+    width: 1.85rem;
+    height: 1.85rem;
+    font-size: 0.95rem;
+    margin-right: 0.55rem;
+  }
   .booking-new-form .booking-form-section + .booking-form-section {
     padding-top: 1.25rem;
     margin-top: 1.25rem;
@@ -141,6 +181,28 @@
     resize: vertical;
     border-radius: 0.65rem;
   }
+  .booking-notes-card--compact textarea.booking-notes-input,
+  .booking-notes-card--compact textarea {
+    min-height: 5.5rem;
+    max-height: 8rem;
+    resize: vertical;
+  }
+  .booking-edit-panels-row {
+    margin-top: 0.15rem;
+  }
+  .booking-edit-panels-row > [class*="col-"] {
+    display: flex;
+    flex-direction: column;
+  }
+  .booking-edit-panels-row .booking-panel-card,
+  .booking-edit-panels-row .booking-communication-log-card,
+  .booking-edit-panels-row .booking-telegram-card {
+    flex: 1 1 auto;
+  }
+  .booking-edit-panels-row .booking-telegram-card,
+  .booking-edit-panels-row .booking-communication-log-card {
+    height: 100%;
+  }
   .communication-log-list {
     display: flex;
     flex-direction: column;
@@ -154,23 +216,47 @@
     padding-bottom: 0;
     border-bottom: 0;
   }
-  .booking-communication-log-card.d-flex.flex-column {
-    min-height: 0;
-  }
-  .booking-communication-log-card .card-body {
+  .booking-communication-log-card .communication-log-body {
     overflow-y: auto;
     min-height: 5rem;
-  }
-  .booking-communication-log-card:not(.flex-grow-1) .card-body {
     max-height: 12rem;
-  }
-  .booking-communication-log-card.flex-grow-1 .card-body.flex-grow-1 {
-    flex: 1 1 auto;
-    min-height: 6rem;
-    max-height: none;
   }
   .booking-telegram-card .card-body {
     padding-top: 0.85rem;
     padding-bottom: 0.85rem;
+  }
+
+  .booking-page-with-floating-actions {
+    padding-bottom: 5.75rem;
+  }
+
+  .booking-floating-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 1040;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(16, 24, 40, 0.12);
+    box-shadow: 0 -6px 24px rgba(16, 24, 40, 0.1);
+    padding: 0.8rem 1rem;
+    padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
+  }
+
+  @media (min-width: 992px) {
+    .booking-floating-actions {
+      left: 280px;
+    }
+  }
+
+  .booking-floating-actions__inner {
+    max-width: 100%;
+  }
+
+  html[data-color-scheme="night"] .booking-floating-actions {
+    background: rgba(33, 37, 41, 0.96);
+    border-top-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.35);
   }
 </style>

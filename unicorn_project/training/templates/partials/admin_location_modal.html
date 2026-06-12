@@ -1,0 +1,77 @@
+{# Training location add/edit modal — used on booking and business admin pages #}
+<div class="modal fade" id="AddLocationModal" tabindex="-1" aria-labelledby="AddLocationModalLabel" aria-hidden="true" data-bs-focus="false">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="AddLocationModalLabel">Add training location</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="add-loc-id" value="">
+        <div id="add-location-errors" class="alert alert-danger d-none small mb-3"></div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="add-loc-name">Location name *</label>
+            <input type="text" class="form-control" id="add-loc-name" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="add-loc-property-name">Property name</label>
+            <input type="text" class="form-control" id="add-loc-property-name" autocomplete="off"
+                   placeholder="e.g. Progress House">
+            <div class="form-text">Building or site name, if different from the street address.</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="add-loc-address">Street address</label>
+            <input type="text" class="form-control" id="add-loc-address"
+                   placeholder="Start typing to search…" autocomplete="one-time-code">
+            <div class="form-text">Google address lookup fills street, town, postcode and property name when found.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="add-loc-town">Town</label>
+            <input type="text" class="form-control" id="add-loc-town" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="add-loc-postcode">Postcode</label>
+            <input type="text" class="form-control" id="add-loc-postcode" autocomplete="off">
+          </div>
+
+          <div class="col-12"><hr class="my-1"></div>
+
+          <div class="col-12">
+            <label class="form-label" for="add-loc-copy-contact">Copy contact from another location</label>
+            <select id="add-loc-copy-contact" class="form-select">
+              <option value="">— Select existing contact —</option>
+            </select>
+            <div class="form-text">Prefills the contact fields below for this business. You can still edit them.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label" for="add-loc-contact">Contact name</label>
+            <input type="text" class="form-control" id="add-loc-contact" autocomplete="off">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="add-loc-telephone">Telephone</label>
+            <input type="text" class="form-control" id="add-loc-telephone" autocomplete="off">
+          </div>
+          <div class="col-12">
+            <label class="form-label" for="add-loc-email">Email</label>
+            <input type="email" class="form-control" id="add-loc-email" autocomplete="off">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer justify-content-between">
+        <div>
+          <button type="button" class="btn btn-outline-warning d-none" id="add-location-delete">
+            <i class="bi bi-archive"></i> Delete / Archive
+          </button>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="add-location-save">
+            <i class="bi bi-check2"></i> Save location
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

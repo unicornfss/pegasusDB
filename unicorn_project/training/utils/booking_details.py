@@ -43,6 +43,7 @@ def _location_lines(location):
         return []
     parts = [
         location.name or "",
+        location.property_name or "",
         location.address_line or "",
         location.town or "",
         location.postcode or "",
@@ -80,12 +81,8 @@ def _greeting_line(booking, notification_type):
 
 
 def google_maps_url_for_booking(booking):
-    lat = booking.precise_lat
-    lng = booking.precise_lng
-    if lat is None and booking.admin_precise_lat is not None:
-        lat = float(booking.admin_precise_lat)
-    if lng is None and booking.admin_precise_lng is not None:
-        lng = float(booking.admin_precise_lng)
+    lat = booking.effective_precise_lat()
+    lng = booking.effective_precise_lng()
 
     if lat is not None and lng is not None:
         return f"https://www.google.com/maps/search/?api=1&query={lat},{lng}"
@@ -174,6 +171,10 @@ def _format_booking_details_block(booking, *, highlight=None):
     maps_url = google_maps_url_for_booking(booking)
     if maps_url:
         lines.append(f'🗺️ <a href="{maps_url}">Open destination in Google Maps</a>')
+
+    plus_code = booking.effective_plus_code()
+    if plus_code:
+        lines.append(f'📍 <a href="{booking.plus_code_url()}">Plus code: {escape(plus_code)}</a>')
 
     site = (getattr(settings, "SITE_URL", "") or "").rstrip("/")
     if site and booking.pk:
@@ -304,6 +305,10 @@ def format_booking_telegram_message(booking, *, notification_type, intro=None, c
     maps_url = google_maps_url_for_booking(booking)
     if maps_url:
         lines.append(f'\n🗺️ <a href="{maps_url}">Open destination in Google Maps</a>')
+
+    plus_code = booking.effective_plus_code()
+    if plus_code:
+        lines.append(f'📍 <a href="{booking.plus_code_url()}">Plus code: {escape(plus_code)}</a>')
 
     site = (getattr(settings, "SITE_URL", "") or "").rstrip("/")
     if site and booking.pk:

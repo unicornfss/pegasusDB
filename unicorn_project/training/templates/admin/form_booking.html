@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load dict_extras %}
+{% load dict_extras static %}
 
 {% block title %}{{ title }}{% endblock %}
 
@@ -18,10 +18,13 @@
 
 {% include "partials/booking_panel_styles.html" %}
 
-<div class="booking-page">
+<div class="booking-page booking-page-with-floating-actions">
 
-<h3 class="mb-2 d-flex align-items-center gap-2">
+<h3 class="mb-2 d-flex align-items-center gap-2 flex-wrap">
   {{ title }}
+  {% if booking and booking.course_reference %}
+    <span class="badge bg-light text-dark border">Ref: {{ booking.course_reference }}</span>
+  {% endif %}
   {% if booking %}
     {% with st=booking.status %}
       {% if st == "scheduled" %}
@@ -67,67 +70,26 @@
   <div class="booking-summary-wrap">
     <div class="row g-3 g-lg-4 align-items-stretch booking-summary-row">
 
-      {% if booking %}
-      {# EDIT — three columns #}
-      <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
-        <div class="card booking-panel-card booking-panel-card--information flex-grow-1 mb-0 d-flex flex-column">
-          <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
-            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
-            <span class="booking-panel-title">Course information</span>
-          </div>
-          <div class="card-body flex-grow-1">
-            <div class="row g-3">
-              {% include "partials/admin_booking_course_fields.html" %}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
-        <div class="card booking-panel-card booking-panel-card--instructor mb-0 d-flex flex-column">
-          <div class="card-header booking-panel-header booking-panel-header--instructor d-flex align-items-center">
-            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-person-badge"></i></span>
-            <span class="booking-panel-title">Instructor</span>
-          </div>
-          <div class="card-body">
-            {% include "partials/admin_booking_instructor_fields.html" %}
-          </div>
-        </div>
-
-        {% include "partials/booking_telegram_resend.html" with send_url_name="admin_booking_telegram_send" stacked=True inside_booking_form=True %}
-      </div>
-
-      <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
-        <div class="card booking-panel-card booking-panel-card--notes booking-notes-card flex-grow-1 mb-0 d-flex flex-column">
-          <div class="card-header booking-panel-header booking-panel-header--notes d-flex align-items-center">
-            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-journal-text"></i></span>
-            <span class="booking-panel-title">Course notes</span>
-          </div>
-          <div class="card-body flex-grow-1 d-flex flex-column">
-            {{ form.booking_notes }}
-            {% for err in form.booking_notes.errors %}
-              <div class="text-danger small">{{ err }}</div>
-            {% endfor %}
-          </div>
-        </div>
-
-        {% include "partials/booking_communication_log.html" with stacked=True %}
-      </div>
-
-      {% else %}
-      {# NEW — full-width course information #}
+      {# Course information + secondary panels (new and edit) #}
       <div class="col-12">
         <div class="card booking-panel-card booking-panel-card--information mb-0">
           <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
             <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
             <span class="booking-panel-title">Course information</span>
           </div>
-          <div class="card-body booking-new-form-body">
-            {% include "partials/admin_booking_new_fields.html" %}
+          <div class="card-body booking-new-form-body booking-new-form booking-course-info--compact">
+            {% if booking %}
+              {% include "partials/admin_booking_course_information_fields.html" with compact=True %}
+            {% else %}
+              {% include "partials/admin_booking_course_information_fields.html" with compact=True editable_business=True %}
+            {% endif %}
           </div>
         </div>
       </div>
-      {% endif %}
+
+      <div class="col-12">
+        {% include "partials/admin_booking_secondary_panels.html" %}
+      </div>
 
     </div>
   </div>
@@ -734,6 +696,7 @@
         {% endwith %}
       {% endif %}
     </div>
+    {% endif %}
 
 
   
@@ -783,41 +746,12 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
   {% endif %}
-  {% endif %}
 
 
-  <div class="mt-3 d-flex gap-2 flex-wrap">
-    <button type="submit" class="btn btn-primary" name="save_continue" value="1">
-      <i class="bi bi-check2"></i> Save and continue editing
-    </button>
-
-    <button type="submit" class="btn btn-success" name="save_return" value="1">
-      <i class="bi bi-check2-circle"></i> Save and return
-    </button>
-
-    <a class="btn btn-secondary" href="{{ back_url }}">
-      <i class="bi bi-x-circle"></i> Discard changes and go back
-    </a>
-
-    {% if booking %}
-      {% if booking.status == 'cancelled' %}
-        <a class="btn btn-warning" href="{% url 'admin_booking_reinstate' booking.id %}">
-          <i class="bi bi-arrow-counterclockwise"></i> Reinstate
-        </a>
-      {% else %}
-        <a class="btn btn-outline-danger" href="{% url 'admin_booking_cancel' booking.id %}">
-          <i class="bi bi-slash-circle"></i> Cancel booking
-        </a>
-      {% endif %}
-    {% endif %}
-
-    {% if delete_url %}
-      <a class="btn btn-outline-danger" href="{{ delete_url }}">
-        <i class="bi bi-trash"></i> Delete
-      </a>
-    {% endif %}
-  </div>
+  {% include "partials/admin_booking_floating_actions.html" %}
 </form>
+
+{% include "partials/admin_location_modal.html" %}
 
 <!-- Precise Location Picker Modal -->
 <div class="modal fade" id="MapPickerModal" tabindex="-1">
@@ -837,6 +771,9 @@ document.addEventListener('DOMContentLoaded', function () {
       </div>
 
       <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="reset-map-to-address-default">
+          <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to address default
+        </button>
         <button class="btn btn-primary" id="save-map-location">
             Save location
         </button>
@@ -848,6 +785,106 @@ document.addEventListener('DOMContentLoaded', function () {
 
 function getTrainingAddress() {
     return document.getElementById("loc-address-text")?.innerText?.trim() || "";
+}
+
+function geocodeTrainingAddress(callback) {
+    const trainingAddress = getTrainingAddress();
+    if (!trainingAddress) {
+        callback(null, "no_address");
+        return;
+    }
+    if (typeof google === "undefined" || !google.maps || !google.maps.Geocoder) {
+        callback(null, "no_maps");
+        return;
+    }
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ address: trainingAddress }, function (results, status) {
+        if (status === "OK" && results[0]) {
+            callback(results[0].geometry.location, null);
+        } else {
+            callback(null, status || "error");
+        }
+    });
+}
+
+function updatePreciseLocationDisplay(lat, lng, saving) {
+    const label = document.getElementById("precise-location-display");
+    if (!label) return;
+    const latText = Number(lat).toFixed(6);
+    const lngText = Number(lng).toFixed(6);
+    if (saving) {
+        label.innerHTML = `
+            Precise location selected:
+            <strong>${latText}, ${lngText}</strong>
+            <br><em>Saving…</em>
+        `;
+    } else {
+        label.innerHTML = `Precise location: <strong>${latText}, ${lngText}</strong>`;
+    }
+}
+
+function applyPreciseCoords(lat, lng, options) {
+    const opts = options || {};
+    const latField = document.getElementById("id_precise_lat");
+    const lngField = document.getElementById("id_precise_lng");
+    if (!latField || !lngField) return false;
+
+    const latNum = Number(lat);
+    const lngNum = Number(lng);
+    latField.value = latNum;
+    lngField.value = lngNum;
+
+    updatePreciseLocationDisplay(latNum, lngNum, !!opts.saving);
+
+    if (map && marker) {
+        const pos = { lat: latNum, lng: lngNum };
+        map.setCenter(pos);
+        marker.setPosition(pos);
+    }
+
+    if (opts.autoSave) {
+        document.getElementById("booking-form")?.submit();
+    }
+    return true;
+}
+
+function resetPreciseLocationToAddressDefault(autoSave) {
+    const buttons = document.querySelectorAll(
+        "#reset-precise-to-address-default, .reset-precise-to-address-default, #reset-map-to-address-default"
+    );
+    buttons.forEach(function (btn) { btn.disabled = true; });
+
+    geocodeTrainingAddress(function (location, err) {
+        buttons.forEach(function (btn) { btn.disabled = !getTrainingAddress(); });
+
+        if (err === "no_address") {
+            alert("Select a training location first — there is no address to geocode.");
+            return;
+        }
+        if (err === "no_maps") {
+            alert("Google Maps is not loaded yet. Please try again in a moment.");
+            return;
+        }
+        if (err || !location) {
+            alert("Could not find a map location for this address (" + (err || "unknown error") + ").");
+            return;
+        }
+
+        applyPreciseCoords(location.lat(), location.lng(), { autoSave: !!autoSave, saving: !!autoSave });
+
+        if (autoSave) {
+            bootstrap.Modal.getInstance(document.getElementById("MapPickerModal"))?.hide();
+        }
+    });
+}
+
+function refreshResetPreciseButtonState() {
+    const hasAddress = !!getTrainingAddress();
+    document.querySelectorAll(
+        "#reset-precise-to-address-default, .reset-precise-to-address-default, #reset-map-to-address-default"
+    ).forEach(function (btn) {
+        btn.disabled = !hasAddress;
+    });
 }
 
 
@@ -876,18 +913,12 @@ function createMap() {
     // 1. Use saved lat/lng if available
     // 2. Otherwise fall back to geocoder based on address
     if (!latField.value || !lngField.value) {
-
-        const trainingAddress = getTrainingAddress();
-        if (trainingAddress) {
-            const geocoder = new google.maps.Geocoder();
-            geocoder.geocode({ address: trainingAddress }, function (results, status) {
-                if (status === "OK" && results[0]) {
-                    const loc = results[0].geometry.location;
-                    map.setCenter(loc);
-                    marker.setPosition(loc);
-                }
-            });
-        }
+        geocodeTrainingAddress(function (location, err) {
+            if (location) {
+                map.setCenter(location);
+                marker.setPosition(location);
+            }
+        });
     }
 
 
@@ -913,25 +944,14 @@ function createMap() {
     // Save button
     document.getElementById("save-map-location").onclick = function () {
         const pos = marker.getPosition();
-        latField.value = pos.lat();
-        lngField.value = pos.lng();
-
-        const label = document.getElementById("precise-location-display");
-        if (label) {
-            label.innerHTML = `
-                Precise location selected:
-                <strong>${pos.lat().toFixed(6)}, ${pos.lng().toFixed(6)}</strong>
-                <br><em>Saving…</em>
-            `;
-        }
-
-        // hide modal
+        applyPreciseCoords(pos.lat(), pos.lng(), { autoSave: true, saving: true });
         bootstrap.Modal.getInstance(
             document.getElementById("MapPickerModal")
         ).hide();
+    };
 
-        // ⭐ automatic save
-        document.getElementById("booking-form").submit();
+    document.getElementById("reset-map-to-address-default").onclick = function () {
+        resetPreciseLocationToAddressDefault(false);
     };
 
 
@@ -939,6 +959,15 @@ function createMap() {
 
 // WAIT FOR GOOGLE MAPS API TO FINISH LOADING (from base.html)
 document.addEventListener("gmaps:ready", function () {
+
+    document.querySelectorAll(
+        "#reset-precise-to-address-default, .reset-precise-to-address-default"
+    ).forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            resetPreciseLocationToAddressDefault(true);
+        });
+    });
+    refreshResetPreciseButtonState();
 
     // When modal becomes visible, create the map
     document.getElementById("MapPickerModal")
@@ -964,11 +993,14 @@ document.addEventListener("gmaps:ready", function () {
 }
 </style>
 
+<script src="{% static 'training/js/admin_location_modal.js' %}"></script>
+
 <script>
   /* ---- Data from view (safe defaults) ---- */
   const LOCATIONS     = {{ location_map_json|default:"{}"|safe }};
   const EXISTING_DAYS = {{ booking_days_initial_json|default:"[]"|safe }};
   const IS_NEW_BOOKING = {% if booking %}false{% else %}true{% endif %};
+  let locationSelectionBeforeAdd = '';
 
   /* NEW: capture initial values to protect existing references */
   const INIT_CT  = "{{ form.instance.course_type_id|default:'' }}";
@@ -985,7 +1017,7 @@ document.addEventListener("gmaps:ready", function () {
 /* ---- Business dropdown helpers ---- */
 function sortBusinessDropdownAndAddOption() {
   const bizSel = byName('business');
-  if (!bizSel) return;
+  if (!bizSel || bizSel.tagName !== 'SELECT') return;
 
   const ADD_VALUE = '__add_business__';
 
@@ -1034,33 +1066,43 @@ function sortBusinessDropdownAndAddOption() {
   }
   function setAddress(rec){
     const h=document.getElementById('loc-address-text'); if(!h) return;
-    const line = rec.name || rec.address_line || rec.address || '';
-    const town = rec.town || rec.city || '';
-    const post = rec.postcode || rec.post_code || '';
-    h.textContent = [line,town,post].filter(Boolean).join(', ');
+    const parts = [
+      rec.property_name || '',
+      rec.address_line || rec.address || '',
+      rec.town || rec.city || '',
+      rec.postcode || rec.post_code || '',
+    ].filter(Boolean);
+    h.textContent = parts.join(', ');
   }
+  function getSelectedBusinessId() {
+    const bizSel = byName('business');
+    if (!bizSel) return '';
+    return String(bizSel.value || '');
+  }
+
+  function revertLocationSelectionAfterCancel() {
+    const locSel = byName('training_location');
+    if (!locSel) return;
+    locSel.value = locationSelectionBeforeAdd || '';
+    onLocationChange();
+  }
+
   function onLocationChange(){
     const sel = byName('training_location');
-    if (!sel || !sel.value) { clearContacts(); clearAddress(); return; }
+    if (!sel || !sel.value) { clearContacts(); clearAddress(); refreshResetPreciseButtonState(); return; }
 
-    // Shortcut: create a new location for the selected business
     if (sel.value === '__add_new__') {
-      const bizSel = byName('business');
-      const bizId = String(bizSel?.value || '');
-      if (!bizId) {
-        alert('Please select a business first.');
-        sel.value = '';
-        return;
-      }
-      window.location.href = `/app/admin/businesses/${bizId}/locations/new/`;
+      AdminLocationModal.openAdd();
+      refreshResetPreciseButtonState();
       return;
     }
 
     const rec = LOCATIONS[sel.value];
-    if (!rec) { clearContacts(); clearAddress(); return; }
+    if (!rec) { clearContacts(); clearAddress(); refreshResetPreciseButtonState(); return; }
 
     // Always update the displayed address text
     setAddress(rec);
+    refreshResetPreciseButtonState();
 
     // Only auto-fill contact fields when:
     // - creating a new booking, OR
@@ -1526,7 +1568,14 @@ function sortBusinessDropdownAndAddOption() {
     }
     rebuildLocationOptions();
   }
-    if (e.target.name === 'training_location')  onLocationChange();
+    if (e.target.name === 'training_location') {
+      if (e.target.value === '__add_new__') {
+        locationSelectionBeforeAdd = e.target.dataset.prevValue || '';
+      } else {
+        e.target.dataset.prevValue = e.target.value;
+      }
+      onLocationChange();
+    }
     if (e.target.name === 'course_type')        handleCourseChanged();
     if (e.target.name === 'course_date')        populateFromHeader();
     if (e.target.name === 'start_time')         populateFromHeader();
@@ -1552,11 +1601,39 @@ function sortBusinessDropdownAndAddOption() {
 }
 
   document.addEventListener('DOMContentLoaded', () => {
+    AdminLocationModal.init({
+      getBusinessId: getSelectedBusinessId,
+      getLocationsMap: () => LOCATIONS,
+      createUrl: "{% url 'admin_location_create_ajax' %}",
+      updateUrlTemplate: "{% url 'admin_location_update_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+      deleteUrlTemplate: "{% url 'admin_location_delete_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+      onSaved: function (location) {
+        LOCATIONS[location.id] = location;
+        rebuildLocationOptions();
+        const locSel = byName('training_location');
+        if (locSel) {
+          locSel.value = location.id;
+          onLocationChange();
+          fillContactsFromRecord(location);
+        }
+      },
+      onCancelAdd: function () {
+        const locSel = byName('training_location');
+        if (locSel && locSel.value === '__add_new__') {
+          revertLocationSelectionAfterCancel();
+        }
+      },
+    });
+
     // Ensure Business dropdown is sorted A–Z and includes “Add new business…”
     sortBusinessDropdownAndAddOption();
 
     const locSel = byName('training_location'); 
-    if (locSel) locSel.setAttribute('autocomplete','off');
+    if (locSel) {
+      locSel.setAttribute('autocomplete','off');
+      locationSelectionBeforeAdd = locSel.value || '';
+      locSel.dataset.prevValue = locSel.value || '';
+    }
     rebuildLocationOptions();
     onLocationChange();
 
@@ -1599,9 +1676,9 @@ function sortBusinessDropdownAndAddOption() {
       daysTbody.addEventListener('change', serializeDays);
     }
 
-    // auto-grow notes textarea for nicer UX
+    // auto-grow notes textarea (skip compact edit panel)
     const notes = document.getElementById('{{ form.booking_notes.id_for_label }}');
-    if (notes) {
+    if (notes && !notes.closest('.booking-notes-card--compact')) {
       notes.addEventListener('input', () => {
         notes.style.height = 'auto';
         notes.style.height = (notes.scrollHeight) + 'px';

@@ -112,6 +112,9 @@
                 {{ booking.training_location.name|default:"(TBC)" }}<br>
 
                 {% if booking.training_location %}
+                  {% if booking.training_location.property_name %}
+                    {{ booking.training_location.property_name }}<br>
+                  {% endif %}
                   {{ booking.training_location.address_line }}<br>
                   {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
 
@@ -124,21 +127,35 @@
                   {% endwith %}
 
                   {# === Precise location display === #}
-                  {% if booking.precise_lat and booking.precise_lng %}
+                  {% if booking.has_effective_precise_location %}
                     <div class="small text-success mt-2">
                       <a
-                        href="https://www.google.com/maps/dir/?api=1&destination={{ booking.precise_lat }},{{ booking.precise_lng }}"
+                        href="https://www.google.com/maps/dir/?api=1&destination={{ booking.effective_precise_lat }},{{ booking.effective_precise_lng }}"
                         target="_blank"
                         rel="noopener"
                         class="text-success text-decoration-none"
                       >
                         <i class="bi bi-crosshair2 me-1"></i>
-                        <strong>Precise location:</strong> {{ booking.precise_lat }}, {{ booking.precise_lng }}
+                        <strong>Precise location:</strong> {{ booking.effective_precise_lat }}, {{ booking.effective_precise_lng }}
                       </a>
                     </div>
                   {% else %}
                     <div class="small text-muted mt-2">
                       No precise map location set.
+                    </div>
+                  {% endif %}
+
+                  {% if booking.effective_plus_code %}
+                    <div class="small mt-2">
+                      <a
+                        href="{{ booking.plus_code_url }}"
+                        target="_blank"
+                        rel="noopener"
+                        class="text-decoration-none"
+                      >
+                        <i class="bi bi-grid-3x3-gap me-1"></i>
+                        <strong>Plus code:</strong> {{ booking.effective_plus_code }}
+                      </a>
                     </div>
                   {% endif %}
 
@@ -151,7 +168,7 @@
                         <i class="bi bi-geo-alt-fill me-1"></i> View / adjust precise location
                       </button>
 
-                      {% if booking.precise_lat and booking.precise_lng %}
+                      {% if booking.has_effective_precise_location %}
                         <form method="post" style="display:inline;">
                           {% csrf_token %}
                           <input type="hidden" name="action" value="reset_precise_location">
@@ -288,8 +305,8 @@
               {% csrf_token %}
 
               <input type="hidden" name="action" id="id_precise_action" value="">
-              <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.precise_lat }}">
-              <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.precise_lng }}">
+              <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.effective_precise_lat|default_if_none:'' }}">
+              <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.effective_precise_lng|default_if_none:'' }}">
 
               {% if is_locked %}
                 {{ notes_form.booking_notes }}
@@ -1073,8 +1090,24 @@
 let map, marker;
 
 function initMapPicker() {
-  const initialLat = parseFloat('{{ booking.precise_lat|default:"" }}') || 52.5;
-  const initialLng = parseFloat('{{ booking.precise_lng|default:"" }}') || -2.1;
+  const latField = document.getElementById("id_precise_lat");
+  const lngField = document.getElementById("id_precise_lng");
+  const trainingAddress = "{{ booking.training_address_for_map|escapejs }}";
+  const adminLat = parseFloat("{{ booking.admin_precise_lat|default_if_none:'' }}");
+  const adminLng = parseFloat("{{ booking.admin_precise_lng|default_if_none:'' }}");
+  const hasAdminBaseline = Number.isFinite(adminLat) && Number.isFinite(adminLng);
+
+  let initialLat = hasAdminBaseline ? adminLat : parseFloat(latField?.value || "");
+  let initialLng = hasAdminBaseline ? adminLng : parseFloat(lngField?.value || "");
+  const hasSaved = Number.isFinite(initialLat) && Number.isFinite(initialLng);
+
+  if (!hasSaved) {
+    initialLat = 52.4895;
+    initialLng = -1.8986;
+  }
+
+  if (latField) latField.value = initialLat;
+  if (lngField) lngField.value = initialLng;
 
   map = new google.maps.Map(document.getElementById("map"), {
     center: { lat: initialLat, lng: initialLng },
@@ -1086,6 +1119,17 @@ function initMapPicker() {
     map: map,
     draggable: true,
   });
+
+  if (!hasSaved && trainingAddress) {
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ address: trainingAddress }, function (results, status) {
+      if (status === "OK" && results[0]) {
+        const loc = results[0].geometry.location;
+        map.setCenter(loc);
+        marker.setPosition(loc);
+      }
+    });
+  }
 
   map.addListener("click", (e) => {
     marker.setPosition(e.latLng);
@@ -1103,7 +1147,15 @@ function initMapPicker() {
 
 document.addEventListener("DOMContentLoaded", function () {
   const modal = document.getElementById("MapPickerModal");
-  modal.addEventListener("shown.bs.modal", initMapPicker);
+  modal.addEventListener("shown.bs.modal", function () {
+    initMapPicker();
+    setTimeout(function () {
+      if (map) {
+        google.maps.event.trigger(map, "resize");
+        if (marker) map.setCenter(marker.getPosition());
+      }
+    }, 200);
+  });
 });
 </script>
 

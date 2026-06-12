@@ -1491,6 +1491,8 @@ def instructor_booking_detail(request, pk):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
+    booking.sync_precise_from_admin(save=True)
+
     is_locked = booking.status == "completed"
 
     # ------------------------------------------------------------------
@@ -1916,20 +1918,9 @@ def instructor_booking_detail(request, pk):
             lng = request.POST.get("precise_lng")
 
             if lat and lng:
-                booking.precise_lat = lat
-                booking.precise_lng = lng
-
-                # ✅ AUTO-STORE ADMIN BASELINE IF IT DOESN'T EXIST YET
-                if not booking.admin_precise_lat and not booking.admin_precise_lng:
-                    booking.admin_precise_lat = lat
-                    booking.admin_precise_lng = lng
-
-                booking.save(update_fields=[
-                    "precise_lat",
-                    "precise_lng",
-                    "admin_precise_lat",
-                    "admin_precise_lng",
-                ])
+                booking.precise_lat = float(lat)
+                booking.precise_lng = float(lng)
+                booking.save(update_fields=["precise_lat", "precise_lng"])
 
                 messages.success(request, "Precise location updated.")
             else:
@@ -1946,8 +1937,8 @@ def instructor_booking_detail(request, pk):
                 return HttpResponseForbidden("Course is locked.")
 
             if booking.admin_precise_lat and booking.admin_precise_lng:
-                booking.precise_lat = booking.admin_precise_lat
-                booking.precise_lng = booking.admin_precise_lng
+                booking.precise_lat = float(booking.admin_precise_lat)
+                booking.precise_lng = float(booking.admin_precise_lng)
                 booking.save(update_fields=["precise_lat", "precise_lng"])
                 messages.success(request, "Precise location reset to admin-defined point.")
             else:

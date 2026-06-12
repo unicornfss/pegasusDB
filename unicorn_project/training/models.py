@@ -57,6 +57,12 @@ class TrainingLocation(models.Model):
     # We don't hard-delete a location if it has been used for bookings.
     is_active = models.BooleanField(default=True, db_index=True)
 
+    property_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Building or site name (e.g. Progress House), if different from the street address.",
+    )
     address_line = models.CharField(max_length=255, blank=True, null=True)
     town         = models.CharField(max_length=255, blank=True, null=True)
     postcode     = models.CharField(max_length=32,  blank=True, null=True)
@@ -546,6 +552,119 @@ class Booking(models.Model):
     @property
     def is_dummy_business(self):
         return bool(self.business_id and getattr(self.business, "is_dummy", False))
+
+    _MAP_PLACEHOLDER_POINTS = (
+        (52.5, -2.1),
+        (52.4895, -1.8986),
+    )
+
+    @classmethod
+    def is_placeholder_coords(cls, lat, lng):
+        if lat is None or lng is None:
+            return True
+        lat = float(lat)
+        lng = float(lng)
+        return any(
+            abs(lat - plat) < 0.01 and abs(lng - plng) < 0.01
+            for plat, plng in cls._MAP_PLACEHOLDER_POINTS
+        )
+
+    def effective_precise_lat(self):
+        if self.admin_precise_lat is not None and self.admin_precise_lng is not None:
+            return float(self.admin_precise_lat)
+        if (
+            self.precise_lat is not None
+            and self.precise_lng is not None
+            and not self.is_placeholder_coords(self.precise_lat, self.precise_lng)
+        ):
+            return self.precise_lat
+        return None
+
+    def effective_precise_lng(self):
+        if self.admin_precise_lat is not None and self.admin_precise_lng is not None:
+            return float(self.admin_precise_lng)
+        if (
+            self.precise_lat is not None
+            and self.precise_lng is not None
+            and not self.is_placeholder_coords(self.precise_lat, self.precise_lng)
+        ):
+            return self.precise_lng
+        return None
+
+    def has_effective_precise_location(self):
+        return (
+            self.effective_precise_lat() is not None
+            and self.effective_precise_lng() is not None
+        )
+
+    def effective_plus_code(self):
+        lat = self.effective_precise_lat()
+        lng = self.effective_precise_lng()
+        if lat is None or lng is None:
+            return ""
+        from .utils.plus_codes import coordinates_to_plus_code
+
+        return coordinates_to_plus_code(lat, lng)
+
+    def plus_code_url(self):
+        from .utils.plus_codes import plus_code_url
+
+        return plus_code_url(self.effective_plus_code())
+
+    def plus_code_maps_url(self):
+        from .utils.plus_codes import plus_code_maps_url
+
+        return plus_code_maps_url(self.effective_plus_code())
+
+    def training_address_for_map(self):
+        loc = self.training_location
+        if not loc:
+            return ""
+        parts = [
+            loc.property_name or "",
+            loc.address_line or "",
+            loc.town or "",
+            loc.postcode or "",
+        ]
+        return ", ".join(p for p in parts if p and str(p).strip())
+
+    def sync_precise_from_admin(self, save=False, force=False):
+        """Copy admin baseline coordinates into precise_*."""
+        admin_lat = self.admin_precise_lat
+        admin_lng = self.admin_precise_lng
+        precise_lat = self.precise_lat
+        precise_lng = self.precise_lng
+
+        updates = {}
+
+        if admin_lat is None and admin_lng is None:
+            if precise_lat is not None and precise_lng is not None:
+                if not self.is_placeholder_coords(precise_lat, precise_lng):
+                    updates["admin_precise_lat"] = precise_lat
+                    updates["admin_precise_lng"] = precise_lng
+                    admin_lat = precise_lat
+                    admin_lng = precise_lng
+
+        if admin_lat is not None and admin_lng is not None:
+            new_lat = float(admin_lat)
+            new_lng = float(admin_lng)
+            should_sync = force or (
+                precise_lat is None
+                or precise_lng is None
+                or self.is_placeholder_coords(precise_lat, precise_lng)
+            )
+            if should_sync and (precise_lat != new_lat or precise_lng != new_lng):
+                updates["precise_lat"] = new_lat
+                updates["precise_lng"] = new_lng
+
+        if not updates:
+            return False
+
+        for field, value in updates.items():
+            setattr(self, field, value)
+        if save:
+            self.save(update_fields=list(updates.keys()))
+        return True
 
     def __str__(self):
         return self.course_reference or "(pending)"

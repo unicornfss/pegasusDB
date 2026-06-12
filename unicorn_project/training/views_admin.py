@@ -252,10 +252,25 @@ def business_form(request, pk=None):
 
     # --- Locations (left card) --------------------------------------------
     locations = []
-    add_location_url = None
+    location_map = {}
     if obj:
         locations = TrainingLocation.objects.filter(business=obj).order_by("-is_active", "name")
-        add_location_url = reverse("admin_location_new", args=[obj.id])
+        location_map = {
+            str(loc.id): {
+                "id": str(loc.id),
+                "name": loc.name or "",
+                "property_name": loc.property_name or "",
+                "business_id": str(obj.id),
+                "contact_name": loc.contact_name or "",
+                "telephone": loc.telephone or "",
+                "email": loc.email or "",
+                "address_line": loc.address_line or "",
+                "town": loc.town or "",
+                "postcode": loc.postcode or "",
+                "is_active": loc.is_active,
+            }
+            for loc in locations
+        }
 
     # --- Bookings (right card) + filters ----------------------------------
     bookings = []
@@ -320,7 +335,7 @@ def business_form(request, pk=None):
 
         # locations card
         "locations": locations,
-        "add_location_url": add_location_url,
+        "location_map_json": json.dumps(location_map, cls=DjangoJSONEncoder),
 
         # bookings card + filter data
         "bookings": bookings,
@@ -367,6 +382,114 @@ def location_new(request, business_id):
         "other_locations": other_locations,
         "back_url": reverse("admin_business_edit", args=[biz.id]),
         "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,
+    })
+
+
+@admin_required
+@require_http_methods(["POST"])
+def admin_location_create_ajax(request):
+    """Create a training location from the booking form modal."""
+    business_id = (request.POST.get("business_id") or "").strip()
+    if not business_id:
+        return JsonResponse({"ok": False, "errors": {"business_id": ["Business is required."]}}, status=400)
+
+    biz = get_object_or_404(Business, pk=business_id)
+    form = TrainingLocationForm(request.POST)
+    if not form.is_valid():
+        return JsonResponse({"ok": False, "errors": form.errors}, status=400)
+
+    loc = form.save(commit=False)
+    loc.business = biz
+    loc.save()
+
+    return JsonResponse({
+        "ok": True,
+        "location": {
+            "id": str(loc.id),
+            "name": loc.name or "",
+            "property_name": loc.property_name or "",
+            "business_id": str(biz.id),
+            "contact_name": loc.contact_name or "",
+            "telephone": loc.telephone or "",
+            "email": loc.email or "",
+            "address_line": loc.address_line or "",
+            "town": loc.town or "",
+            "postcode": loc.postcode or "",
+            "is_active": loc.is_active,
+        },
+    })
+
+
+@admin_required
+@require_http_methods(["POST"])
+def admin_location_update_ajax(request, pk):
+    """Update a training location from the admin modal."""
+    loc = get_object_or_404(TrainingLocation, pk=pk)
+    biz = loc.business
+    form = TrainingLocationForm(request.POST, instance=loc)
+    if not form.is_valid():
+        return JsonResponse({"ok": False, "errors": form.errors}, status=400)
+
+    loc = form.save(commit=False)
+    loc.business = biz
+    loc.save()
+
+    return JsonResponse({
+        "ok": True,
+        "location": {
+            "id": str(loc.id),
+            "name": loc.name or "",
+            "property_name": loc.property_name or "",
+            "business_id": str(biz.id),
+            "contact_name": loc.contact_name or "",
+            "telephone": loc.telephone or "",
+            "email": loc.email or "",
+            "address_line": loc.address_line or "",
+            "town": loc.town or "",
+            "postcode": loc.postcode or "",
+            "is_active": loc.is_active,
+        },
+    })
+
+
+@admin_required
+@require_http_methods(["POST"])
+def admin_location_delete_ajax(request, pk):
+    """Delete or archive a training location from the admin modal."""
+    loc = get_object_or_404(TrainingLocation, pk=pk)
+    name = loc.name
+
+    if Booking.objects.filter(training_location=loc).exists():
+        if loc.is_active:
+            loc.is_active = False
+            loc.save(update_fields=["is_active"])
+        return JsonResponse({
+            "ok": True,
+            "archived": True,
+            "deleted": False,
+            "location": {
+                "id": str(loc.id),
+                "name": loc.name or "",
+                "property_name": loc.property_name or "",
+                "business_id": str(loc.business_id),
+                "contact_name": loc.contact_name or "",
+                "telephone": loc.telephone or "",
+                "email": loc.email or "",
+                "address_line": loc.address_line or "",
+                "town": loc.town or "",
+                "postcode": loc.postcode or "",
+                "is_active": loc.is_active,
+            },
+            "message": f'Location "{name}" archived (it has existing bookings).',
+        })
+
+    loc.delete()
+    return JsonResponse({
+        "ok": True,
+        "archived": False,
+        "deleted": True,
+        "location_id": str(pk),
+        "message": f'Location "{name}" deleted.',
     })
 
 
@@ -941,6 +1064,11 @@ def booking_form(request, pk=None):
 
             booking.save()
 
+            if booking.precise_lat is not None and booking.precise_lng is not None:
+                booking.admin_precise_lat = booking.precise_lat
+                booking.admin_precise_lng = booking.precise_lng
+                booking.save(update_fields=["admin_precise_lat", "admin_precise_lng"])
+
 
             inv_status = (request.POST.get("invoice_status_admin") or "").strip().lower()
             admin_comment = (request.POST.get("invoice_admin_comment") or "").strip()
@@ -1136,6 +1264,7 @@ def booking_form(request, pk=None):
     location_map = {
         str(loc.id): {
             "name": loc.name or "",
+            "property_name": loc.property_name or "",
             "contact_name": loc.contact_name or "",
             "telephone": loc.telephone or "",
             "email": loc.email or "",
@@ -1144,7 +1273,7 @@ def booking_form(request, pk=None):
             "postcode": loc.postcode or "",
             "business_id": str(loc.business_id),
         }
-        for loc in TrainingLocation.objects.select_related("business").order_by("name")
+        for loc in TrainingLocation.objects.filter(is_active=True).select_related("business").order_by("name")
     }
 
     if obj and obj.pk:

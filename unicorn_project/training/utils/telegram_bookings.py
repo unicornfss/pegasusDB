@@ -69,6 +69,7 @@ def format_directions_message(booking):
         f"<b>Directions — {booking.course_reference or 'booking'}</b>",
         "",
         loc.name or "",
+        loc.property_name or "",
         loc.address_line or "",
         loc.town or "",
         loc.postcode or "",

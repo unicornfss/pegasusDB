@@ -21,8 +21,15 @@
       {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
     <div class="col-md-6">
-      <label class="form-label">Address</label>
+      <label class="form-label">Property name</label>
+      {{ form.property_name }}
+      <div class="form-text">Building or site name (e.g. Progress House), if different from the street address.</div>
+      {% for err in form.property_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    </div>
+    <div class="col-md-6">
+      <label class="form-label">Street address</label>
       {{ form.address_line }}
+      <div class="form-text">Start typing to search with Google address lookup.</div>
       {% for err in form.address_line.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
     <div class="col-md-4">

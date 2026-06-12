@@ -1,187 +1,612 @@
 {% extends "base.html" %}
+
+{% load static %}
+
+
+
 {% block title %}{{ title }}{% endblock %}
 
-{% block content %}
-<h3 class="mb-3">{{ title }}</h3>
 
-<form method="post" class="mb-4">
+
+{% block content %}
+
+
+
+<style>
+
+  .booking-page{background:#f6f7fb;padding:1.25rem;border-radius:1rem;}
+
+  .booking-page h3{font-weight:600;}
+
+  .booking-page .form-label{font-weight:600;color:#344054;margin-bottom:.35rem;}
+
+  .booking-page input.form-control,
+
+  .booking-page select.form-select,
+
+  .booking-page textarea.form-control{border-radius:.75rem;}
+
+  .business-location-item {
+
+    border: 0;
+
+    border-bottom: 1px solid rgba(16, 24, 40, 0.06);
+
+    padding: 0.85rem 1rem;
+
+    text-align: left;
+
+    width: 100%;
+
+    background: transparent;
+
+  }
+
+  .business-location-item:last-child { border-bottom: 0; }
+
+  .business-location-item:hover { background: rgba(13, 110, 253, 0.04); }
+
+  .business-booking-item {
+
+    border: 0;
+
+    border-bottom: 1px solid rgba(16, 24, 40, 0.06);
+
+  }
+
+  .business-booking-item:last-child { border-bottom: 0; }
+
+  .booking-panel-card--locations { border-top: 3px solid #6f42c1; }
+
+  .booking-panel-header--locations .booking-panel-icon {
+
+    background: linear-gradient(180deg, rgba(111, 66, 193, 0.16), rgba(111, 66, 193, 0.08));
+
+    color: #6f42c1;
+
+  }
+
+  .booking-panel-card--bookings { border-top: 3px solid #0d6efd; }
+
+  .booking-panel-header--bookings .booking-panel-icon {
+
+    background: linear-gradient(180deg, rgba(13, 110, 253, 0.16), rgba(13, 110, 253, 0.08));
+
+    color: #0a58ca;
+
+  }
+
+</style>
+
+
+
+{% include "partials/booking_panel_styles.html" %}
+
+
+
+<div class="booking-page">
+
+
+
+<h3 class="mb-2 d-flex align-items-center gap-2 flex-wrap">
+
+  {{ title }}
+
+  {% if business %}
+
+    {% if business.is_dummy %}
+
+      <span class="badge bg-warning text-dark">Dummy business</span>
+
+    {% endif %}
+
+  {% endif %}
+
+</h3>
+
+
+
+<form method="post" id="business-form">
+
   {% csrf_token %}
-  <div class="row g-3">
-    {% for field in form %}
-      <div class="col-md-6">
-        <label class="form-label">{{ field.label }}{% if field.field.required %} *{% endif %}</label>
-        {{ field }}
-        {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-        {% for err in field.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+
+
+  {% if form.non_field_errors %}
+
+    <div class="alert alert-danger">
+
+      {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+
+    </div>
+
+  {% endif %}
+
+
+
+  <div class="booking-summary-wrap mb-3">
+
+    <div class="card booking-panel-card booking-panel-card--information mb-0">
+
+      <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
+
+        <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-building"></i></span>
+
+        <span class="booking-panel-title">Business details</span>
+
       </div>
-    {% endfor %}
+
+      <div class="card-body booking-new-form-body booking-course-info--compact">
+
+        <div class="row g-2 booking-course-info-compact">
+
+          <div class="col-md-6">
+
+            <label class="form-label" for="{{ form.name.id_for_label }}">Business name *</label>
+
+            {{ form.name }}
+
+            {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          <div class="col-md-6">
+
+            <label class="form-label" for="{{ form.email.id_for_label }}">Email</label>
+
+            {{ form.email }}
+
+            {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+
+
+          <div class="col-12"><hr class="my-1"></div>
+
+
+
+          <div class="col-md-6">
+
+            <label class="form-label" for="{{ form.address_line.id_for_label }}">Street address</label>
+
+            {{ form.address_line }}
+
+            <div class="form-text">Start typing to search with Google address lookup.</div>
+
+            {% for err in form.address_line.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          <div class="col-md-3">
+
+            <label class="form-label" for="{{ form.town.id_for_label }}">Town</label>
+
+            {{ form.town }}
+
+            {% for err in form.town.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          <div class="col-md-3">
+
+            <label class="form-label" for="{{ form.postcode.id_for_label }}">Postcode</label>
+
+            {{ form.postcode }}
+
+            {% for err in form.postcode.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+
+
+          <div class="col-md-4">
+
+            <label class="form-label" for="{{ form.contact_name.id_for_label }}">Contact name</label>
+
+            {{ form.contact_name }}
+
+            {% for err in form.contact_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          <div class="col-md-4">
+
+            <label class="form-label" for="{{ form.telephone.id_for_label }}">Telephone</label>
+
+            {{ form.telephone }}
+
+            {% for err in form.telephone.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          <div class="col-md-4"></div>
+
+
+
+          <div class="col-12">
+
+            <div class="form-check mt-1">
+
+              {{ form.add_as_training_location }}
+
+              <label class="form-check-label" for="{{ form.add_as_training_location.id_for_label }}">
+
+                {{ form.add_as_training_location.label }}
+
+              </label>
+
+            </div>
+
+            {% for err in form.add_as_training_location.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+
+
+          {% if 'is_dummy' in form.fields %}
+
+          <div class="col-12"><hr class="my-1"></div>
+
+          <div class="col-md-4">
+
+            <div class="form-check mt-1">
+
+              {{ form.is_dummy }}
+
+              <label class="form-check-label" for="{{ form.is_dummy.id_for_label }}">{{ form.is_dummy.label }}</label>
+
+            </div>
+
+            {% if form.is_dummy.help_text %}<div class="form-text">{{ form.is_dummy.help_text }}</div>{% endif %}
+
+            {% for err in form.is_dummy.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          <div class="col-md-8">
+
+            <label class="form-label" for="{{ form.dummy_course_type.id_for_label }}">Default course type for practice bookings</label>
+
+            {{ form.dummy_course_type }}
+
+            {% if form.dummy_course_type.help_text %}<div class="form-text">{{ form.dummy_course_type.help_text }}</div>{% endif %}
+
+            {% for err in form.dummy_course_type.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+          {% endif %}
+
+        </div>
+
+      </div>
+
+    </div>
+
   </div>
 
-  {# Actions row #}
-  <div class="mt-3 d-flex gap-2 align-items-center">
-    <a href="{{ back_url }}" class="btn btn-outline-secondary">Back</a>
+
+
+  <div class="d-flex gap-2 flex-wrap mb-4">
+
+    <a href="{{ back_url }}" class="btn btn-outline-secondary">
+
+      <i class="bi bi-arrow-left"></i> Back
+
+    </a>
 
     <button class="btn btn-primary" type="submit" name="save_continue" value="1">
-      Save and continue editing
+
+      <i class="bi bi-check2"></i> Save and continue editing
+
     </button>
 
     <button class="btn btn-success" type="submit" name="save_return" value="1">
-      Save and return
+
+      <i class="bi bi-check2-circle"></i> Save and return
+
     </button>
 
     {% if business %}
-      {# DELETE: submit this same form to the delete URL; skip validation; confirm first #}
+
       <button
+
         type="submit"
+
         class="btn btn-outline-danger ms-auto"
+
         formaction="{% url 'admin_business_delete' business.id %}"
+
         formmethod="post"
+
         formnovalidate
+
         onclick="return confirm('This will permanently delete this business. This cannot be undone.\n\nAre you sure you want to proceed?');">
+
         <i class="bi bi-trash"></i> Delete
+
       </button>
+
     {% endif %}
+
   </div>
+
 </form>
 
+
+
 {% if business %}
+
 <div class="row g-3">
 
-  <!-- LEFT: Training locations (50%) -->
   <div class="col-lg-6">
-    <div class="card">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Training locations for <strong>{{ business.name }}</strong>{% if business.is_dummy %} <span class="badge bg-warning text-dark ms-2">Dummy</span>{% endif %}</span>
-        {% if add_location_url %}
-          <a class="btn btn-sm btn-success" href="{{ add_location_url }}">
-            <i class="bi bi-plus-lg"></i> Add Location
-          </a>
-        {% endif %}
+
+    <div class="card booking-panel-card booking-panel-card--locations mb-0 h-100">
+
+      <div class="card-header booking-panel-header booking-panel-header--locations d-flex justify-content-between align-items-center">
+
+        <div class="d-flex align-items-center">
+
+          <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-geo-alt"></i></span>
+
+          <span class="booking-panel-title">Training locations</span>
+
+        </div>
+
+        <button type="button" class="btn btn-sm btn-success" id="btn-add-location">
+
+          <i class="bi bi-plus-lg"></i> Add location
+
+        </button>
+
       </div>
 
-      {% if locations %}
-        <div class="list-group list-group-flush">
-          {% for loc in locations %}
-            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-start"
-               href="{% url 'admin_location_edit' loc.id %}">
-              <div>
-                <div class="fw-semibold">
-                  {{ loc.name }}
-                  {% if not loc.is_active %}
-                    <span class="badge text-bg-secondary ms-2">Archived</span>
-                  {% endif %}
-                </div>
-                <div class="small text-muted">
-                  {{ loc.address_line }}{% if loc.town %}, {{ loc.town }}{% endif %}{% if loc.postcode %} {{ loc.postcode }}{% endif %}
-                </div>
-                {% if loc.contact_name or loc.telephone or loc.email %}
-                  <div class="small">
-                    {{ loc.contact_name }}{% if loc.telephone %} · {{ loc.telephone }}{% endif %}{% if loc.email %} · {{ loc.email }}{% endif %}
+      <div class="card-body p-0">
+
+        {% if locations %}
+
+          <div class="list-group list-group-flush">
+
+            {% for loc in locations %}
+
+              <button type="button"
+
+                      class="list-group-item business-location-item js-edit-location"
+
+                      data-location-id="{{ loc.id }}">
+
+                <div class="d-flex justify-content-between align-items-start gap-2">
+
+                  <div>
+
+                    <div class="fw-semibold">
+
+                      {{ loc.name }}
+
+                      {% if not loc.is_active %}
+
+                        <span class="badge text-bg-secondary ms-1">Archived</span>
+
+                      {% endif %}
+
+                    </div>
+
+                    <div class="small text-muted">
+
+                      {% if loc.property_name %}{{ loc.property_name }}, {% endif %}{{ loc.address_line }}{% if loc.town %}, {{ loc.town }}{% endif %}{% if loc.postcode %} {{ loc.postcode }}{% endif %}
+
+                    </div>
+
+                    {% if loc.contact_name or loc.telephone or loc.email %}
+
+                      <div class="small">
+
+                        {{ loc.contact_name }}{% if loc.telephone %} · {{ loc.telephone }}{% endif %}{% if loc.email %} · {{ loc.email }}{% endif %}
+
+                      </div>
+
+                    {% endif %}
+
                   </div>
-                {% endif %}
-              </div>
-              <span class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></span>
-            </a>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="card-body text-muted">
-          No training locations yet. Tick “Add as training location” and save to auto-create one,
-          or click <em>Add Location</em> to create another.
-        </div>
-      {% endif %}
+
+                  <span class="btn btn-sm btn-outline-primary flex-shrink-0"><i class="bi bi-pencil"></i></span>
+
+                </div>
+
+              </button>
+
+            {% endfor %}
+
+          </div>
+
+        {% else %}
+
+          <div class="p-3 text-muted small">
+
+            No training locations yet. Tick “Also add/update a training location with this address” and save,
+
+            or click <em>Add location</em>.
+
+          </div>
+
+        {% endif %}
+
+      </div>
+
     </div>
+
   </div>
 
-  <!-- RIGHT: Bookings (50%) — status tabs only -->
+
+
   <div class="col-lg-6">
-    <div class="card">
-      <div class="card-header">
-        <div class="d-flex align-items-center justify-content-between">
-          <span>Bookings</span>
+
+    <div class="card booking-panel-card booking-panel-card--bookings mb-0 h-100">
+
+      <div class="card-header booking-panel-header booking-panel-header--bookings">
+
+        <div class="d-flex align-items-center mb-2">
+
+          <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+
+          <span class="booking-panel-title">Bookings</span>
+
         </div>
 
-        {# Status tabs (All + distinct statuses) #}
-        <ul class="nav nav-pills mt-2" role="tablist">
+        <ul class="nav nav-pills nav-pills-sm gap-1" role="tablist">
+
           <li class="nav-item">
-            <a class="nav-link {% if b_status|default:'all' == 'all' %}active{% endif %}"
+
+            <a class="nav-link py-1 px-2 {% if b_status|default:'all' == 'all' %}active{% endif %}"
+
                href="?b_status=all">All</a>
+
           </li>
+
           {% for st in booking_statuses %}
+
             {% if st %}
+
             <li class="nav-item">
-              <a class="nav-link {% if b_status == st %}active{% endif %}"
+
+              <a class="nav-link py-1 px-2 {% if b_status == st %}active{% endif %}"
+
                  href="?b_status={{ st }}">{{ st|capfirst }}</a>
+
             </li>
+
             {% endif %}
+
           {% endfor %}
+
         </ul>
+
       </div>
 
-      {% if bookings %}
-        <div class="list-group list-group-flush">
-          {% for b in bookings %}
-            <a class="list-group-item list-group-item-action"
-               href="{% url 'admin_booking_edit' b.id %}">
-              <div class="fw-semibold">
-                {{ b.course_type.name|default:b.course_type }}
-                {% if b.training_location %} — {{ b.training_location.name|default:b.training_location }}{% endif %}
-              </div>
-              <div class="small text-muted">
-                {% if b.course_date %}
-                  {{ b.course_date|date:"d M Y" }}
-                {% elif b.first_day %}
-                  {{ b.first_day|date:"d M Y" }}
-                {% endif %}
-                {% if b.start_time %} at {{ b.start_time|time:"H:i" }}{% endif %}
-                {% if b.instructor %} · {{ b.instructor.name|default:b.instructor }}{% endif %}
-                {% if b.status %} · {{ b.status|capfirst }}{% endif %}
-              </div>
-            </a>
-          {% endfor %}
-        </div>
-      {% else %}
-        <div class="card-body text-muted">
-          No bookings{% if b_status and b_status != 'all' %} in "{{ b_status|capfirst }}"{% endif %}.
-        </div>
-      {% endif %}
+      <div class="card-body p-0">
+
+        {% if bookings %}
+
+          <div class="list-group list-group-flush">
+
+            {% for b in bookings %}
+
+              <a class="list-group-item list-group-item-action business-booking-item py-3"
+
+                 href="{% url 'admin_booking_edit' b.id %}">
+
+                <div class="fw-semibold">
+
+                  {{ b.course_type.name|default:b.course_type }}
+
+                  {% if b.training_location %} — {{ b.training_location.name|default:b.training_location }}{% endif %}
+
+                </div>
+
+                <div class="small text-muted">
+
+                  {% if b.course_date %}
+
+                    {{ b.course_date|date:"d M Y" }}
+
+                  {% elif b.first_day %}
+
+                    {{ b.first_day|date:"d M Y" }}
+
+                  {% endif %}
+
+                  {% if b.start_time %} at {{ b.start_time|time:"H:i" }}{% endif %}
+
+                  {% if b.instructor %} · {{ b.instructor.name|default:b.instructor }}{% endif %}
+
+                  {% if b.status %} · {{ b.status|capfirst }}{% endif %}
+
+                </div>
+
+              </a>
+
+            {% endfor %}
+
+          </div>
+
+        {% else %}
+
+          <div class="p-3 text-muted small">
+
+            No bookings{% if b_status and b_status != 'all' %} in "{{ b_status|capfirst }}"{% endif %}.
+
+          </div>
+
+        {% endif %}
+
+      </div>
+
     </div>
+
   </div>
 
 </div>
-{% endif %}
+
+
+
+{% include "partials/admin_location_modal.html" %}
+
+
+
+<script src="{% static 'training/js/admin_location_modal.js' %}"></script>
 
 <script>
-  // 1) Your callback: binds Places Autocomplete to the address input
-  function initAutocomplete() {
-    // adjust this id to your field's id if different:
-    var input =
-      document.getElementById('id_address_line') ||   // Business.address_line
-      document.getElementById('id_address') ||        // generic
-      document.querySelector('input[name="address_line"], input[name="address"]');
 
-    if (!input) return;
+  const BUSINESS_LOCATIONS = {{ location_map_json|default:"{}"|safe }};
 
-    var ac = new google.maps.places.Autocomplete(input, {
-      types: ['address'] // restrict to addresses
-      // componentRestrictions: { country: ['gb'] } // optional
+
+
+  AdminLocationModal.init({
+
+    businessId: "{{ business.id }}",
+
+    locationsMap: BUSINESS_LOCATIONS,
+
+    createUrl: "{% url 'admin_location_create_ajax' %}",
+
+    updateUrlTemplate: "{% url 'admin_location_update_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+
+    deleteUrlTemplate: "{% url 'admin_location_delete_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+
+    onSaved: function () { window.location.reload(); },
+
+    onDeleted: function () { window.location.reload(); },
+
+  });
+
+
+
+  document.getElementById('btn-add-location')?.addEventListener('click', function () {
+
+    AdminLocationModal.openAdd();
+
+  });
+
+
+
+  document.querySelectorAll('.js-edit-location').forEach(function (btn) {
+
+    btn.addEventListener('click', function () {
+
+      AdminLocationModal.openEdit(this.dataset.locationId);
+
     });
 
-    // optional: handle when a suggestion is chosen
-    ac.addListener('place_changed', function () {
-      var place = ac.getPlace();
-      // console.log(place);
-      // If you want to split postcode/town later, we can add that.
-    });
-  }
+  });
 
-  // 2) Expose callback globally for Google loader
-  window.initAutocomplete = initAutocomplete;
 </script>
 
-<!-- 3) Load Google Maps JS with the Places library -->
-<script async defer
-  src="https://maps.googleapis.com/maps/api/js?key={{ GOOGLE_MAPS_API_KEY }}&libraries=places&callback=initAutocomplete">
-</script>
+{% endif %}
+
+
+
+</div>
 
 {% endblock %}
+

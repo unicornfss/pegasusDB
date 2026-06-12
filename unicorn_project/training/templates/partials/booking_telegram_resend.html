@@ -1,62 +1,31 @@
 {% if booking.instructor %}
-
-<div class="card booking-panel-card booking-panel-card--telegram booking-telegram-card{% if stacked %} flex-grow-1 d-flex flex-column{% else %} mt-3{% endif %}">
-
+<div class="card booking-panel-card booking-panel-card--telegram booking-telegram-card{% if stacked %} flex-grow-1 d-flex flex-column{% elif panel %} mb-0 h-100{% else %} mt-3{% endif %}">
   <div class="card-header booking-panel-header booking-panel-header--telegram d-flex align-items-center">
-
     <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-arrow-repeat"></i></span>
-
     <span class="booking-panel-title">Resend notifications</span>
-
   </div>
-
   <div class="card-body{% if stacked %} d-flex flex-column justify-content-center flex-grow-1{% endif %}">
-
     <p class="small text-muted mb-3 mb-md-2">
-
       Resend course dates, type, business, location, reference, instructor fee, and a Google Maps link.
-
     </p>
-
     {% if booking.instructor.telegram_chat_id %}
-
       {% if inside_booking_form %}
-
       <button type="submit"
-
               formaction="{% url send_url_name booking.pk %}"
-
               formmethod="post"
-
               formnovalidate
-
               class="btn btn-outline-primary btn-sm">
-
         <i class="bi bi-send me-1"></i>Resend notification via Telegram
-
       </button>
-
       {% else %}
-
       <form method="post" action="{% url send_url_name booking.pk %}">
-
         {% csrf_token %}
-
         <button type="submit" class="btn btn-outline-primary btn-sm">
-
           <i class="bi bi-send me-1"></i>Resend notification via Telegram
-
         </button>
-
       </form>
-
       {% endif %}
-
     {% endif %}
-
   </div>
-
 </div>
-
 {% endif %}
-

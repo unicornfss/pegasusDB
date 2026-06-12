@@ -97,6 +97,9 @@ urlpatterns = [
 
     # Training Locations
     path("app/admin/businesses/<uuid:business_id>/locations/new/", app_admin.location_new, name="admin_location_new"),
+    path("app/admin/locations/create-ajax/", app_admin.admin_location_create_ajax, name="admin_location_create_ajax"),
+    path("app/admin/locations/<uuid:pk>/update-ajax/", app_admin.admin_location_update_ajax, name="admin_location_update_ajax"),
+    path("app/admin/locations/<uuid:pk>/delete-ajax/", app_admin.admin_location_delete_ajax, name="admin_location_delete_ajax"),
     path("app/admin/locations/<uuid:pk>/", app_admin.location_edit, name="admin_location_edit"),
     path("app/admin/locations/<uuid:pk>/delete/", app_admin.location_delete, name="admin_location_delete"),
 

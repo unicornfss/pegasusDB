@@ -99,6 +99,13 @@ class BookingForm(forms.ModelForm):
         current_ct_id = getattr(self.instance, "course_type_id", None)
         self.fields["course_type"].queryset = bookable_course_types(include_pk=current_ct_id)
 
+        if self.instance and self.instance.pk and not self.is_bound:
+            admin_lat = self.instance.admin_precise_lat
+            admin_lng = self.instance.admin_precise_lng
+            if admin_lat is not None and admin_lng is not None:
+                self.instance.precise_lat = float(admin_lat)
+                self.instance.precise_lng = float(admin_lng)
+
         # Start with none until we know the business
         self.fields["training_location"].queryset = TrainingLocation.objects.none()
 
@@ -241,7 +248,11 @@ class BusinessForm(forms.ModelForm):
         ]
         widgets = {
             'name': forms.TextInput(attrs={'class':'form-control'}),
-            'address_line': forms.TextInput(attrs={'class':'form-control', 'id':'id_business_address'}),
+            'address_line': forms.TextInput(attrs={
+                'class':'form-control',
+                'id':'id_business_address',
+                'placeholder': 'Start typing to search…',
+            }),
             'town': forms.TextInput(attrs={'class':'form-control'}),
             'postcode': forms.TextInput(attrs={'class':'form-control'}),
             'contact_name': forms.TextInput(attrs={'class':'form-control'}),
@@ -506,6 +517,7 @@ class TrainingLocationForm(forms.ModelForm):
         model = TrainingLocation
         fields = [
             "name",
+            "property_name",
             "address_line",
             "town",
             "postcode",
@@ -513,6 +525,19 @@ class TrainingLocationForm(forms.ModelForm):
             "telephone",
             "email",
         ]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "property_name": forms.TextInput(attrs={"class": "form-control"}),
+            "address_line": forms.TextInput(attrs={
+                "class": "form-control",
+                "placeholder": "Start typing to search…",
+            }),
+            "town": forms.TextInput(attrs={"class": "form-control"}),
+            "postcode": forms.TextInput(attrs={"class": "form-control"}),
+            "contact_name": forms.TextInput(attrs={"class": "form-control"}),
+            "telephone": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+        }
         # (business is set in the view; it’s not an editable form field here)
 
 
