@@ -244,6 +244,11 @@
     <p>Please complete your details below{% if course %} to register for today’s course{% endif %}.</p>
   </div>
 
+  {% if registration_unavailable %}
+  <div class="alert alert-warning register-card">
+    This course is not available for new registrations. It may have been suspended or removed.
+  </div>
+  {% else %}
   <form method="post" class="register-card">
     {% csrf_token %}
     {% if day_code %}
@@ -422,6 +427,7 @@
       </button>
     </div>
   </form>
+  {% endif %}
 </div>
 
 <script>

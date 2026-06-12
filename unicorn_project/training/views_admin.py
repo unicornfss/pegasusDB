@@ -19,7 +19,7 @@ from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
 from django.http import HttpResponseForbidden, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
-from django.urls import reverse
+from django.urls import reverse, NoReverseMatch
 from django.utils import timezone
 from django.utils.crypto import get_random_string
 
@@ -438,13 +438,14 @@ def location_delete(request, pk):
 def course_list(request):
     rows = []
     for c in CourseType.objects.order_by("name"):
+        status = "Suspended" if c.is_suspended else "Active"
         rows.append({
-            "cells": [c.name, c.code, c.duration_days],
+            "cells": [c.name, c.code, c.duration_days, status],
             "edit_url": reverse("admin_course_edit", args=[c.id]),
         })
     ctx = {
         "title": "Course Types",
-        "headers": ["Name", "Code", "Duration (days)"],
+        "headers": ["Name", "Code", "Duration (days)", "Status"],
         "rows": rows,
         "create_url": reverse("admin_course_new"),
     }
@@ -473,7 +474,12 @@ def course_form(request, pk=None):
         formset = CourseCompetencyFormSet(request.POST, instance=ct, prefix="comps")
 
         if form.is_valid() and formset.is_valid():
-            ct = form.save()
+            is_new = not pk
+            ct = form.save(commit=False)
+            if is_new or not (ct.code or "").strip():
+                from .utils.course_type_code import unique_course_code
+                ct.code = unique_course_code(ct.name, exclude_pk=ct.pk if ct.pk else None)
+            ct.save()
             formset.instance = ct
 
             # Save competencies safely: keep any competency that is still referenced
@@ -529,7 +535,10 @@ def course_form(request, pk=None):
                         messages.info(request, f"Removed {removed_all} exam(s) because 'Has exam?' is not ticked.")
             # ⬆️ END REPLACED BLOCK
 
-            messages.success(request, "Course type saved.")
+            if is_new:
+                messages.success(request, f"Course type saved. Code: {ct.code}")
+            else:
+                messages.success(request, "Course type saved.")
 
             if "save_return" in request.POST:
                 return redirect("admin_course_list")
@@ -541,7 +550,7 @@ def course_form(request, pk=None):
         formset = CourseCompetencyFormSet(instance=ct, prefix="comps")
 
     register_links = None
-    if ct.pk and (ct.code or "").strip():
+    if pk and (ct.code or "").strip():
         from .utils.register_links import (
             course_register_full_url,
             course_register_short_url,
@@ -554,6 +563,13 @@ def course_form(request, pk=None):
             "download_name": f"register-{ct.code}.png",
         }
 
+    course_code_preview_url = ""
+    if not pk:
+        try:
+            course_code_preview_url = reverse("admin_course_code_preview")
+        except NoReverseMatch:
+            course_code_preview_url = "/app/admin/courses/preview-code/"
+
     return render(request, "admin/course_form.html", {
         "title": title,
         "form": form,
@@ -561,21 +577,50 @@ def course_form(request, pk=None):
         "object": ct,
         "register_links": register_links,
         "cancel_url": reverse("admin_course_list"),
+        "is_new_course": pk is None,
+        "course_code_preview_url": course_code_preview_url,
+        "can_delete": pk is not None and ct.can_be_deleted(),
+        "has_bookings": pk is not None and ct.has_ever_been_booked(),
     })
 
+
+@admin_required
+def course_code_preview(request):
+    """Return the unique code that would be assigned for a course name (new types only)."""
+    from .utils.course_type_code import unique_course_code
+
+    name = (request.GET.get("name") or "").strip()
+    if not name:
+        return JsonResponse({"code": ""})
+    return JsonResponse({"code": unique_course_code(name)})
 
 
 @admin_required
 @require_http_methods(["GET", "POST"])
 def course_delete(request, pk):
     obj = get_object_or_404(CourseType, pk=pk)
+    if not obj.can_be_deleted():
+        messages.error(
+            request,
+            "This course type cannot be deleted because bookings have used it.",
+        )
+        return redirect("admin_course_edit", pk=obj.pk)
     if request.method == "POST":
-        obj.delete()
-        messages.success(request, "Course type deleted.")
+        try:
+            name = obj.name
+            obj.delete()
+        except ProtectedError:
+            messages.error(
+                request,
+                "This course type cannot be deleted because it is still referenced elsewhere.",
+            )
+            return redirect("admin_course_edit", pk=pk)
+        messages.success(request, f"Course type “{name}” deleted.")
         return redirect("admin_course_list")
     return render(request, "admin/confirm_delete.html", {
         "title": "Delete course type",
         "object": obj,
+        "confirm_lead": "Are you sure you want to permanently delete this course type?",
         "back_url": reverse("admin_course_edit", args=[obj.id]),
     })
 

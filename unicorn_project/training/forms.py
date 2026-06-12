@@ -94,6 +94,11 @@ class BookingForm(forms.ModelForm):
         extra_ids = [current_instructor_id] if current_instructor_id else None
         self.fields["instructor"].queryset = delivery_personnel_queryset(extra_ids)
 
+        from .utils.course_types import bookable_course_types
+
+        current_ct_id = getattr(self.instance, "course_type_id", None)
+        self.fields["course_type"].queryset = bookable_course_types(include_pk=current_ct_id)
+
         # Start with none until we know the business
         self.fields["training_location"].queryset = TrainingLocation.objects.none()
 
@@ -176,6 +181,20 @@ class BookingForm(forms.ModelForm):
         loc = cleaned.get("training_location")
         if biz and loc and loc.business_id != biz.id:
             self.add_error("training_location", "Selected location does not belong to the chosen business.")
+
+        ct = cleaned.get("course_type")
+        if ct and ct.is_suspended:
+            creating = not (self.instance and self.instance.pk)
+            changing = (
+                self.instance
+                and self.instance.pk
+                and self.instance.course_type_id != ct.pk
+            )
+            if creating or changing:
+                self.add_error(
+                    "course_type",
+                    "This course type is suspended and cannot be used for new bookings.",
+                )
 
         # Generate a unique course reference if empty
         if not cleaned.get("course_reference"):
@@ -328,7 +347,9 @@ class DummyBookingQuickCreateForm(forms.Form):
         default_course_type = kwargs.pop('default_course_type', None)
         super().__init__(*args, **kwargs)
 
-        self.fields['course_type'].queryset = CourseType.objects.order_by('name')
+        from .utils.course_types import bookable_course_types
+
+        self.fields['course_type'].queryset = bookable_course_types()
         if default_course_type and not self.is_bound:
             self.fields['course_type'].initial = default_course_type
 
@@ -338,10 +359,11 @@ class CourseTypeForm(forms.ModelForm):
     class Meta:
         model = CourseType
         fields = [
-            "name", "code", "duration_days",
+            "name", "duration_days",
             "certificate_duration", "onedrive_folder_link",
             "default_course_fee", "default_instructor_fee",
             "has_exam", "number_of_exams", "optional_modules_required",
+            "is_suspended",
         ]
         widgets = {
             "optional_modules_required": forms.Select(
@@ -349,6 +371,22 @@ class CourseTypeForm(forms.ModelForm):
                 attrs={"class": "form-select"},
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance._state.adding:
+            self.fields.pop("is_suspended", None)
+        for name, field in self.fields.items():
+            if name == "has_exam":
+                field.widget.attrs.setdefault("class", "form-check-input")
+            elif name == "is_suspended":
+                field.widget.attrs.setdefault("class", "form-check-input suspend-course-toggle")
+                field.label = "Suspend course"
+                field.help_text = "Existing bookings and records are unaffected."
+            elif name == "optional_modules_required":
+                field.widget.attrs.setdefault("class", "form-select")
+            elif not isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.setdefault("class", "form-control")
 
 class CourseCompetencyForm(forms.ModelForm):
     do_not_use = forms.BooleanField(required=False)

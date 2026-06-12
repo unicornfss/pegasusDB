@@ -77,7 +77,6 @@ urlpatterns = [
 
     # ---------- Admin dashboard ----------
     path("app/admin/", views_admin.admin_dashboard, name="app_admin_dashboard"),
-    path("app/admin/courses/<uuid:pk>/", app_admin.course_form, name="admin_course_edit"),
     path("app/admin/exams/<int:pk>/", app_admin.exam_form, name="admin_exam_edit"),
     path("delegates/search/", views_admin.admin_delegate_search, name="admin_delegate_search"),
     path("app-admin/dashboard/", views_admin.admin_dashboard, name="admin_dashboard"),
@@ -101,6 +100,7 @@ urlpatterns = [
     # Course Types
     path("app/admin/courses/", app_admin.course_list, name="admin_course_list"),
     path("app/admin/courses/new/", app_admin.course_form, name="admin_course_new"),
+    path("app/admin/courses/preview-code/", app_admin.course_code_preview, name="admin_course_code_preview"),
     path("app/admin/courses/<uuid:pk>/", app_admin.course_form, name="admin_course_edit"),
     path("app/admin/courses/<uuid:pk>/delete/", app_admin.course_delete, name="admin_course_delete"),
     path("app/admin/course-types/", app_admin.course_list, name="admin_course_type_list"),  # alias

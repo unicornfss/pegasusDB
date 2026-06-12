@@ -231,7 +231,10 @@ def public_delegate_instructors_api(request):
 
 
 def _course_type_by_register_code(code: str):
-    return CourseType.objects.filter(code__iexact=(code or "").strip()).first()
+    return CourseType.objects.filter(
+        code__iexact=(code or "").strip(),
+        is_suspended=False,
+    ).first()
 
 
 @require_GET
@@ -282,21 +285,30 @@ def public_delegate_register(request):
     if selected_day and selected_day.booking and selected_day.booking.course_type:
         course = selected_day.booking.course_type
     
-    # First try GET ?ct=<code>
+    # First try GET ?ct=<code> (not when already bound to a booking day)
     ct_code = (request.GET.get("ct") or "").strip()
-    if ct_code:
+    if ct_code and not course:
         course = CourseType.objects.filter(code__iexact=ct_code).first()
-    
+        if course and course.is_suspended:
+            course = None
+
     # If not in GET, try POST course_id (from hidden field in form)
     if not course and request.method == "POST":
         course_id = (request.POST.get("course_id") or "").strip()
         if course_id:
             try:
                 course = CourseType.objects.get(pk=course_id)
+                if course.is_suspended and not selected_day:
+                    course = None
             except CourseType.DoesNotExist:
                 pass
-    # For the dropdown when no QR is used
-    course_types = CourseType.objects.order_by("name")
+
+    from .utils.course_types import bookable_course_types
+
+    course_types = bookable_course_types()
+    registration_unavailable = bool(
+        ct_code and not selected_day and not course
+    )
 
     # 2) Course date: hidden (always today) in production; editable when REGISTER_SHOW_DATE
     show_register_date = getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
@@ -399,6 +411,7 @@ def public_delegate_register(request):
             "show_register_date": show_register_date,
             "instructor_dev_hint": instructor_dev_hint,
             "instructor_fallback": instructor_fallback,
+            "registration_unavailable": registration_unavailable,
         },
     )
 

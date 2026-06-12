@@ -111,6 +111,17 @@ class CourseType(models.Model):
     help_text="Optional OneDrive folder link for instructors"
 )
 
+    is_suspended = models.BooleanField(
+        default=False,
+        help_text="When suspended, this course type cannot be used for new bookings.",
+    )
+
+    def has_ever_been_booked(self) -> bool:
+        return self.bookings.exists()
+
+    def can_be_deleted(self) -> bool:
+        return not self.has_ever_been_booked()
+
     def clean(self):
         # Enforce conditional requirement
         if self.has_exam and not self.number_of_exams:
