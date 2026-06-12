@@ -27,6 +27,8 @@ from .views_admin import meta_settings_list, meta_settings_edit
 
 urlpatterns = [
     # ---------- Core / Home ----------
+    path("health/", views.health_check, name="health_check"),
+    path("app/", views.app_entry, name="app_entry"),
     path("", views.home, name="home"),
     path("switch-role/<str:role>/", views.switch_role, name="switch_role"),
 

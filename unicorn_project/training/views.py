@@ -1273,3 +1273,40 @@ def accident_report_anonymise(request):
 
     messages.success(request, f"Anonymised {updated} report{'s' if updated != 1 else ''}.")
     return redirect("accident_report_list")
+
+
+@require_GET
+def health_check(request):
+    """Lightweight probe for Render / ops — checks DB and pending migrations."""
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+
+    status = {"database": "ok", "pending_migrations": 0}
+
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+    except Exception as exc:
+        status["database"] = str(exc)
+        return JsonResponse(status, status=503)
+
+    try:
+        executor = MigrationExecutor(connection)
+        plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+        status["pending_migrations"] = len(plan)
+        if plan:
+            status["next_migrations"] = [f"{app}.{name}" for app, name in plan[:5]]
+    except Exception as exc:
+        status["migration_check"] = str(exc)
+        return JsonResponse(status, status=503)
+
+    if status["pending_migrations"]:
+        return JsonResponse(status, status=503)
+    return JsonResponse(status)
+
+
+def app_entry(request):
+    """Common bookmark target — send users to the post-login router."""
+    if request.user.is_authenticated:
+        return redirect("post_login")
+    return redirect(f"{reverse('login')}?next=/post-login/")
