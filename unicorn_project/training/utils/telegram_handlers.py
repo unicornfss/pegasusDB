@@ -23,7 +23,10 @@ logger = logging.getLogger(__name__)
 def _link_personnel(token, chat_id):
     personnel_id = consume_link_token(token)
     if not personnel_id:
-        return None, "That link has expired. Open your Pegasus profile and scan a fresh QR code."
+        return None, (
+            "That link is invalid or has expired. Open your Pegasus profile, "
+            "refresh the page, and scan a new QR code."
+        )
 
     try:
         personnel = Personnel.objects.get(pk=personnel_id, is_active=True)
