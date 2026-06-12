@@ -19,6 +19,7 @@ env/
 *.sqlite3
 db.sqlite3
 .django_cache/
+.telegram_poll.lock
 media/
 staticfiles/
 

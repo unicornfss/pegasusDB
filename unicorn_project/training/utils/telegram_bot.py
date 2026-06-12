@@ -3,6 +3,7 @@ import sys
 
 from django.conf import settings
 from telegram import Update
+from telegram.error import Conflict
 from telegram.ext import Application, CommandHandler
 
 from .telegram_handlers import bookings_command, directions_command, help_command, start_command
@@ -10,7 +11,10 @@ from .telegram_handlers import bookings_command, directions_command, help_comman
 logger = logging.getLogger(__name__)
 
 
-async def _on_startup(application: Application) -> None:
+async def _on_startup(application: Application, *, for_polling: bool = False) -> None:
+    if for_polling:
+        await application.bot.delete_webhook(drop_pending_updates=False)
+        logger.info("Cleared webhook before polling (local dev).")
     me = await application.bot.get_me()
     configured = (settings.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@")
     logger.info("Telegram bot ready: @%s (id %s)", me.username, me.id)
@@ -23,15 +27,24 @@ async def _on_startup(application: Application) -> None:
 
 
 async def _on_error(update, context) -> None:
+    if isinstance(context.error, Conflict):
+        logger.warning(
+            "Another process is polling this bot token (HTTP 409). "
+            "Stop duplicate telegram_poll terminals and try again."
+        )
+        return
     logger.exception("Telegram handler error: %s", context.error)
 
 
-def build_application() -> Application:
+def build_application(*, for_polling: bool = False) -> Application:
     token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set in .env")
 
-    app = Application.builder().token(token).post_init(_on_startup).build()
+    async def on_startup(application: Application) -> None:
+        await _on_startup(application, for_polling=for_polling)
+
+    app = Application.builder().token(token).post_init(on_startup).build()
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("bookings", bookings_command))
@@ -93,7 +106,7 @@ def run_polling():
         flush=True,
     )
     try:
-        build_application().run_polling(drop_pending_updates=True)
+        build_application(for_polling=True).run_polling(drop_pending_updates=True)
     except Exception as exc:
         msg = str(exc)
         if "Conflict" in msg or "getUpdates" in msg:

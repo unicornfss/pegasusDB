@@ -115,6 +115,15 @@ Run **two** terminals:
 
 Local dev uses **polling** (not webhooks). `telegram_poll.bat` clears any webhook on the dev bot when it starts.
 
+**If you see “another process is polling” (HTTP 409):** Windows often leaves old `python.exe` running after Ctrl+C. Run:
+
+```
+.\telegram_poll_stop.bat
+.\telegram_poll.bat
+```
+
+Only **one** `telegram_poll.bat` terminal should be open at a time.
+
 Then on **Profile**, scan the QR code to link Telegram.
 
 ---
