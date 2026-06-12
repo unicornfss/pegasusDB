@@ -152,6 +152,58 @@
     </div>
   </div>
 
+  {% if register_links %}
+  <div class="card mb-3">
+    <div class="card-header">Delegate registration link</div>
+    <div class="card-body">
+      <p class="text-muted mb-3">
+        Use this short link or QR code instead of Bitly. Delegates go straight to the register form
+        with this course pre-selected; instructors for today’s date are filtered automatically.
+      </p>
+      <div class="row g-4 align-items-start">
+        <div class="col-md-8">
+          <div class="mb-3">
+            <label class="form-label">Short link (for QR codes and typing)</label>
+            <div class="input-group">
+              <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.short_url }}" id="register-short-url">
+              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-short-url" title="Copy">
+                <i class="bi bi-clipboard"></i> Copy
+              </button>
+              <a class="btn btn-outline-primary" href="{{ register_links.short_url }}" target="_blank" rel="noopener">
+                <i class="bi bi-box-arrow-up-right"></i> Open
+              </a>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label">Full registration URL</label>
+            <div class="input-group">
+              <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.full_url }}" id="register-full-url">
+              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-full-url" title="Copy">
+                <i class="bi bi-clipboard"></i> Copy
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4 text-center">
+          <label class="form-label d-block">QR code</label>
+          <img src="{{ register_links.qr_url }}" alt="Registration QR code for {{ object.code }}" class="img-fluid border rounded mb-2" style="max-width: 220px;">
+          <div>
+            <a class="btn btn-sm btn-outline-primary" href="{{ register_links.qr_url }}" download="{{ register_links.download_name }}">
+              <i class="bi bi-download"></i> Download PNG
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% elif object.pk %}
+  <div class="card mb-3">
+    <div class="card-header">Delegate registration link</div>
+    <div class="card-body text-muted mb-0">
+      Add a course code above and save to generate the registration short link and QR code.
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Collapsible sections in columns -->
   <div class="row">
@@ -346,6 +398,23 @@
 
 <!-- Small inline scripts so they always run -->
 <script>
+(function(){
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.js-copy-btn');
+    if (!btn) return;
+    var sel = btn.getAttribute('data-target');
+    var input = sel ? document.querySelector(sel) : null;
+    if (!input) return;
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    navigator.clipboard.writeText(input.value).then(function(){
+      var label = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+      setTimeout(function(){ btn.innerHTML = label; }, 1500);
+    });
+  });
+})();
+
 (function(){
   // toggle Number of exams + Exams accordion
   function q(sel){ return document.querySelector(sel); }

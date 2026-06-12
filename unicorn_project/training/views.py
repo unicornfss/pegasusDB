@@ -127,6 +127,32 @@ def public_delegate_instructors_api(request):
     return JsonResponse({"instructors": data})
 
 
+def _course_type_by_register_code(code: str):
+    return CourseType.objects.filter(code__iexact=(code or "").strip()).first()
+
+
+@require_GET
+def public_register_short(request, code):
+    """Short URL for delegate registration: /r/<course_code>/ → /register/?ct=…"""
+    course = _course_type_by_register_code(code)
+    if not course:
+        return HttpResponse("Course not found.", status=404)
+    target = f"{reverse('public_delegate_register')}?{urlencode({'ct': course.code})}"
+    return redirect(target)
+
+
+@require_GET
+def public_register_short_qr(request, code):
+    """PNG QR code encoding the short registration URL for a course type."""
+    from .utils.register_links import course_register_short_url, qr_png_bytes
+
+    course = _course_type_by_register_code(code)
+    if not course:
+        return HttpResponse(status=404)
+    png = qr_png_bytes(course_register_short_url(request, course.code))
+    return HttpResponse(png, content_type="image/png")
+
+
 def public_delegate_register(request):
     """
     Public delegate register page.

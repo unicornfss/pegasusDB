@@ -65,6 +65,8 @@ urlpatterns = [
     path("app/instructor/day/<int:pk>/registers/pdf/", instv.instructor_day_registers_pdf, name="instructor_day_registers_pdf"),
 
     # ---------- Public delegate register ----------
+    path("r/<str:code>/qr.png", views.public_register_short_qr, name="public_register_short_qr"),
+    path("r/<str:code>/", views.public_register_short, name="public_register_short"),
     path("register/", views.public_delegate_register, name="public_delegate_register"),
     path("register/success/", views.public_delegate_register_success, name="public_delegate_register_success"),
     path("register/instructors/", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),

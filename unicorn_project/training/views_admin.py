@@ -540,11 +540,27 @@ def course_form(request, pk=None):
         form = CourseTypeForm(instance=ct)
         formset = CourseCompetencyFormSet(instance=ct, prefix="comps")
 
+    register_links = None
+    if ct.pk and (ct.code or "").strip():
+        from .utils.register_links import (
+            course_register_full_url,
+            course_register_short_url,
+        )
+
+        register_links = {
+            "short_url": course_register_short_url(request, ct.code),
+            "full_url": course_register_full_url(request, ct.code),
+            "qr_url": reverse("public_register_short_qr", kwargs={"code": ct.code}),
+            "download_name": f"register-{ct.code}.png",
+        }
+
     return render(request, "admin/course_form.html", {
         "title": title,
         "form": form,
         "formset": formset,
         "object": ct,
+        "register_links": register_links,
+        "cancel_url": reverse("admin_course_list"),
     })
 
 
