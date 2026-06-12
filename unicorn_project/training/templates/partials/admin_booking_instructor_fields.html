@@ -1,0 +1,14 @@
+<label class="form-label">Lead instructor</label>
+{{ form.instructor }}
+<div class="small text-muted mt-2" id="instructor-mileage"></div>
+<div class="small text-muted" id="mileage-fee"></div>
+<div class="form-check form-switch mt-2">
+  {{ form.allow_mileage_claim }}
+  <label class="form-check-label" for="id_allow_mileage_claim">Allow mileage claim?</label>
+</div>
+<div class="form-check form-switch mt-2">
+  {{ form.allow_accommodation }}
+  <label class="form-check-label" for="id_allow_accommodation">Accommodation allowance?</label>
+</div>
+{{ form.mileage_fee }}
+{% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}

@@ -78,7 +78,7 @@ class BookingForm(forms.ModelForm):
             "course_date": forms.DateInput(attrs={"type": "date"}),
             "start_time": forms.TimeInput(attrs={"type": "time"}),
             "course_reference": forms.TextInput(attrs={"readonly": "readonly"}),
-            "booking_notes": forms.Textarea(attrs={"rows": 4, "class": "form-control"}),
+            "booking_notes": forms.Textarea(attrs={"rows": 6, "class": "form-control booking-notes-input"}),
             'precise_lat': forms.HiddenInput(),
             'precise_lng': forms.HiddenInput(), 
             "allow_mileage_claim": forms.CheckboxInput(attrs={"class": "form-check-input"}),
@@ -631,7 +631,11 @@ class BookingNotesForm(forms.ModelForm):
         fields = ["booking_notes"]
         widgets = {
             "booking_notes": forms.Textarea(
-                attrs={"rows": 4, "placeholder": "Notes about this course (visible to instructor and admin)."}
+                attrs={
+                    "rows": 6,
+                    "class": "form-control booking-notes-input",
+                    "placeholder": "Notes about this course (visible to instructor and admin).",
+                }
             ),
         }
 

@@ -1,0 +1,24 @@
+<div class="card booking-panel-card booking-panel-card--log booking-communication-log-card{% if stacked %} flex-grow-1 d-flex flex-column mb-0{% else %} mt-3{% endif %}">
+  <div class="card-header booking-panel-header booking-panel-header--log d-flex align-items-center">
+    <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-clock-history"></i></span>
+    <span class="booking-panel-title">Communication log</span>
+  </div>
+  <div class="card-body{% if stacked %} flex-grow-1{% endif %}">
+    {% if communication_log_entries %}
+      <ul class="list-unstyled mb-0 small communication-log-list">
+        {% for entry in communication_log_entries %}
+          <li class="communication-log-item{% if not entry.success %} text-danger{% endif %}">
+            {% if entry.sent_at %}
+              <span class="text-muted">{{ entry.sent_at|date:"j M Y H:i" }}</span>
+              ·
+            {% endif %}
+            <span class="fw-semibold">{{ entry.channel }}</span>
+            — {{ entry.message }}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted small mb-0">No Telegram or email notifications recorded for this booking yet.</p>
+    {% endif %}
+  </div>
+</div>

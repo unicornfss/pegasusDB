@@ -156,6 +156,65 @@
                         </div>
                     </div>
                 </div>
+
+                {% if telegram_bot_configured %}
+                <div class="card shadow-sm">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="card-title mb-0"><i class="bi bi-send me-2"></i>Telegram notifications</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="telegram-link-status" class="mb-3">
+                            {% if telegram_linked %}
+                                <span class="badge bg-success">Linked</span>
+                                {% if telegram_linked_at %}
+                                <span class="text-muted small ms-2">since {{ telegram_linked_at|date:"j M Y H:i" }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge bg-secondary">Not linked</span>
+                                <div class="form-text mt-2">Scan the QR code or open the link, then tap <strong>Start</strong> in Telegram.</div>
+                            {% endif %}
+                        </div>
+
+                        <div id="telegram-link-panel" class="{% if telegram_linked %}d-none{% endif %} mb-3">
+                            <div class="d-flex flex-wrap align-items-start gap-3">
+                                <img id="telegram-qr" alt="Telegram link QR code" class="border rounded" width="160" height="160" style="display:none;">
+                                <div>
+                                    <a id="telegram-deep-link" href="#" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm mb-2" style="display:none;">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>Open in Telegram
+                                    </a>
+                                    <div id="telegram-link-error" class="text-danger small"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {% if telegram_linked %}
+                        <button type="submit"
+                                formaction="{% url 'telegram_unlink' %}"
+                                formmethod="post"
+                                formnovalidate
+                                class="btn btn-outline-danger btn-sm mb-4"
+                                onclick="return confirm('Unlink Telegram from this account?');">
+                            <i class="bi bi-link-45deg me-1"></i>Unlink Telegram
+                        </button>
+                        {% endif %}
+
+                        <p class="small text-muted mb-2">Choose which booking alerts Pegasus sends to your linked Telegram account.</p>
+                        <div class="form-check form-switch mb-2">
+                            {{ pform.notify_new_bookings_telegram }}
+                            <label class="form-check-label" for="{{ pform.notify_new_bookings_telegram.id_for_label }}">New bookings assigned to me</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
+                            {{ pform.notify_booking_changes_telegram }}
+                            <label class="form-check-label" for="{{ pform.notify_booking_changes_telegram.id_for_label }}">Booking updates and cancellations</label>
+                        </div>
+                        <div class="form-check form-switch mb-0">
+                            {{ pform.notify_reminders_telegram }}
+                            <label class="form-check-label" for="{{ pform.notify_reminders_telegram.id_for_label }}">Upcoming booking reminders</label>
+                        </div>
+                        <div class="form-text mt-2">Bot commands: /bookings · /directions REF · /help</div>
+                    </div>
+                </div>
+                {% endif %}
             </div>
 
             <div class="col-lg-4">
@@ -387,6 +446,32 @@ document.addEventListener("DOMContentLoaded", function () {
         sidebarCustomColorInput?.value || presetThemeColors[document.querySelector('input[name="sidebar_theme"]:checked')?.value || "default"]
     );
     applySidebarTheme(document.querySelector('input[name="sidebar_theme"]:checked')?.value || "default");
+
+    const telegramQr = document.getElementById("telegram-qr");
+    const telegramDeepLink = document.getElementById("telegram-deep-link");
+    const telegramLinkError = document.getElementById("telegram-link-error");
+    const telegramLinkPanel = document.getElementById("telegram-link-panel");
+    if (telegramLinkPanel && telegramQr) {
+        fetch("{% url 'telegram_link_token' %}", { headers: { "Accept": "application/json" } })
+            .then(function (response) { return response.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    if (telegramLinkError) telegramLinkError.textContent = data.error;
+                    return;
+                }
+                if (!data.linked && data.qr_data_url) {
+                    telegramQr.src = data.qr_data_url;
+                    telegramQr.style.display = "block";
+                }
+                if (data.deep_link && telegramDeepLink) {
+                    telegramDeepLink.href = data.deep_link;
+                    telegramDeepLink.style.display = "inline-block";
+                }
+            })
+            .catch(function () {
+                if (telegramLinkError) telegramLinkError.textContent = "Could not load Telegram link.";
+            });
+    }
 });
 </script>
 

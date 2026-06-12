@@ -37,6 +37,18 @@ else:
 # ----- APIs ------------------------
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
+# --- Telegram bot (local polling on dev; webhook later on Render) ---
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").lstrip("@")
+SITE_URL = os.getenv("SITE_URL", "http://127.0.0.1:8000").rstrip("/")
+
+# Shared cache so runserver and telegram_poll can both read link tokens (local dev).
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": BASE_DIR / ".django_cache",
+    }
+}
 
 # --- Apps / Middleware ---------------------------------------
 INSTALLED_APPS = [

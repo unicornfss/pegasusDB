@@ -10,6 +10,7 @@ from . import views_inspector as inspv
 from . import views_instructor as instv
 from . import views_instructor
 from . import views_public
+from . import views_telegram
 
 from .views_public import (
     delegate_exam_start,      # start (enter details / match register)
@@ -40,10 +41,13 @@ urlpatterns = [
     path("app/instructor/practice-bookings/new/<uuid:business_id>/", instv.instructor_dummy_booking_new, name="instructor_dummy_booking_new"),
     path("app/instructor/booking/<uuid:pk>/", instv.instructor_booking_detail, name="instructor_booking_detail"),
     path("app/instructor/booking/<uuid:pk>/delete-dummy/", instv.instructor_delete_dummy_booking, name="instructor_delete_dummy_booking"),
+    path("app/instructor/booking/<uuid:pk>/telegram-send/", instv.instructor_send_telegram_booking, name="instructor_booking_telegram_send"),
     path("app/instructor/day/<int:pk>/registers/", instv.instructor_day_registers, name="instructor_day_registers"),
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
     path("app/profile/", views.user_profile, name="user_profile"),
+    path("app/telegram/link-token/", views_telegram.telegram_link_token, name="telegram_link_token"),
+    path("app/telegram/unlink/", views_telegram.telegram_unlink, name="telegram_unlink"),
     path("app/preferences/night-mode/", views.toggle_night_mode, name="toggle_night_mode"),
     path("app/instructor/day/<int:pk>/registers/send-pdf/", views_instructor.instructor_day_registers_pdf, name="instructor_send_register_pdf"),
     path("app/instructor/day/<int:pk>/registers/poll/", views_instructor.instructor_day_registers_poll, name="instructor_day_registers_poll"),
@@ -135,6 +139,7 @@ urlpatterns = [
     path("app/admin/bookings/<uuid:pk>/delete/", app_admin.booking_delete, name="admin_booking_delete"),
     path("app/admin/bookings/<uuid:pk>/cancel/", app_admin.booking_cancel, name="admin_booking_cancel"),
     path("app/admin/bookings/<uuid:pk>/reinstate/", app_admin.booking_reinstate, name="admin_booking_reinstate"),
+    path("app/admin/bookings/<uuid:pk>/telegram-send/", app_admin.admin_booking_telegram_send, name="admin_booking_telegram_send"),
     path("app/admin/bookings/<uuid:pk>/unlock/", app_admin.booking_unlock, name="admin_booking_unlock"),
     path('admin/invoice/<uuid:pk>/pdf/', views_admin.admin_invoice_pdf, name='admin_invoice_pdf'),
 

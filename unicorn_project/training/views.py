@@ -451,6 +451,9 @@ def user_profile(request):
         "current_avatar_initial": personnel.avatar_initial,
         "current_night_mode": current_night_mode,
         "has_2fa": bool(personnel.totp_secret),
+        "telegram_linked": bool((personnel.telegram_chat_id or "").strip()),
+        "telegram_linked_at": personnel.telegram_linked_at,
+        "telegram_bot_configured": bool(settings.TELEGRAM_BOT_USERNAME),
     })
 
 

@@ -1,0 +1,35 @@
+import asyncio
+import logging
+
+from django.conf import settings
+from telegram import Bot
+
+logger = logging.getLogger(__name__)
+
+
+def _run_async(coro):
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            return asyncio.run(coro)
+    except RuntimeError:
+        pass
+    return asyncio.run(coro)
+
+
+def send_telegram_message(chat_id, text, *, parse_mode="HTML"):
+    token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
+    chat_id = (chat_id or "").strip()
+    if not token or not chat_id:
+        return None, "Telegram bot token or chat id missing."
+
+    async def _send():
+        bot = Bot(token=token)
+        return await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+
+    try:
+        message = _run_async(_send())
+        return message, ""
+    except Exception as exc:
+        logger.exception("Telegram send failed for chat_id=%s", chat_id)
+        return None, str(exc)

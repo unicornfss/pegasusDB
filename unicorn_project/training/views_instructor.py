@@ -1178,6 +1178,10 @@ def instructor_dummy_booking_new(request, business_id):
                     note="Dummy / familiarisation day",
                 )
 
+            from .utils.booking_notifications import notify_new_booking
+
+            notify_new_booking(booking)
+
             messages.success(request, f"Practice booking created for {business.name}.")
             return redirect("instructor_booking_detail", pk=booking.pk)
     else:
@@ -1214,6 +1218,30 @@ def instructor_delete_dummy_booking(request, pk):
     delete_dummy_booking_tree(booking)
     messages.success(request, f"Dummy booking {ref} deleted.")
     return redirect(request.POST.get("next") or reverse("instructor_bookings"))
+
+
+@login_required
+@require_POST
+def instructor_send_telegram_booking(request, pk):
+    booking = get_object_or_404(
+        Booking.objects.select_related(
+            "instructor", "course_type", "business", "training_location"
+        ).prefetch_related("days"),
+        pk=pk,
+    )
+    instr = getattr(request.user, "personnel", None)
+    if not instr or booking.instructor_id != instr.id:
+        messages.error(request, "You do not have access to this booking.")
+        return redirect("instructor_bookings")
+
+    from .utils.booking_notifications import notify_resend
+
+    if notify_resend(booking):
+        messages.success(request, "Booking details resent via Telegram.")
+    else:
+        messages.warning(request, "Could not send Telegram. Link your account on Profile and try again.")
+    return redirect("instructor_booking_detail", pk=booking.pk)
+
 
 @login_required
 def whoami(request):
@@ -1444,8 +1472,8 @@ def instructor_booking_detail(request, pk):
 
     booking = get_object_or_404(
         Booking.objects.select_related(
-            "course_type", "business", "instructor", "training_location"
-        ),
+            "course_type", "business", "instructor", "instructor__user", "training_location"
+        ).prefetch_related("telegram_notifications", "telegram_notifications__personnel", "days"),
         pk=pk,
     )
 
@@ -2502,7 +2530,12 @@ def instructor_booking_detail(request, pk):
         })
 
     ctx["gcal_links"] = gcal_links
-    ctx["notes_form"] = BookingNotesForm(instance=booking)
+    from .utils.communication_log import communication_log_entries, user_editable_booking_notes
+
+    ctx["notes_form"] = BookingNotesForm(
+        initial={"booking_notes": user_editable_booking_notes(booking)},
+    )
+    ctx["communication_log_entries"] = communication_log_entries(booking)
 
     return render(request, "instructor/booking_detail.html", ctx)
 

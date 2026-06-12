@@ -863,6 +863,12 @@ def booking_form(request, pk=None):
     obj = get_object_or_404(Booking, pk=pk) if pk else None
 
     if request.method == "POST":
+        from .utils.booking_change_detection import (
+            booking_notification_snapshot,
+            detect_notifiable_booking_changes,
+        )
+
+        before_snapshot = booking_notification_snapshot(obj) if obj else None
         form = BookingForm(request.POST, instance=obj)
         if form.is_valid():
             was_new = obj is None
@@ -1020,6 +1026,28 @@ def booking_form(request, pk=None):
                             end_time=end_t,
                             instructor_id=inst_id,
                         )
+
+            from .utils.booking_notifications import notify_new_booking, notify_booking_changes
+
+            if was_new:
+                notify_new_booking(booking)
+            else:
+                booking_for_notify = (
+                    Booking.objects.prefetch_related("days")
+                    .select_related(
+                        "instructor",
+                        "course_type",
+                        "business",
+                        "training_location",
+                    )
+                    .get(pk=booking.pk)
+                )
+                changed_areas = detect_notifiable_booking_changes(
+                    before_snapshot,
+                    booking_for_notify,
+                )
+                if changed_areas:
+                    notify_booking_changes(booking_for_notify, changed_areas=changed_areas)
 
             messages.success(request, "Booking saved.")
             if "save_return" in request.POST:
@@ -1249,6 +1277,9 @@ def booking_form(request, pk=None):
     # ---- NEW: attach admin invoice context if there is a booking ----
     if obj and obj.pk:
         ctx.update(_admin_invoice_context(obj))
+        from .utils.communication_log import communication_log_entries
+
+        ctx["communication_log_entries"] = communication_log_entries(obj)
 
     return render(request, "admin/form_booking.html", ctx)
 
@@ -1348,6 +1379,9 @@ def booking_cancel(request, pk):
         booking.cancel_reason = reason
         booking.cancelled_at = timezone.now()
         booking.save(update_fields=["status", "cancel_reason", "cancelled_at"])
+        from .utils.booking_notifications import notify_booking_cancellation
+
+        notify_booking_cancellation(booking)
         messages.success(request, "Booking cancelled.")
         return redirect("admin_booking_edit", pk=booking.pk)
 
@@ -1372,6 +1406,14 @@ def booking_reinstate(request, pk):
         booking.cancel_reason = ""
         booking.cancelled_at = None
         booking.save(update_fields=["status", "cancel_reason", "cancelled_at"])
+        from .utils.booking_change_detection import CHANGE_REINSTATEMENT
+        from .utils.booking_notifications import notify_booking_changes
+
+        notify_booking_changes(
+            booking,
+            intro="A cancelled booking assigned to you has been reinstated.",
+            changed_areas=[CHANGE_REINSTATEMENT],
+        )
         messages.success(request, "Booking reinstated.")
         return redirect("admin_booking_edit", pk=booking.pk)
 
@@ -1380,6 +1422,27 @@ def booking_reinstate(request, pk):
         "booking": booking,
         "back_url": reverse("admin_booking_edit", args=[booking.pk]),
     })
+
+
+@admin_required
+@require_http_methods(["POST"])
+def admin_booking_telegram_send(request, pk):
+    booking = get_object_or_404(
+        Booking.objects.select_related(
+            "instructor", "course_type", "business", "training_location"
+        ).prefetch_related("days"),
+        pk=pk,
+    )
+    from .utils.booking_notifications import notify_resend
+
+    if notify_resend(booking):
+        messages.success(request, "Booking details resent via Telegram.")
+    else:
+        messages.warning(
+            request,
+            "Could not send Telegram (instructor not linked or bot not configured).",
+        )
+    return redirect("admin_booking_edit", pk=booking.pk)
 
 # --- Unlock a completed booking so instructor can edit again ---
 @admin_required

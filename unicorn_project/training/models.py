@@ -246,6 +246,21 @@ class Personnel(models.Model):
     totp_secret = models.CharField(max_length=32, blank=True, null=True, help_text="TOTP secret for 2FA")
     totp_backup_codes = models.TextField(blank=True, null=True, help_text="JSON list of hashed one-time backup codes")
 
+    telegram_chat_id = models.CharField(max_length=32, blank=True, default="")
+    telegram_linked_at = models.DateTimeField(null=True, blank=True)
+    notify_new_bookings_telegram = models.BooleanField(
+        default=False,
+        help_text="Telegram alert when a new booking is assigned to you.",
+    )
+    notify_booking_changes_telegram = models.BooleanField(
+        default=False,
+        help_text="Telegram alert when a booking is updated or cancelled.",
+    )
+    notify_reminders_telegram = models.BooleanField(
+        default=False,
+        help_text="Telegram reminder before upcoming bookings.",
+    )
+
     @property
     def avatar_initial(self):
         source = (self.name or self.email or "?").strip()
@@ -1255,3 +1270,31 @@ class Resource(models.Model):
 
     def __str__(self):
         return self.title
+
+
+class TelegramNotification(models.Model):
+    """Audit log of Telegram messages sent for a booking."""
+
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="telegram_notifications",
+    )
+    personnel = models.ForeignKey(
+        Personnel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="telegram_notifications",
+    )
+    notification_type = models.CharField(max_length=32)
+    message_id = models.CharField(max_length=64, blank=True, default="")
+    sent_at = models.DateTimeField(auto_now_add=True)
+    success = models.BooleanField(default=True)
+    error_text = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"{self.notification_type} for booking {self.booking_id}"
