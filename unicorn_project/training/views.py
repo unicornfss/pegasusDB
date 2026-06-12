@@ -20,12 +20,14 @@ from .forms import (
     PersonnelAdminForm,
     PersonnelProfileForm,
     DelegateRegisterForm,
+    PublicDelegateRegisterForm,
     FeedbackForm,
+    delivery_personnel_queryset,
 )
 from .forms_profile import UserProfileForm, PersonnelProfileForm
 from .signal_control import disable, enable
 
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, date
 from pptx import Presentation
 from pptx.enum.shapes import MSO_SHAPE as SHAPE
 from pptx.enum.text import PP_PARAGRAPH_ALIGNMENT
@@ -79,6 +81,108 @@ def _parse_yyyy_mm_dd(s: str):
     except ValueError:
         return None
 
+
+def _parse_partial_date_from_post(post, prefix: str):
+    day = (post.get(f"{prefix}_day") or "").strip()
+    month = (post.get(f"{prefix}_month") or "").strip()
+    year = (post.get(f"{prefix}_year") or "").strip()
+    if not (day and month and year and len(year) == 4):
+        return None
+    try:
+        return date(int(year), int(month), int(day))
+    except (TypeError, ValueError):
+        return None
+
+
+_ACTIVE_BOOKING_STATUSES = ("scheduled", "in_progress", "awaiting_closure", "completed")
+
+
+def _register_dev_mode() -> bool:
+    return getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
+
+
+def _instructors_for_course_date(course, day_date, *, dev_mode=None):
+    """Personnel delivering *course* on *day_date* (booking- or day-level instructor)."""
+    if not course or not day_date:
+        return Personnel.objects.none()
+    if dev_mode is None:
+        dev_mode = _register_dev_mode()
+
+    q_booking = Q(bookings__course_type=course, bookings__days__date=day_date)
+    q_day = Q(
+        booking_days__booking__course_type=course,
+        booking_days__date=day_date,
+    )
+    if not dev_mode:
+        q_booking &= Q(bookings__status__in=_ACTIVE_BOOKING_STATUSES)
+        q_day &= Q(booking_days__booking__status__in=_ACTIVE_BOOKING_STATUSES)
+
+    return (
+        Personnel.objects.filter(q_booking | q_day)
+        .distinct()
+        .order_by("name")
+    )
+
+
+def _dev_instructor_register_hint(course, day_date) -> str:
+    """Dev-only hint when other course types have sessions on the same date."""
+    if not _register_dev_mode() or not course or not day_date:
+        return ""
+    days = (
+        BookingDay.objects.filter(date=day_date)
+        .exclude(booking__course_type=course)
+        .select_related("booking__course_type", "booking__instructor", "instructor")
+    )
+    if not days.exists():
+        return ""
+
+    parts = []
+    seen = set()
+    for bd in days.order_by("booking__course_type__code"):
+        ct = bd.booking.course_type
+        if ct.pk in seen:
+            continue
+        seen.add(ct.pk)
+        inst = bd.instructor or bd.booking.instructor
+        inst_name = inst.name if inst else "TBC"
+        parts.append(f"{ct.code} ({inst_name})")
+    return "Other courses on this date: " + ", ".join(parts)
+
+
+def _resolve_public_register_instructors(course, day_date):
+    """
+    Instructors for the public register form.
+    Falls back to all active delivery personnel when none are scheduled
+    for the course on the given date.
+    Returns (instructor_list, used_fallback).
+    """
+    scheduled = list(_instructors_for_course_date(course, day_date))
+    if scheduled:
+        return scheduled, False
+    return list(delivery_personnel_queryset()), True
+
+
+def _booking_day_for_public_register(course, reg_date, instructor, *, instructor_fallback=False):
+    """Find the BookingDay row to attach a public delegate registration to."""
+    if not course or not reg_date:
+        return None
+
+    qs = BookingDay.objects.filter(
+        booking__course_type=course,
+        date=reg_date,
+    )
+    if not _register_dev_mode():
+        qs = qs.filter(booking__status__in=_ACTIVE_BOOKING_STATUSES)
+
+    if not instructor_fallback and instructor:
+        matched = qs.filter(
+            Q(booking__instructor=instructor) | Q(instructor=instructor)
+        ).order_by("id").first()
+        if matched:
+            return matched
+
+    return qs.order_by("id").first()
+
 # --- home redirect --------------------------------------------
 
 def _redirect_to_user_dashboard(request):
@@ -114,17 +218,16 @@ def public_delegate_instructors_api(request):
     if not course:
         return JsonResponse({"instructors": []})
 
-    qs = (
-        Personnel.objects.filter(
-            bookings__course_type=course,
-            bookings__days__date=day_date
-        )
-        .distinct()
-        .order_by("name")
-    )
-
-    data = [{"id": i.id, "name": i.name} for i in qs]
-    return JsonResponse({"instructors": data})
+    instructors, instructor_fallback = _resolve_public_register_instructors(course, day_date)
+    payload = {
+        "instructors": [{"id": i.id, "name": i.name} for i in instructors],
+        "fallback": instructor_fallback,
+    }
+    if not instructor_fallback:
+        hint = _dev_instructor_register_hint(course, day_date)
+        if hint:
+            payload["dev_hint"] = hint
+    return JsonResponse(payload)
 
 
 def _course_type_by_register_code(code: str):
@@ -157,9 +260,9 @@ def public_delegate_register(request):
     """
     Public delegate register page.
     - Optional ?ct=<COURSE_CODE> to preselect a course
-    - Optional ?date=YYYY-MM-DD to preselect the date
+    - Course date is always today (hidden from the delegate)
     - Instructor list is restricted to instructors who have a booking
-      for the selected course and date.
+      for the selected course and today's date.
     """
 
     # 0) Optional exact day binding (used by dummy/test booking quick links)
@@ -195,37 +298,50 @@ def public_delegate_register(request):
     # For the dropdown when no QR is used
     course_types = CourseType.objects.order_by("name")
 
-    # 2) Initial date (from exact day, querystring, or today)
-    initial = {}
-    if selected_day:
-        initial["date"] = selected_day.date
-    elif request.GET.get("date"):
-        initial["date"] = request.GET["date"]              # 'YYYY-MM-DD'
-    else:
-        initial["date"] = timezone.localdate()             # today (date obj)
-
-    form = DelegateRegisterForm(request.POST or None, initial=initial)
+    # 2) Course date: hidden (always today) in production; editable when REGISTER_SHOW_DATE
+    show_register_date = getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
+    register_date = timezone.localdate()
+    if show_register_date:
+        if request.method == "POST":
+            parsed = _parse_yyyy_mm_dd((request.POST.get("date") or "").strip())
+            if not parsed:
+                parsed = _parse_partial_date_from_post(request.POST, "course_date")
+            if parsed:
+                register_date = parsed
+        else:
+            if selected_day:
+                register_date = selected_day.date
+            elif request.GET.get("date"):
+                parsed = _parse_yyyy_mm_dd(request.GET.get("date").strip())
+                if parsed:
+                    register_date = parsed
+    initial = {"date": register_date}
 
     # 3) Build instructors list (depends on course + date)
     instructors = []
-    bound_date = form.data.get("date") if form.is_bound else initial.get("date")
+    instructor_fallback = False
     if selected_day:
         possible_ids = [selected_day.instructor_id, selected_day.booking.instructor_id]
         instructor_ids = [pid for pid in possible_ids if pid]
-        instructors = Personnel.objects.filter(pk__in=instructor_ids).distinct().order_by("name")
-    elif course and bound_date:
-        instructors = (
-            Personnel.objects
-            .filter(
-                bookings__course_type=course,
-                bookings__days__date=bound_date
-            )
-            .distinct()
-            .order_by("name")
+        instructors = list(
+            Personnel.objects.filter(pk__in=instructor_ids).distinct().order_by("name")
         )
-        # UX: if there is only one matching instructor, preselect them.
-        if not form.is_bound and instructors.count() == 1:
-            form.fields["instructor"].initial = instructors.first().pk
+    elif course:
+        instructors, instructor_fallback = _resolve_public_register_instructors(course, register_date)
+
+    form = PublicDelegateRegisterForm(
+        request.POST or None,
+        initial=initial,
+        instructors=instructors,
+        show_register_date=show_register_date,
+    )
+
+    single_instructor = instructors[0] if len(instructors) == 1 else None
+    instructor_dev_hint = (
+        _dev_instructor_register_hint(course, register_date)
+        if course and not instructor_fallback
+        else ""
+    )
 
     if request.method == "POST" and form.is_valid():
         delegate = form.save(commit=False)
@@ -240,18 +356,19 @@ def public_delegate_register(request):
             else:
                 form.add_error("instructor", "Please select the instructor for this course session.")
         elif course and inst and form.cleaned_data.get("date"):
-            bd = (
-                BookingDay.objects
-                .filter(
-                    booking__course_type=course,
-                    date=form.cleaned_data["date"],
-                )
-                .filter(Q(booking__instructor=inst) | Q(instructor=inst))
-                .order_by("id")
-                .first()
+            reg_date = form.cleaned_data["date"]
+            _, submit_fallback = _resolve_public_register_instructors(course, reg_date)
+            bd = _booking_day_for_public_register(
+                course,
+                reg_date,
+                inst,
+                instructor_fallback=submit_fallback,
             )
             if not bd:
-                form.add_error("date", "No matching course session was found for that course, date, and instructor.")
+                form.add_error(
+                    "date",
+                    "No course session was found for that course and date.",
+                )
 
         if not form.errors and bd:
             delegate.booking_day = bd
@@ -261,8 +378,6 @@ def public_delegate_register(request):
             success_params = {}
             if course and getattr(course, "code", None):
                 success_params["ct"] = course.code
-            if form.cleaned_data.get("date"):
-                success_params["date"] = form.cleaned_data["date"].isoformat()
             if day_code:
                 success_params["day"] = day_code
             success_url = reverse("public_delegate_register_success")
@@ -278,7 +393,12 @@ def public_delegate_register(request):
             "course": course,
             "course_types": course_types,
             "instructors": instructors,
+            "single_instructor": single_instructor,
             "day_code": day_code,
+            "register_date": register_date,
+            "show_register_date": show_register_date,
+            "instructor_dev_hint": instructor_dev_hint,
+            "instructor_fallback": instructor_fallback,
         },
     )
 

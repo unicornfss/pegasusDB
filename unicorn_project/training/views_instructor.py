@@ -660,6 +660,15 @@ def instructor_bookings(request):
         .select_related("course_type", "business", "training_location")
         .filter(instructor=inst)
         .exclude(status="cancelled")
+        .exclude(business__is_dummy=True)
+    )
+
+    practice_bookings = list(
+        Booking.objects
+        .select_related("course_type", "business", "training_location")
+        .filter(instructor=inst, business__is_dummy=True)
+        .exclude(status="cancelled")
+        .order_by("-course_date", "-id")
     )
 
     in_progress = (
@@ -704,7 +713,7 @@ def instructor_bookings(request):
     closed = list(closed_qs[:10])
 
     # Add first register-day id for direct register-entry links in list rows.
-    visible_bookings = list(in_progress) + list(awaiting) + list(scheduled) + list(closed_rows)
+    visible_bookings = list(in_progress) + list(awaiting) + list(scheduled) + list(closed_rows) + practice_bookings
     visible_booking_ids = [b.id for b in visible_bookings]
 
     first_day_by_booking = {}
@@ -739,6 +748,7 @@ def instructor_bookings(request):
         "closed_total": closed_total,    # <— correct badge count
         "closed": closed,                 # fallback if needed
         "dummy_businesses": dummy_businesses,
+        "practice_bookings": practice_bookings,
     })
 
 
