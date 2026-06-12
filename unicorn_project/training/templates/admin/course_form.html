@@ -4,350 +4,618 @@
 {% block title %}{{ title|default:"Course Type" }}{% endblock %}
 
 {% block content %}
-<form method="post" novalidate>
+<style>
+  .course-type-page {
+    width: 100%;
+    max-width: none;
+  }
+  .course-type-header {
+    margin-bottom: 1.25rem;
+  }
+  .course-type-header .breadcrumb-link {
+    font-size: 0.875rem;
+    text-decoration: none;
+    color: var(--app-muted, #6b7280);
+  }
+  .course-type-header .breadcrumb-link:hover {
+    color: var(--unicorn-red, #8B0000);
+  }
+  .course-type-header h1 {
+    font-size: clamp(1.35rem, 3vw, 1.75rem);
+    font-weight: 700;
+    margin: 0.25rem 0 0;
+  }
+  .course-type-header .subtitle {
+    color: var(--app-muted, #6b7280);
+    font-size: 0.95rem;
+    margin-top: 0.25rem;
+  }
+  .admin-form-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .04);
+    margin-bottom: 1.25rem;
+    overflow: hidden;
+    background: var(--app-surface, #fff);
+  }
+  .admin-form-card .card-header {
+    padding: 0.85rem 1.15rem;
+    font-weight: 600;
+    background: var(--app-surface-2, #f8fafc);
+    border-bottom: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .admin-form-card .card-header i {
+    color: var(--unicorn-red, #8B0000);
+    opacity: 0.85;
+  }
+  .admin-form-card .card-body {
+    padding: 1.15rem;
+  }
+  .admin-form-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 1rem;
+  }
+  .admin-form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    background: var(--app-surface, #fff);
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    padding: 0.85rem 0;
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+  .admin-form-actions .suspend-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid rgba(255, 193, 7, .45);
+    border-radius: 0.375rem;
+    background: rgba(255, 193, 7, .12);
+  }
+  .suspend-switch .form-check-input {
+    margin-top: 0;
+    cursor: pointer;
+  }
+  .suspend-switch .form-check-input:checked {
+    background-color: #ffc107;
+    border-color: #e0a800;
+  }
+  .suspend-switch .form-check-input:focus {
+    border-color: #e0a800;
+    box-shadow: 0 0 0 0.25rem rgba(255, 193, 7, 0.35);
+  }
+  .suspend-switch .form-check-label {
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .course-type-header .suspend-switch {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.85rem;
+    border: 1px solid rgba(255, 193, 7, .45);
+    border-radius: 0.375rem;
+    background: rgba(255, 193, 7, .12);
+    margin-right: 0.25rem;
+  }
+  .register-qr-wrap {
+    padding: 0.75rem;
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 0.65rem;
+    background: var(--app-surface-2, #f8fafc);
+    display: inline-block;
+  }
+  .comp-table thead th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--app-muted, #6b7280);
+    font-weight: 600;
+    border-bottom-width: 1px;
+  }
+  .comp-table tbody tr:hover {
+    background: var(--app-surface-2, #f8fafc);
+  }
+  tr.clickable-row[data-href] {
+    cursor: pointer;
+  }
+  tr.clickable-row[data-href]:hover {
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .exam-toggle-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 0.5rem;
+    padding: 0.85rem 1rem;
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .course-type-page .field-compact {
+    max-width: 11rem;
+  }
+  .course-type-page .field-code {
+    max-width: 11rem;
+  }
+  .course-type-page .field-code .form-control[readonly] {
+    background-color: var(--app-surface-2, #f8fafc);
+    cursor: default;
+  }
+  .course-type-page .field-fee {
+    max-width: 14rem;
+  }
+  .course-type-page .register-links-panel {
+    flex: 1 1 28rem;
+    min-width: 0;
+  }
+  .course-type-page .register-qr-panel {
+    flex: 0 0 auto;
+  }
+  @media (min-width: 1200px) {
+    .course-type-page .register-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 2rem;
+    }
+  }
+  .course-type-header .header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+</style>
+
+<form method="post" novalidate class="course-type-page">
   {% csrf_token %}
 
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h3 mb-0">{{ title|default:"Course Type" }}</h1>
-    <div class="d-flex gap-2">
+  <div class="course-type-header d-flex flex-wrap justify-content-between align-items-start gap-3">
+    <div>
+      <a href="{{ cancel_url|default:'#' }}" class="breadcrumb-link">
+        <i class="bi bi-arrow-left"></i> Course types
+      </a>
+      <h1>{{ title|default:"Course type" }}</h1>
+      {% if not is_new_course and object.name %}
+        <div class="subtitle">{{ object.name }}</div>
+      {% elif is_new_course %}
+        <div class="subtitle">Set up course details, competencies, exams, and registration links.</div>
+      {% endif %}
+    </div>
+    <div class="header-actions">
+      {% if not is_new_course and form.is_suspended %}
+      <div class="suspend-switch">
+        <div class="form-check form-switch mb-0">
+          {{ form.is_suspended }}
+          <label class="form-check-label" for="id_is_suspended">Suspend course</label>
+        </div>
+      </div>
+      {% endif %}
       <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline-secondary">Cancel</a>
-      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="submit" name="save_return" value="1" class="btn btn-success">Save and return</button>
+      <button type="submit" class="btn btn-primary">
+        <i class="bi bi-check-lg me-1"></i> Save
+      </button>
     </div>
   </div>
 
-  {% if messages %}
-    {% for message in messages %}
-      <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-        {{ message }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-      </div>
-    {% endfor %}
+  {% if not is_new_course %}
+    {% for e in form.is_suspended.errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
   {% endif %}
 
   {% if form.non_field_errors %}
     <div class="alert alert-danger">{{ form.non_field_errors }}</div>
   {% endif %}
 
-  <!-- Course details -->
-  <div class="card mb-3">
-    <div class="card-header">Course details</div>
+  {# ── Course details ── #}
+  <div class="admin-form-card">
+    <div class="card-header">
+      <i class="bi bi-mortarboard"></i> Course details
+    </div>
     <div class="card-body">
       <div class="row g-4">
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="admin-form-section-title">Course info</div>
 
-        <!-- Column 1: core course info -->
-        <div class="col-md-4">
-          <h6 class="text-muted text-uppercase small mb-2">Course info</h6>
-
-          <div class="mb-3">
-            <label class="form-label">Name</label>
-            {{ form.name }}
-            {% for e in form.name.errors %}
-                <div class="text-danger small">{{ e }}</div>
-            {% endfor %}
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Code</label>
-            {{ form.code }}
-            {% for e in form.code.errors %}
-                <div class="text-danger small">{{ e }}</div>
-            {% endfor %}
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Duration (days)</label>
-            {{ form.duration_days }}
-            {% for e in form.duration_days.errors %}
-                <div class="text-danger small">{{ e }}</div>
-            {% endfor %}
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Certificate duration (years)</label>
-            {{ form.certificate_duration }}
-            {% for e in form.certificate_duration.errors %}
-                <div class="text-danger small">{{ e }}</div>
-            {% endfor %}
-          </div>
-
-          <div class="mb-0">
-            <label class="form-label">OneDrive folder view link</label>
-
-            <div class="input-group">
-              <span class="input-group-text" title="OneDrive">
-                <i class="bi bi-cloud"></i>
-              </span>
-
-              {{ form.onedrive_folder_link }}
-
-              {% if form.onedrive_folder_link.value %}
-                <a class="btn btn-outline-primary"
-                  href="{{ form.onedrive_folder_link.value }}"
-                  target="_blank"
-                  rel="noopener">
-                  <i class="bi bi-box-arrow-up-right"></i> Open
-                </a>
+          <div class="row g-3 mb-0">
+            <div class="col-md">
+              <label class="form-label fw-semibold" for="id_name">Name</label>
+              {{ form.name }}
+              {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
+            <div class="col-sm-auto">
+              <label class="form-label fw-semibold" for="course-code-display">Code</label>
+              {% if not is_new_course %}
+              <div class="input-group field-code">
+                <input type="text" class="form-control" id="course-code-display" value="{{ object.code }}" readonly aria-readonly="true" tabindex="-1">
+                <span class="input-group-text" title="Cannot be changed"><i class="bi bi-lock"></i></span>
+              </div>
               {% else %}
-                <button class="btn btn-outline-primary" type="button" disabled>
-                  <i class="bi bi-box-arrow-up-right"></i> Open
-                </button>
+              <div class="input-group field-code">
+                <input type="text" class="form-control" id="code-preview" value="" placeholder="—" readonly aria-readonly="true" tabindex="-1">
+                <span class="input-group-text text-muted" title="Updates as you type"><i class="bi bi-arrow-repeat"></i></span>
+              </div>
               {% endif %}
             </div>
-
-            {% for e in form.onedrive_folder_link.errors %}
-              <div class="text-danger small">{{ e }}</div>
-            {% endfor %}
-
-            <div class="form-text">
-              Paste a OneDrive “share” link to the course materials folder.
-            </div>
           </div>
-        </div>
+          <p class="form-text mt-1 mb-3">
+            {% if not is_new_course %}
+              Course code is set when this type is created and cannot be changed (registration links depend on it).
+            {% else %}
+              Course code updates as you type and is confirmed when you save.
+            {% endif %}
+          </p>
 
-        <!-- Column 2: exams -->
-        <div class="col-md-4">
-          <h6 class="text-muted text-uppercase small mb-2">Exams</h6>
-
-          <div class="mb-3">
-            <label class="form-label d-block">Has exam?</label>
-            <div class="form-check">
-              {{ form.has_exam }}
+          <div class="row g-3">
+            <div class="col-6 col-sm-auto">
+              <label class="form-label fw-semibold" for="id_duration_days">Duration (days)</label>
+              <div class="field-compact">{{ form.duration_days }}</div>
+              {% for e in form.duration_days.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
             </div>
-            {% for e in form.has_exam.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-          </div>
-
-          <div class="mb-0" id="number-of-exams-wrapper"
-              {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
-            <label class="form-label">Number of exams</label>
-            {{ form.number_of_exams }}
-            {% for e in form.number_of_exams.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-            <div class="form-text">Required when “Has exam?” is ticked.</div>
+            <div class="col-6 col-sm-auto">
+              <label class="form-label fw-semibold" for="id_certificate_duration">Certificate (years)</label>
+              <div class="field-compact">{{ form.certificate_duration }}</div>
+              {% for e in form.certificate_duration.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+            </div>
           </div>
 
           <div class="mt-3 mb-0">
-            <label class="form-label">Required optional modules (0-5)</label>
-            {{ form.optional_modules_required }}
-            {% for e in form.optional_modules_required.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-            <div class="form-text">How many optional competencies instructors must choose in assessments.</div>
+            <label class="form-label fw-semibold" for="id_onedrive_folder_link">OneDrive folder</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-cloud"></i></span>
+              {{ form.onedrive_folder_link }}
+              {% if form.onedrive_folder_link.value %}
+                <a class="btn btn-outline-primary" href="{{ form.onedrive_folder_link.value }}" target="_blank" rel="noopener">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+              {% else %}
+                <button class="btn btn-outline-secondary" type="button" disabled>
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+              {% endif %}
+            </div>
+            <div class="form-text">Share link to course materials for instructors.</div>
+            {% for e in form.onedrive_folder_link.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
           </div>
         </div>
 
-        <!-- Column 3: fees + OneDrive -->
-        <div class="col-md-4">
-          <h6 class="text-muted text-uppercase small mb-2">Fees</h6>
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="admin-form-section-title">Exams &amp; assessment</div>
+
+          <div class="exam-toggle-card mb-3">
+            <div class="form-check">
+              {{ form.has_exam }}
+              <label class="form-check-label fw-semibold" for="id_has_exam">This course has theoretical exam(s)</label>
+            </div>
+            {% for e in form.has_exam.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-3" id="number-of-exams-wrapper"
+               {% if not form.has_exam.value and not form.number_of_exams.errors %}style="display:none;"{% endif %}>
+            <label class="form-label fw-semibold" for="id_number_of_exams">Number of exams</label>
+            <div class="field-compact">{{ form.number_of_exams }}</div>
+            <div class="form-text">Save to auto-create exam rows below.</div>
+            {% for e in form.number_of_exams.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label fw-semibold" for="id_optional_modules_required">Required optional modules</label>
+            <div class="field-compact">{{ form.optional_modules_required }}</div>
+            <div class="form-text">How many optional competencies (0–5) instructors must pick in assessments.</div>
+            {% for e in form.optional_modules_required.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <div class="col-12 col-md-6 col-xl-4">
+          <div class="admin-form-section-title">Default fees</div>
 
           <div class="mb-3">
-            <label class="form-label">Default course fee</label>
-            {{ form.default_course_fee }}
+            <label class="form-label fw-semibold" for="id_default_course_fee">Course fee</label>
+            <div class="input-group field-fee">
+              <span class="input-group-text">£</span>
+              {{ form.default_course_fee }}
+            </div>
+            <div class="form-text">Prefills new bookings (editable per booking).</div>
             {% for e in form.default_course_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
           </div>
 
-          <div class="mb-3">
-            <label class="form-label">Default instructor fee</label>
-            {{ form.default_instructor_fee }}
+          <div class="mb-0">
+            <label class="form-label fw-semibold" for="id_default_instructor_fee">Instructor fee</label>
+            <div class="input-group field-fee">
+              <span class="input-group-text">£</span>
+              {{ form.default_instructor_fee }}
+            </div>
             {% for e in form.default_instructor_fee.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
           </div>
-
+        </div>
       </div>
     </div>
   </div>
 
-
-  <!-- Collapsible sections in columns -->
-  <div class="row">
-    <!-- Competencies accordion -->
-    <div class="col-md-6">
-      <div class="accordion mb-3" id="competencies-accordion">
-        <div class="accordion-item">
-          <h2 class="accordion-header" id="heading-comps">
-            <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                    data-bs-target="#collapse-comps" aria-expanded="true" aria-controls="collapse-comps">
-              Competencies
-            </button>
-          </h2>
-          <div id="collapse-comps" class="accordion-collapse collapse show" aria-labelledby="heading-comps">
-            <div class="accordion-body">
-              {{ formset.management_form }}
-
-              <div class="table-responsive">
-                <table class="table table-sm align-middle">
-                  <thead>
-                    <tr>
-                      <th style="width:8rem">Order</th>
-                      <th>Competency</th>
-                      <th style="width:9rem">Optional</th>
-                      <th style="width:10rem">Do not use</th>
-                      <th style="width:12rem" class="text-end">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody id="comp-body">
-                    {% for f in formset.forms %}
-                      <tr class="comp-row">
-                        <td>
-                          {% if f.sort_order %}{{ f.sort_order }}{% endif %}
-                          <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
-                            <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
-                            <button type="button" class="btn btn-outline-secondary js-move" data-dir="1"  title="Move down">▼</button>
-                          </div>
-                        </td>
-                        <td>
-                          {% if f.name %}
-                            {{ f.name }}
-                          {% else %}
-                            {% for field in f.visible_fields %}{{ field }}{% endfor %}
-                          {% endif %}
-                          {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-                        </td>
-                        <td>
-                          {% if f.is_optional %}
-                            <div class="form-check">{{ f.is_optional }}</div>
-                          {% endif %}
-                        </td>
-                        <td>
-                          {% if f.do_not_use %}
-                            <div class="form-check">{{ f.do_not_use }}</div>
-                          {% endif %}
-                        </td>
-                        <td class="text-end">
-                          {% if formset.can_delete and f.DELETE %}
-                            <label class="btn btn-outline-danger btn-sm mb-0">{{ f.DELETE }} Delete</label>
-                          {% endif %}
-                          {{ f.id }}
-                        </td>
-                      </tr>
-                    {% empty %}
-                      <tr class="text-muted"><td colspan="5">No competencies yet.</td></tr>
-                    {% endfor %}
-                  </tbody>
-                </table>
-              </div>
-
-              <button type="button" class="btn btn-outline-primary btn-sm" id="add-row">
-                <i class="bi bi-plus-lg"></i> Add competency
+  {# ── Delegate registration ── #}
+  {% if register_links %}
+  <div class="admin-form-card">
+    <div class="card-header">
+      <i class="bi bi-qr-code"></i> Delegate registration link
+    </div>
+    <div class="card-body">
+      {% if object.is_suspended %}
+      <div class="alert alert-warning">
+        This course type is suspended. Links and QR codes below will not accept new delegate registrations until it is reactivated.
+      </div>
+      {% endif %}
+      <p class="text-muted mb-3 mb-md-4">
+        Share this short link or QR code with delegates. They go straight to the register form with this course pre-selected.
+      </p>
+      <div class="register-row">
+        <div class="register-links-panel">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Short link</label>
+            <div class="input-group">
+              <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.short_url }}" id="register-short-url">
+              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-short-url">
+                <i class="bi bi-clipboard"></i> Copy
               </button>
-
-              <!-- Empty row template -->
-              <template id="empty-form-template">
-                <tr class="comp-row">
-                  <td>
-                    {% if formset.empty_form.sort_order %}{{ formset.empty_form.sort_order.as_widget }}{% endif %}
-                    <div class="btn-group btn-group-sm mt-1">
-                      <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1">▲</button>
-                      <button type="button" class="btn btn-outline-secondary js-move" data-dir="1">▼</button>
-                    </div>
-                  </td>
-                  <td>
-                    {% if formset.empty_form.name %}
-                      {{ formset.empty_form.name.as_widget }}
-                    {% else %}
-                      {% for field in formset.empty_form.visible_fields %}{{ field.as_widget }}{% endfor %}
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if formset.empty_form.is_optional %}
-                      <div class="form-check">{{ formset.empty_form.is_optional.as_widget }}</div>
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if formset.empty_form.do_not_use %}
-                      <div class="form-check">{{ formset.empty_form.do_not_use.as_widget }}</div>
-                    {% endif %}
-                  </td>
-                  <td class="text-end">
-                    {% if formset.can_delete and formset.empty_form.DELETE %}
-                      <label class="btn btn-outline-danger btn-sm mb-0">{{ formset.empty_form.DELETE.as_widget }} Delete</label>
-                    {% endif %}
-                    {{ formset.empty_form.id.as_widget }}
-                  </td>
-                </tr>
-              </template>
+              <a class="btn btn-outline-primary" href="{{ register_links.short_url }}" target="_blank" rel="noopener">
+                <i class="bi bi-box-arrow-up-right"></i> Open
+              </a>
             </div>
           </div>
+          <div class="mb-0">
+            <label class="form-label fw-semibold">Full URL</label>
+            <div class="input-group">
+              <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.full_url }}" id="register-full-url">
+              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-full-url">
+                <i class="bi bi-clipboard"></i> Copy
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="register-qr-panel text-center text-xl-start mt-3 mt-xl-0">
+          <label class="form-label fw-semibold d-block">QR code</label>
+          <div class="register-qr-wrap mb-2">
+            <img src="{{ register_links.qr_url }}" alt="Registration QR for {{ object.code }}" class="img-fluid" style="max-width: 180px;">
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="{{ register_links.qr_url }}" download="{{ register_links.download_name }}">
+            <i class="bi bi-download"></i> Download PNG
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% elif not is_new_course %}
+  <div class="admin-form-card">
+    <div class="card-header">
+      <i class="bi bi-qr-code"></i> Delegate registration link
+    </div>
+    <div class="card-body text-muted mb-0">
+      Save this course type to generate the registration short link and QR code.
+    </div>
+  </div>
+  {% endif %}
+
+  {# ── Competencies & exams ── #}
+  <div class="row g-3">
+    <div class="col-12 col-xl-6">
+      <div class="admin-form-card h-100 mb-0">
+        <div class="card-header">
+          <i class="bi bi-list-check"></i> Competencies
+        </div>
+        <div class="card-body">
+          {{ formset.management_form }}
+
+          <div class="table-responsive">
+            <table class="table table-sm align-middle comp-table mb-3">
+              <thead>
+                <tr>
+                  <th style="width:7rem">Order</th>
+                  <th>Competency</th>
+                  <th style="width:5rem" class="text-center">Opt.</th>
+                  <th style="width:5rem" class="text-center">Hide</th>
+                  <th style="width:5rem"></th>
+                </tr>
+              </thead>
+              <tbody id="comp-body">
+                {% for f in formset.forms %}
+                  <tr class="comp-row">
+                    <td>
+                      {% if f.sort_order %}{{ f.sort_order }}{% endif %}
+                      <div class="btn-group btn-group-sm mt-1" role="group" aria-label="Reorder">
+                        <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1" title="Move up">▲</button>
+                        <button type="button" class="btn btn-outline-secondary js-move" data-dir="1" title="Move down">▼</button>
+                      </div>
+                    </td>
+                    <td>
+                      {% if f.name %}{{ f.name }}{% else %}{% for field in f.visible_fields %}{{ field }}{% endfor %}{% endif %}
+                      {% for e in f.non_field_errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                    </td>
+                    <td class="text-center">{% if f.is_optional %}<div class="form-check d-inline-block">{{ f.is_optional }}</div>{% endif %}</td>
+                    <td class="text-center">{% if f.do_not_use %}<div class="form-check d-inline-block">{{ f.do_not_use }}</div>{% endif %}</td>
+                    <td class="text-end">
+                      {% if formset.can_delete and f.DELETE %}
+                        <label class="btn btn-outline-danger btn-sm mb-0">{{ f.DELETE }} <i class="bi bi-trash"></i></label>
+                      {% endif %}
+                      {{ f.id }}
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td colspan="5" class="text-muted py-3">No competencies yet — add one below.</td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <button type="button" class="btn btn-outline-primary btn-sm" id="add-row">
+            <i class="bi bi-plus-lg"></i> Add competency
+          </button>
+
+          <template id="empty-form-template">
+            <tr class="comp-row">
+              <td>
+                {% if formset.empty_form.sort_order %}{{ formset.empty_form.sort_order.as_widget }}{% endif %}
+                <div class="btn-group btn-group-sm mt-1">
+                  <button type="button" class="btn btn-outline-secondary js-move" data-dir="-1">▲</button>
+                  <button type="button" class="btn btn-outline-secondary js-move" data-dir="1">▼</button>
+                </div>
+              </td>
+              <td>
+                {% if formset.empty_form.name %}{{ formset.empty_form.name.as_widget }}{% else %}{% for field in formset.empty_form.visible_fields %}{{ field.as_widget }}{% endfor %}{% endif %}
+              </td>
+              <td class="text-center">{% if formset.empty_form.is_optional %}<div class="form-check d-inline-block">{{ formset.empty_form.is_optional.as_widget }}</div>{% endif %}</td>
+              <td class="text-center">{% if formset.empty_form.do_not_use %}<div class="form-check d-inline-block">{{ formset.empty_form.do_not_use.as_widget }}</div>{% endif %}</td>
+              <td class="text-end">
+                {% if formset.can_delete and formset.empty_form.DELETE %}
+                  <label class="btn btn-outline-danger btn-sm mb-0">{{ formset.empty_form.DELETE.as_widget }} <i class="bi bi-trash"></i></label>
+                {% endif %}
+                {{ formset.empty_form.id.as_widget }}
+              </td>
+            </tr>
+          </template>
         </div>
       </div>
     </div>
 
-    <!-- Exams accordion -->
-    <div class="col-md-6">
-      <div class="accordion mb-3" id="exams-accordion">
-        <div class="accordion-item" id="exams-accordion-item"
-             {% if form.has_exam.value or form.number_of_exams.errors %}style=""{% else %}style="display:none;"{% endif %}>
-          <h2 class="accordion-header" id="heading-exams">
-            <button class="accordion-button" type="button" data-bs-toggle="collapse"
-                    data-bs-target="#collapse-exams" aria-expanded="false" aria-controls="collapse-exams">
-              Exams
-            </button>
-          </h2>
-          <div id="collapse-exams" class="accordion-collapse collapse show" aria-labelledby="heading-exams">
-            <div class="accordion-body">
+    <div class="col-12 col-xl-6">
+      <div class="admin-form-card h-100 mb-0" id="exams-accordion-item"
+           {% if not form.has_exam.value and not form.number_of_exams.errors %}style="display:none;"{% endif %}>
+        <div class="card-header">
+          <i class="bi bi-journal-text"></i> Exams
+        </div>
+        <div class="card-body">
+          {% if form.has_exam.value %}
+            {% if form.number_of_exams.value %}
+              <p class="mb-3">This course has <strong>{{ form.number_of_exams.value }}</strong> exam slot(s). Click a row to edit questions.</p>
+            {% else %}
+              <p class="text-muted mb-3">Enter the number of exams above and click Save to create them.</p>
+            {% endif %}
 
-              {% if form.has_exam.value %}
-                {% if form.number_of_exams.value %}
-                  <p class="mb-3">This course will have <strong>{{ form.number_of_exams.value }}</strong> exam(s).</p>
+            {% if object %}
+              {% with exams=object.exams.all %}
+                {% if exams %}
+                  <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle comp-table mb-0">
+                      <thead>
+                        <tr>
+                          <th style="width:4rem">#</th>
+                          <th style="width:8rem">Code</th>
+                          <th>Title</th>
+                          <th style="width:6rem">Qs</th>
+                          <th style="width:5rem"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for ex in exams %}
+                          <tr class="clickable-row" data-href="{% url 'admin_exam_edit' ex.id %}" tabindex="0">
+                            <td>{{ ex.sequence }}</td>
+                            <td><code class="small">{{ ex.exam_code }}</code></td>
+                            <td>{{ ex.title }}</td>
+                            <td>{{ ex.questions.count }}</td>
+                            <td class="text-end">
+                              <a href="{% url 'admin_exam_edit' ex.id %}" class="btn btn-sm btn-outline-primary" data-no-row-nav="1">Edit</a>
+                            </td>
+                          </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
                 {% else %}
-                  <p class="text-muted mb-3">Enter the number of exams above and click Save to create them.</p>
+                  <p class="text-muted mb-0">No exams yet. Set the count above and save.</p>
                 {% endif %}
-
-                {% if object %}
-                  {% with exams=object.exams.all %}
-                    {% if exams %}
-                      <div class="table-responsive">
-                        <table class="table table-sm table-hover align-middle">
-                          <thead>
-                            <tr>
-                              <th style="width:8rem">Seq</th>
-                              <th style="width:10rem">Code</th>
-                              <th>Title</th>
-                              <th style="width:10rem">Questions</th>
-                              <th style="width:10rem" class="text-end">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {% for ex in exams %}
-                              <tr class="clickable-row" data-href="{% url 'admin_exam_edit' ex.id %}" tabindex="0">
-                                <td>{{ ex.sequence }}</td>
-                                <td>{{ ex.exam_code }}</td>
-                                <td>{{ ex.title }}</td>
-                                <td>{{ ex.questions.count }}</td>
-                                <td class="text-end">
-                                  <a href="{% url 'admin_exam_edit' ex.id %}" class="btn btn-sm btn-outline-primary" data-no-row-nav="1">
-                                    Edit
-                                  </a>
-                                </td>
-                              </tr>
-                            {% empty %}
-                              <tr><td colspan="5" class="text-muted">No exams yet.</td></tr>
-                            {% endfor %}
-                          </tbody>
-                        </table>
-                      </div>
-                    {% else %}
-                      <div class="text-muted">No exams yet. Set “Number of exams” and Save.</div>
-                    {% endif %}
-                  {% endwith %}
-                {% endif %}
-
-              {% else %}
-                <p class="text-muted mb-0">Enable “Has exam?” above to configure exams.</p>
-              {% endif %}
-
-            </div>
-          </div>
+              {% endwith %}
+            {% endif %}
+          {% else %}
+            <p class="text-muted mb-0">Enable “This course has theoretical exam(s)” above to configure exams.</p>
+          {% endif %}
         </div>
       </div>
     </div>
   </div>
 
-  <div class="d-flex justify-content-end gap-2">
+  {% if not is_new_course %}
+  <div class="admin-form-card mb-3">
+    <div class="card-header text-danger">
+      <i class="bi bi-trash"></i> Delete course type
+    </div>
+    <div class="card-body">
+      {% if can_delete %}
+        <p class="mb-3 text-muted">This course type has never been booked. It can be permanently deleted.</p>
+        <a href="{% url 'admin_course_delete' object.id %}" class="btn btn-outline-danger">
+          <i class="bi bi-trash"></i> Delete course type
+        </a>
+      {% else %}
+        <p class="mb-0 text-muted">This course type cannot be deleted because at least one booking has used it. You can suspend it instead to prevent new bookings.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="admin-form-actions">
+    {% if not is_new_course and form.is_suspended %}
+    <div class="suspend-switch">
+      <div class="form-check form-switch mb-0">
+        <input type="checkbox" class="form-check-input" id="id_is_suspended_bottom" {% if form.is_suspended.value %}checked{% endif %}>
+        <label class="form-check-label" for="id_is_suspended_bottom">Suspend course</label>
+      </div>
+    </div>
+    {% endif %}
     <a href="{{ cancel_url|default:'#' }}" class="btn btn-outline-secondary">Cancel</a>
-    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="submit" name="save_return" value="1" class="btn btn-success">Save and return</button>
+    <button type="submit" class="btn btn-primary">
+      <i class="bi bi-check-lg me-1"></i> Save course type
+    </button>
   </div>
 </form>
 
-<!-- Small inline scripts so they always run -->
+{% if not is_new_course %}
+<div class="modal fade" id="courseNameChangeModal" tabindex="-1" aria-labelledby="courseNameChangeModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="courseNameChangeModalLabel">Course name changed</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>The course code <strong><code>{{ object.code }}</code></strong> will <strong>not</strong> change when you rename this course.</p>
+        <p class="mb-0 text-muted">This protects registration links, QR codes, and other references. To use a different code, create a new course type.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Understood</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
 (function(){
-  // toggle Number of exams + Exams accordion
+  document.addEventListener('click', function(e){
+    var btn = e.target.closest('.js-copy-btn');
+    if (!btn) return;
+    var sel = btn.getAttribute('data-target');
+    var input = sel ? document.querySelector(sel) : null;
+    if (!input) return;
+    input.select();
+    input.setSelectionRange(0, input.value.length);
+    navigator.clipboard.writeText(input.value).then(function(){
+      var label = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check2"></i> Copied';
+      setTimeout(function(){ btn.innerHTML = label; }, 1500);
+    });
+  });
+})();
+
+(function(){
   function q(sel){ return document.querySelector(sel); }
   function syncExamFields(){
     var has = q('input[name="has_exam"]') || q('#id_has_exam');
@@ -366,7 +634,6 @@
   });
 })();
 
-// add competency row from empty_form
 (function(){
   function updateAttrs(el, idx){
     ['id','name','for'].forEach(function(attr){
@@ -402,19 +669,14 @@
 })();
 
 (function () {
-  const rows = document.querySelectorAll('tr.clickable-row[data-href]');
-  rows.forEach(tr => {
-    // Mouse click
+  document.querySelectorAll('tr.clickable-row[data-href]').forEach(tr => {
     tr.addEventListener('click', e => {
-      // Don’t hijack clicks on interactive elements inside the row
       if (e.target.closest('a, button, input, select, label')) return;
       const url = tr.dataset.href;
       if (!url) return;
-      if (e.ctrlKey || e.metaKey) { window.open(url, '_blank'); }
-      else { window.location.href = url; }
+      if (e.ctrlKey || e.metaKey) window.open(url, '_blank');
+      else window.location.href = url;
     });
-
-    // Keyboard (Enter/Space)
     tr.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -424,6 +686,83 @@
     });
   });
 })();
-</script>
+{% if is_new_course %}
+(function(){
+  var nameInput = document.getElementById('id_name');
+  var preview = document.getElementById('code-preview');
+  var previewUrl = "{{ course_code_preview_url|default:'/app/admin/courses/preview-code/'|escapejs }}";
+  var fetchTimer = null;
+  var SMALL = new Set(['a','an','and','at','by','for','in','of','on','the','to','with']);
+  if (!nameInput || !preview) return;
 
+  function localInitials(name){
+    var parts = [];
+    name.trim().split(/[\s\-/]+/).forEach(function(raw){
+      var word = raw.replace(/[^\w]/g, '');
+      if (!word || !/[A-Za-z]/.test(word)) return;
+      var first = word.match(/[A-Za-z]/)[0];
+      if (SMALL.has(word.toLowerCase())) parts.push(first.toLowerCase());
+      else parts.push(first);
+    });
+    return parts.join('');
+  }
+
+  function applyLocal(name){
+    if (!name) {
+      preview.value = '';
+      preview.placeholder = '—';
+      return '';
+    }
+    var code = localInitials(name);
+    preview.value = code;
+    preview.placeholder = code ? '' : '—';
+    return code;
+  }
+
+  function fetchUnique(name){
+    fetch(previewUrl + '?name=' + encodeURIComponent(name), {headers: {'X-Requested-With': 'XMLHttpRequest'}})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){
+        if (data && data.code) {
+          preview.value = data.code;
+          preview.placeholder = '';
+        }
+      })
+      .catch(function(){ /* localInitials already shown */ });
+  }
+
+  nameInput.addEventListener('input', function(){
+    var name = (nameInput.value || '').trim();
+    applyLocal(name);
+    clearTimeout(fetchTimer);
+    if (name) fetchTimer = setTimeout(function(){ fetchUnique(name); }, 400);
+  });
+
+  applyLocal((nameInput.value || '').trim());
+  if ((nameInput.value || '').trim()) fetchUnique(nameInput.value.trim());
+})();
+{% elif not is_new_course %}
+(function(){
+  var primary = document.getElementById('id_is_suspended');
+  var mirror = document.getElementById('id_is_suspended_bottom');
+  if (!primary || !mirror) return;
+  primary.addEventListener('change', function(){ mirror.checked = primary.checked; });
+  mirror.addEventListener('change', function(){ primary.checked = mirror.checked; });
+})();
+(function(){
+  var nameInput = document.getElementById('id_name');
+  var modalEl = document.getElementById('courseNameChangeModal');
+  if (!nameInput || !modalEl || !window.bootstrap) return;
+  var original = (nameInput.value || '').trim();
+  var warned = false;
+  nameInput.addEventListener('input', function(){
+    if (warned) return;
+    if ((nameInput.value || '').trim() !== original) {
+      warned = true;
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+  });
+})();
+{% endif %}
+</script>
 {% endblock %}

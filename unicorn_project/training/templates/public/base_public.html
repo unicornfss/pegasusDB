@@ -21,6 +21,7 @@
     crossorigin="anonymous"
   >
   <link rel="stylesheet" href="{% static 'training/css/theme.css' %}">
+  {% block extra_head %}{% endblock %}
   <style>
     /* page takes full viewport height so the footer sits at the bottom */
     .page-wrap { min-height: 100dvh; display: flex; flex-direction: column; }

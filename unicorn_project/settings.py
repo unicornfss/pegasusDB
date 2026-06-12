@@ -14,6 +14,14 @@ load_dotenv(BASE_DIR / ".env", override=True)
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-key-change-me")
 DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() == "true"
 
+_register_show_date = os.getenv("REGISTER_SHOW_DATE", "").strip().lower()
+if _register_show_date in ("1", "true", "yes"):
+    REGISTER_SHOW_DATE = True
+elif _register_show_date in ("0", "false", "no"):
+    REGISTER_SHOW_DATE = False
+else:
+    REGISTER_SHOW_DATE = DEBUG
+
 ALLOWED_HOSTS = ["*"] if DEBUG else [h.strip() for h in os.getenv("ALLOWED_HOSTS", "").split(",") if h.strip()]
 
 # CSRF trusted origins (env list) + Render convenience

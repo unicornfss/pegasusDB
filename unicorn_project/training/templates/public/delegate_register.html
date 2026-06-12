@@ -1,134 +1,437 @@
 {% extends "public/base_public.html" %}
 {% load static %}
 
-{# Browser/tab title #}
 {% block title %}
-  {% if course_type %}{{ course_type.name }} — Course Register{% else %}Course Register{% endif %}
+  {% if course %}{{ course.name }} — Course Register{% else %}Course Register{% endif %}
 {% endblock %}
 
-{# Header: logo + company name #}
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  .register-page {
+    max-width: 42rem;
+    margin-inline: auto;
+  }
+  .register-intro {
+    text-align: center;
+    margin-bottom: 1.25rem;
+  }
+  .register-intro p {
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 0;
+    font-size: 0.95rem;
+  }
+  .register-brand-name {
+    font-size: clamp(1rem, 3vw, 1.15rem);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .register-brand-subtitle {
+    font-size: clamp(0.85rem, 2.5vw, 0.95rem);
+    line-height: 1.35;
+    margin-top: 0.15rem;
+    color: var(--app-muted, #6b7280);
+  }
+  .register-logo {
+    height: clamp(56px, 14vw, 80px);
+    width: auto;
+  }
+  .register-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 1rem;
+    background: var(--app-surface, #fff);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .register-section {
+    padding: 1.25rem 1.25rem 0.25rem;
+  }
+  .register-section + .register-section {
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    margin-top: 0.25rem;
+    padding-top: 1.25rem;
+  }
+  .register-section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 1rem;
+  }
+  .register-course-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--app-surface-2, #f8fafc);
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+  }
+  .register-course-pill .course-icon {
+    flex-shrink: 0;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.65rem;
+    display: grid;
+    place-items: center;
+    background: rgba(139, 0, 0, .1);
+    color: var(--unicorn-red, #8B0000);
+    font-size: 1.1rem;
+  }
+  .register-course-pill .course-name {
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .register-course-pill .course-code {
+    font-size: 0.85rem;
+    color: var(--app-muted, #6b7280);
+  }
+  .register-field label.form-label {
+    font-weight: 600;
+    font-size: 0.92rem;
+    margin-bottom: 0.35rem;
+  }
+  .dob-grid {
+    display: grid;
+    grid-template-columns: minmax(4rem, 1fr) minmax(4rem, 1fr) minmax(5.5rem, 1.4fr) auto;
+    gap: 0.65rem;
+    align-items: end;
+  }
+  @media (max-width: 420px) {
+    .dob-grid {
+      grid-template-columns: 1fr 1fr 1.2fr auto;
+    }
+  }
+  .dob-grid .sub-label {
+    font-size: 0.78rem;
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 0.25rem;
+  }
+  .dob-picker-btn {
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .choice-list {
+    display: grid;
+    gap: 0.65rem;
+  }
+  .choice-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .12));
+    border-radius: 0.75rem;
+    background: var(--app-surface, #fff);
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+  }
+  .choice-card:hover {
+    border-color: rgba(139, 0, 0, .35);
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .choice-card:has(input:checked) {
+    border-color: var(--unicorn-red, #8B0000);
+    box-shadow: 0 0 0 3px rgba(139, 0, 0, .12);
+    background: rgba(139, 0, 0, .04);
+  }
+  .choice-card input {
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+  }
+  .choice-card span {
+    line-height: 1.45;
+    font-size: 0.95rem;
+  }
+  .instructor-readonly {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--app-surface-2, #f8fafc);
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    font-weight: 600;
+  }
+  .instructor-readonly i {
+    color: var(--unicorn-red, #8B0000);
+    font-size: 1.25rem;
+  }
+  .register-dev-hint {
+    font-size: 0.85rem;
+    color: #856404;
+    margin-top: 0.5rem;
+  }
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    background: var(--app-surface-2, #f8fafc);
+    color: var(--app-muted, #6b7280);
+    font-size: 0.92rem;
+  }
+  .register-footer {
+    padding: 1.25rem;
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    background: var(--app-surface-2, #f8fafc);
+  }
+  .register-submit {
+    min-height: 3rem;
+    font-weight: 600;
+    font-size: 1rem;
+    background: var(--unicorn-red, #8B0000);
+    border-color: var(--unicorn-red, #8B0000);
+  }
+  .register-submit:hover,
+  .register-submit:focus {
+    background: #6f0000;
+    border-color: #6f0000;
+  }
+  .dev-date-banner {
+    font-size: 0.82rem;
+    color: #856404;
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+  }
+  body.night-mode .register-card {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+  }
+  body.night-mode .register-course-pill,
+  body.night-mode .instructor-readonly,
+  body.night-mode .register-empty-note,
+  body.night-mode .register-footer {
+    background: #161d27 !important;
+  }
+  body.night-mode .choice-card:hover {
+    background: #161d27 !important;
+  }
+  body.night-mode .choice-card:has(input:checked) {
+    background: rgba(139, 0, 0, .18) !important;
+  }
+  body.night-mode .dev-date-banner {
+    color: #ffe082;
+    background: #3d3200;
+    border-color: #665500;
+  }
+  body.night-mode .register-dev-hint {
+    color: #ffe082;
+  }
+</style>
+{% endblock %}
+
 {% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
+  <div class="register-brand d-flex align-items-center gap-3">
+    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" class="register-logo">
+    <div>
+      <div class="register-brand-name">Unicorn Fire &amp; Safety Solutions</div>
+      <div class="register-brand-subtitle">
+        {% if course %}{{ course.name }}: delegate registration{% else %}Delegate registration{% endif %}
+      </div>
+    </div>
   </div>
 {% endblock %}
 
 {% block content %}
-<h3 class="mb-3">Delegate register</h3>
+<div class="register-page">
+  <div class="register-intro">
+    <p>Please complete your details below{% if course %} to register for today’s course{% endif %}.</p>
+  </div>
 
-<form method="post" class="card p-3">
-  {% csrf_token %}
-  {% if day_code %}
-    <input type="hidden" name="day_code" value="{{ day_code }}">
-  {% endif %}
+  {% if registration_unavailable %}
+  <div class="alert alert-warning register-card">
+    This course is not available for new registrations. It may have been suspended or removed.
+  </div>
+  {% else %}
+  <form method="post" class="register-card">
+    {% csrf_token %}
+    {% if day_code %}
+      <input type="hidden" name="day_code" value="{{ day_code }}">
+    {% endif %}
 
-  <div class="row g-3">
-
-    {# COURSE #}
     {% if course %}
-      <div class="col-12">
-        <label class="form-label">Course</label>
-        <div class="form-control-plaintext fw-semibold">
-          {{ course.name }} ({{ course.code }})
-        </div>
-        <input type="hidden" name="course_id" value="{{ course.id }}">
-        <input type="hidden" name="course_code" value="{{ course.code }}">
+      <input type="hidden" name="course_id" value="{{ course.id }}">
+      <input type="hidden" name="course_code" value="{{ course.code }}">
+    {% endif %}
+
+    {% if show_register_date or REGISTER_SHOW_DATE %}
+    <div class="register-section">
+      <div class="register-section-title">Course date <span class="fw-normal text-lowercase">(development)</span></div>
+      <div class="dev-date-banner mb-2">
+        <i class="bi bi-tools"></i> Visible in development only — change this to test instructor matching on other days.
       </div>
+      <div class="register-field">
+        <label class="form-label">Date</label>
+        {{ form.date }}
+        <div class="dob-grid">
+          <div>
+            <div class="sub-label">Day</div>
+            {{ form.course_date_day }}
+          </div>
+          <div>
+            <div class="sub-label">Month</div>
+            {{ form.course_date_month }}
+          </div>
+          <div>
+            <div class="sub-label">Year</div>
+            {{ form.course_date_year }}
+          </div>
+          <div>
+            <div class="sub-label d-none d-sm-block">&nbsp;</div>
+            <button type="button" class="btn btn-outline-secondary dob-picker-btn" id="courseDatePickerBtn" title="Pick from calendar" aria-label="Pick course date from calendar">
+              <i class="bi bi-calendar3"></i>
+            </button>
+            <input type="date" id="courseDatePicker" class="visually-hidden" tabindex="-1" aria-hidden="true">
+          </div>
+        </div>
+        <div class="form-text mt-2">Enter DD MM YYYY, or tap the calendar if you prefer.</div>
+        {% for err in form.date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      </div>
+    </div>
     {% else %}
-      <div class="col-md-6">
-        <label class="form-label">Course</label>
+      {{ form.date }}
+    {% endif %}
+
+    {% if not course %}
+    <div class="register-section">
+      <div class="register-section-title">Course</div>
+      <div class="register-field">
+        <label class="form-label" for="courseSelect">Select course</label>
         <select name="course_id" id="courseSelect" class="form-select" required>
           <option value="">— Select course —</option>
           {% for c in course_types %}
             <option value="{{ c.id }}" data-code="{{ c.code }}">{{ c.name }} ({{ c.code }})</option>
           {% endfor %}
         </select>
-        <div class="form-text">Tip: scanning a course-specific QR will auto-select this.</div>
+        <div class="form-text">Scanning a course QR code will select this automatically.</div>
       </div>
+    </div>
     {% endif %}
 
-    {# DATE (moved before Name) #}
-    <div class="col-md-6">
-      <label class="form-label">Date</label>
-      {{ form.date }}
-      {% for err in form.date.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+    {# ── Your details ── #}
+    <div class="register-section">
+      <div class="register-section-title">Your details</div>
+      <div class="row g-3">
+        <div class="col-12 col-sm-6 register-field">
+          <label class="form-label" for="id_name">Full name</label>
+          {{ form.name }}
+          {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+
+        <div class="col-12 col-sm-6 register-field">
+          <label class="form-label" for="id_job_title">Job title</label>
+          {{ form.job_title }}
+          {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+
+        <div class="col-12 register-field">
+          <label class="form-label">Date of birth</label>
+          {{ form.date_of_birth }}
+          <div class="dob-grid">
+            <div>
+              <div class="sub-label">Day</div>
+              {{ form.dob_day }}
+            </div>
+            <div>
+              <div class="sub-label">Month</div>
+              {{ form.dob_month }}
+            </div>
+            <div>
+              <div class="sub-label">Year</div>
+              {{ form.dob_year }}
+            </div>
+            <div>
+              <div class="sub-label d-none d-sm-block">&nbsp;</div>
+              <button type="button" class="btn btn-outline-secondary dob-picker-btn" id="dobPickerBtn" title="Pick from calendar" aria-label="Pick date of birth from calendar">
+                <i class="bi bi-calendar3"></i>
+              </button>
+              <input type="date" id="dobPicker" class="visually-hidden" tabindex="-1" aria-hidden="true">
+            </div>
+          </div>
+          <div class="form-text mt-2">Enter DD MM YYYY, or tap the calendar if you prefer.</div>
+          {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+
+        <div class="col-12 col-sm-6 register-field">
+          <label class="form-label" for="id_employee_id">Employee ID <span class="text-muted fw-normal">(optional)</span></label>
+          {{ form.employee_id }}
+          {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+      </div>
     </div>
 
-    {# DATE OF BIRTH #}
-    <div class="col-md-6">
-      <label class="form-label">Date of birth</label>
-      {{ form.date_of_birth }}
-      {% for err in form.date_of_birth.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    {# NAME #}
-    <div class="col-md-6">
-      <label class="form-label">Name</label>
-      {{ form.name }}
-      {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    {# JOB TITLE #}
-    <div class="col-md-6">
-      <label class="form-label">Job title</label>
-      {{ form.job_title }}
-      {% for err in form.job_title.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    {# EMPLOYEE ID #}
-    <div class="col-md-6">
-      <label class="form-label">Employee ID (optional)</label>
-      {{ form.employee_id }}
-      {% for err in form.employee_id.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
-    </div>
-
-    {# INSTRUCTOR (populated based on course + date) #}
-    <div class="col-md-6">
-      <label class="form-label">Instructor</label>
-      <select name="instructor" class="form-select" {% if not course %}disabled{% endif %}>
-        <option value="">— Select instructor —</option>
-        {% if course %}
-          {% for i in instructors %}
-            <option value="{{ i.id }}" {% if form.data.instructor == i.id|stringformat:'s' or instructors|length == 1 %}selected{% endif %}>{{ i.name }}</option>
-          {% endfor %}
+    {# ── Instructor ── #}
+    <div class="register-section" id="instructor-field">
+      <div class="register-section-title">Instructor</div>
+      <div id="instructor-content">
+        {% if single_instructor %}
+          {% if instructor_fallback %}
+            <p class="form-text mb-2">No instructor is scheduled for this course on the selected date.</p>
+          {% endif %}
+          <div class="instructor-readonly">
+            <i class="bi bi-person-badge" aria-hidden="true"></i>
+            <span>{{ single_instructor.name }}</span>
+          </div>
+          {{ form.instructor }}
+        {% elif instructors|length > 1 %}
+          {% if instructor_fallback %}
+            <p class="form-text mb-2">No instructor is scheduled for this course on the selected date. Please select your instructor below.</p>
+          {% endif %}
+          <div class="choice-list">
+            {% for radio in form.instructor %}
+              <label class="choice-card">
+                {{ radio.tag }}
+                <span>{{ radio.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% elif course %}
+          <div class="register-empty-note">No instructors are scheduled for <strong>{{ course.code }}</strong> on the selected date.</div>
+          {% if instructor_dev_hint %}
+            <div class="register-dev-hint"><i class="bi bi-info-circle"></i> {{ instructor_dev_hint }}</div>
+          {% endif %}
+        {% else %}
+          <div class="register-empty-note">Select a course to see available instructors.</div>
         {% endif %}
-      </select>
-      {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+      </div>
+      {% for err in form.instructor.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
     </div>
 
-    {# HEALTH DECLARATION #}
-    <div class="col-12">
-      <label class="form-label">Health declaration</label>
-
-      <div class="vstack gap-2">
+    {# ── Health ── #}
+    <div class="register-section">
+      <div class="register-section-title">Health declaration</div>
+      <div class="choice-list">
         {% for rb in form.health_status %}
-          <label class="form-check d-flex align-items-start gap-2">
+          <label class="choice-card">
             {{ rb.tag }}
             <span>{{ rb.choice_label }}</span>
           </label>
         {% endfor %}
       </div>
-
       {% for err in form.health_status.errors %}
-        <div class="text-danger small">{{ err }}</div>
+        <div class="text-danger small mt-2">{{ err }}</div>
       {% endfor %}
-
-      <div class="form-text">
-        This helps the instructor make reasonable adjustments where needed.
-      </div>
+      <div class="form-text mt-2">This helps the instructor make reasonable adjustments where needed.</div>
     </div>
 
-  </div>
-  <div>
-  {% include "legal/_inline_notice_registers.html" %}
+    <div class="register-footer">
+      {% include "legal/_inline_notice_registers.html" %}
+      <button type="submit" class="btn btn-primary register-submit w-100 mt-3">
+        Submit registration
+      </button>
     </div>
-  <button class="btn btn-primary mt-3 w-100 w-md-auto">Submit</button>
-</form>
+  </form>
+  {% endif %}
+</div>
 
-{# Script: handle course change + refresh instructor list; default date if blank #}
 <script>
-  // When course is chosen via dropdown, persist as ?ct=<CODE> and keep selected date
+  const showRegisterDate = {{ show_register_date|yesno:"true,false" }} || {{ REGISTER_SHOW_DATE|yesno:"true,false" }};
   const courseSelect = document.getElementById('courseSelect');
   if (courseSelect) {
     courseSelect.addEventListener('change', function(){
@@ -136,78 +439,181 @@
       if (opt && opt.dataset.code){
         const params = new URLSearchParams(window.location.search);
         params.set('ct', opt.dataset.code);
-        const dateEl = document.querySelector('input[name="date"]');
-        if (dateEl && dateEl.value) params.set('date', dateEl.value);
+        if (!showRegisterDate) params.delete('date');
         window.location.search = params.toString();
       }
     });
   }
 
-  (function(){
-    const dateInput  = document.querySelector('input[name="date"]');
-    const instSelect = document.querySelector('select[name="instructor"]');
+  function pad2(n) { return String(n).padStart(2, '0'); }
 
-    // Fallback: if date is empty (shouldn't be after server fix), set to today
-    if (dateInput && !dateInput.value) {
-      const tzOffset = new Date().getTimezoneOffset() * 60000;
-      const today = new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
-      dateInput.value = today;
+  function setupSplitDate(config) {
+    const dayInput = document.getElementById(config.dayId);
+    const monthInput = document.getElementById(config.monthId);
+    const yearInput = document.getElementById(config.yearId);
+    const hiddenInput = document.querySelector(config.hiddenSelector);
+    const picker = document.getElementById(config.pickerId);
+    const pickerBtn = document.getElementById(config.pickerBtnId);
+    if (!dayInput || !monthInput || !yearInput || !hiddenInput) return;
+
+    function syncHiddenFromPartials() {
+      const d = dayInput.value.trim();
+      const m = monthInput.value.trim();
+      const y = yearInput.value.trim();
+      hiddenInput.value = (d && m && y && y.length === 4) ? `${y}-${pad2(m)}-${pad2(d)}` : '';
+      if (config.onChange) config.onChange(hiddenInput.value);
     }
+
+    function syncPartialsFromIso(iso) {
+      if (!iso) return;
+      const parts = iso.split('-');
+      if (parts.length !== 3) return;
+      yearInput.value = parts[0];
+      monthInput.value = parts[1];
+      dayInput.value = parts[2];
+      hiddenInput.value = iso;
+      if (config.onChange) config.onChange(iso);
+    }
+
+    [dayInput, monthInput, yearInput].forEach(function(el){
+      el.addEventListener('input', syncHiddenFromPartials);
+    });
+
+    if (pickerBtn && picker) {
+      pickerBtn.addEventListener('click', function(){
+        if (hiddenInput.value) picker.value = hiddenInput.value;
+        if (typeof picker.showPicker === 'function') picker.showPicker();
+        else picker.click();
+      });
+      picker.addEventListener('change', function(){ syncPartialsFromIso(picker.value); });
+    }
+
+    if (hiddenInput.value) syncPartialsFromIso(hiddenInput.value);
+    else if (config.defaultIso) syncPartialsFromIso(config.defaultIso);
+  }
+
+  setupSplitDate({
+    dayId: 'dob-day',
+    monthId: 'dob-month',
+    yearId: 'dob-year',
+    hiddenSelector: 'input[name="date_of_birth"]',
+    pickerId: 'dobPicker',
+    pickerBtnId: 'dobPickerBtn',
+  });
+
+  (function(){
+    const dateInput = document.querySelector('input[name="date"]');
+    const instructorContent = document.getElementById('instructor-content');
+    const defaultRegisterDate = "{{ register_date|date:'Y-m-d' }}";
+
+    function currentRegisterDate() {
+      if (showRegisterDate && dateInput && dateInput.value) return dateInput.value;
+      return defaultRegisterDate;
+    }
+
+    if (dateInput && !dateInput.value) dateInput.value = defaultRegisterDate;
 
     function currentCourseCode() {
       const hidden = document.querySelector('input[name="course_code"]');
       if (hidden && hidden.value) return hidden.value.trim();
       const sel = document.querySelector('select[name="course_id"]');
-      if (sel && sel.options && sel.selectedIndex >= 0) {
+      if (sel && sel.selectedIndex >= 0) {
         const opt = sel.options[sel.selectedIndex];
         return (opt.dataset && opt.dataset.code) ? opt.dataset.code.trim() : "";
       }
       return "";
     }
 
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderInstructors(instructors, devHint, fallback) {
+      if (!instructorContent) return;
+
+      const fallbackNote = fallback
+        ? '<p class="form-text mb-2">No instructor is scheduled for this course on the selected date. Please select your instructor below.</p>'
+        : '';
+
+      if (!instructors.length) {
+        const courseCode = currentCourseCode();
+        let html =
+          '<div class="register-empty-note">No instructors are scheduled for ' +
+          (courseCode ? '<strong>' + escapeHtml(courseCode) + '</strong> ' : 'this course ') +
+          'on the selected date.</div>';
+        if (devHint) {
+          html += '<div class="register-dev-hint"><i class="bi bi-info-circle"></i> ' + escapeHtml(devHint) + '</div>';
+        }
+        instructorContent.innerHTML = html;
+        return;
+      }
+
+      if (instructors.length === 1) {
+        const inst = instructors[0];
+        const singleNote = fallback
+          ? '<p class="form-text mb-2">No instructor is scheduled for this course on the selected date.</p>'
+          : '';
+        instructorContent.innerHTML =
+          singleNote +
+          '<div class="instructor-readonly">' +
+            '<i class="bi bi-person-badge" aria-hidden="true"></i>' +
+            '<span>' + escapeHtml(inst.name) + '</span>' +
+          '</div>' +
+          '<input type="hidden" name="instructor" value="' + escapeHtml(String(inst.id)) + '">';
+        return;
+      }
+
+      let html = fallbackNote + '<div class="choice-list">';
+      instructors.forEach(function(inst){
+        html +=
+          '<label class="choice-card">' +
+            '<input type="radio" name="instructor" value="' + escapeHtml(String(inst.id)) + '" class="form-check-input">' +
+            '<span>' + escapeHtml(inst.name) + '</span>' +
+          '</label>';
+      });
+      html += '</div>';
+      instructorContent.innerHTML = html;
+    }
+
     async function refreshInstructors() {
       const code = currentCourseCode();
-      const date = dateInput ? dateInput.value : "";
-      if (!instSelect || !code || !date) return;
+      if (!instructorContent || !code) return;
 
       const url = new URL("{% url 'public_delegate_instructors_api' %}", window.location.origin);
       url.searchParams.set("ct", code);
-      url.searchParams.set("date", date);
+      url.searchParams.set("date", currentRegisterDate());
 
       try {
         const res = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
         const data = await res.json();
-
-        // enable select if it was disabled (no-QR path)
-        instSelect.removeAttribute('disabled');
-
-        // rebuild options
-        instSelect.innerHTML = "";
-        const blank = document.createElement("option");
-        blank.value = "";
-        blank.textContent = "— Select instructor —";
-        instSelect.appendChild(blank);
-
-        (data.instructors || []).forEach(i => {
-          const o = document.createElement("option");
-          o.value = String(i.id);
-          o.textContent = i.name;
-          instSelect.appendChild(o);
-        });
-
-        if ((data.instructors || []).length === 1) {
-          instSelect.value = String(data.instructors[0].id);
-        }
+        renderInstructors(data.instructors || [], data.dev_hint || '', !!data.fallback);
       } catch (e) {
         console.error("Failed to load instructors", e);
       }
     }
 
-    if (dateInput) dateInput.addEventListener("change", refreshInstructors);
-    if (courseSelect) courseSelect.addEventListener("change", refreshInstructors);
-
-    // initial load
-    refreshInstructors();
+    if (courseSelect) {
+      courseSelect.addEventListener('change', refreshInstructors);
+    }
+    if (showRegisterDate) {
+      setupSplitDate({
+        dayId: 'course-date-day',
+        monthId: 'course-date-month',
+        yearId: 'course-date-year',
+        hiddenSelector: 'input[name="date"]',
+        pickerId: 'courseDatePicker',
+        pickerBtnId: 'courseDatePickerBtn',
+        defaultIso: defaultRegisterDate,
+        onChange: function(iso) {
+          if (iso) refreshInstructors();
+        },
+      });
+    }
+    if (currentCourseCode()) {
+      refreshInstructors();
+    }
   })();
 </script>
 {% endblock %}

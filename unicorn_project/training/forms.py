@@ -5,6 +5,7 @@ from django.core.validators import EmailValidator
 from django.db.models import Q
 from django.forms import inlineformset_factory, BaseInlineFormSet
 from django.utils import timezone
+from datetime import date
 from . import models as m
 
 from .models import (
@@ -93,6 +94,11 @@ class BookingForm(forms.ModelForm):
         extra_ids = [current_instructor_id] if current_instructor_id else None
         self.fields["instructor"].queryset = delivery_personnel_queryset(extra_ids)
 
+        from .utils.course_types import bookable_course_types
+
+        current_ct_id = getattr(self.instance, "course_type_id", None)
+        self.fields["course_type"].queryset = bookable_course_types(include_pk=current_ct_id)
+
         # Start with none until we know the business
         self.fields["training_location"].queryset = TrainingLocation.objects.none()
 
@@ -175,6 +181,20 @@ class BookingForm(forms.ModelForm):
         loc = cleaned.get("training_location")
         if biz and loc and loc.business_id != biz.id:
             self.add_error("training_location", "Selected location does not belong to the chosen business.")
+
+        ct = cleaned.get("course_type")
+        if ct and ct.is_suspended:
+            creating = not (self.instance and self.instance.pk)
+            changing = (
+                self.instance
+                and self.instance.pk
+                and self.instance.course_type_id != ct.pk
+            )
+            if creating or changing:
+                self.add_error(
+                    "course_type",
+                    "This course type is suspended and cannot be used for new bookings.",
+                )
 
         # Generate a unique course reference if empty
         if not cleaned.get("course_reference"):
@@ -327,7 +347,9 @@ class DummyBookingQuickCreateForm(forms.Form):
         default_course_type = kwargs.pop('default_course_type', None)
         super().__init__(*args, **kwargs)
 
-        self.fields['course_type'].queryset = CourseType.objects.order_by('name')
+        from .utils.course_types import bookable_course_types
+
+        self.fields['course_type'].queryset = bookable_course_types()
         if default_course_type and not self.is_bound:
             self.fields['course_type'].initial = default_course_type
 
@@ -337,10 +359,11 @@ class CourseTypeForm(forms.ModelForm):
     class Meta:
         model = CourseType
         fields = [
-            "name", "code", "duration_days",
+            "name", "duration_days",
             "certificate_duration", "onedrive_folder_link",
             "default_course_fee", "default_instructor_fee",
             "has_exam", "number_of_exams", "optional_modules_required",
+            "is_suspended",
         ]
         widgets = {
             "optional_modules_required": forms.Select(
@@ -348,6 +371,22 @@ class CourseTypeForm(forms.ModelForm):
                 attrs={"class": "form-select"},
             ),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance._state.adding:
+            self.fields.pop("is_suspended", None)
+        for name, field in self.fields.items():
+            if name == "has_exam":
+                field.widget.attrs.setdefault("class", "form-check-input")
+            elif name == "is_suspended":
+                field.widget.attrs.setdefault("class", "form-check-input suspend-course-toggle")
+                field.label = "Suspend course"
+                field.help_text = "Existing bookings and records are unaffected."
+            elif name == "optional_modules_required":
+                field.widget.attrs.setdefault("class", "form-select")
+            elif not isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs.setdefault("class", "form-control")
 
 class CourseCompetencyForm(forms.ModelForm):
     do_not_use = forms.BooleanField(required=False)
@@ -578,6 +617,203 @@ class DelegateRegisterForm(forms.ModelForm):
         # (nice-to-have) avoid autofill weirdness
         self.fields["date"].widget.attrs.setdefault("autocomplete", "off")
         self.fields["date_of_birth"].widget.attrs.setdefault("autocomplete", "off")
+
+
+class PublicDelegateRegisterForm(DelegateRegisterForm):
+    """Public register form: hidden course date (always today), split DOB entry."""
+
+    dob_day = forms.CharField(
+        label="Day",
+        max_length=2,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+                "maxlength": "2",
+                "placeholder": "DD",
+                "autocomplete": "bday-day",
+                "class": "form-control text-center",
+                "id": "dob-day",
+            }
+        ),
+    )
+    dob_month = forms.CharField(
+        label="Month",
+        max_length=2,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+                "maxlength": "2",
+                "placeholder": "MM",
+                "autocomplete": "bday-month",
+                "class": "form-control text-center",
+                "id": "dob-month",
+            }
+        ),
+    )
+    dob_year = forms.CharField(
+        label="Year",
+        max_length=4,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+                "maxlength": "4",
+                "placeholder": "YYYY",
+                "autocomplete": "bday-year",
+                "class": "form-control text-center",
+                "id": "dob-year",
+            }
+        ),
+    )
+    course_date_day = forms.CharField(
+        label="Day",
+        max_length=2,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+                "maxlength": "2",
+                "placeholder": "DD",
+                "autocomplete": "off",
+                "class": "form-control text-center",
+                "id": "course-date-day",
+            }
+        ),
+    )
+    course_date_month = forms.CharField(
+        label="Month",
+        max_length=2,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+                "maxlength": "2",
+                "placeholder": "MM",
+                "autocomplete": "off",
+                "class": "form-control text-center",
+                "id": "course-date-month",
+            }
+        ),
+    )
+    course_date_year = forms.CharField(
+        label="Year",
+        max_length=4,
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "inputmode": "numeric",
+                "pattern": "[0-9]*",
+                "maxlength": "4",
+                "placeholder": "YYYY",
+                "autocomplete": "off",
+                "class": "form-control text-center",
+                "id": "course-date-year",
+            }
+        ),
+    )
+
+    def __init__(self, *args, instructors=None, show_register_date=False, **kwargs):
+        self.show_register_date = show_register_date
+        super().__init__(*args, **kwargs)
+
+        self.fields["date"].widget = forms.HiddenInput()
+        self.fields["date"].required = False
+
+        self.fields["date_of_birth"].widget = forms.HiddenInput()
+        self.fields["date_of_birth"].required = False
+
+        for field_name in ("name", "job_title", "employee_id"):
+            self.fields[field_name].widget.attrs.setdefault("class", "form-control")
+
+        today = timezone.localdate()
+        if not self.is_bound:
+            self.initial.setdefault("date", today)
+            if show_register_date:
+                self._set_date_partials("course_date", self.initial.get("date"))
+            dob = self.initial.get("date_of_birth")
+            if dob:
+                self._set_date_partials("dob", dob)
+
+        instructors = instructors or []
+        if len(instructors) == 1:
+            self.fields["instructor"].widget = forms.HiddenInput()
+            if not self.is_bound:
+                self.fields["instructor"].initial = instructors[0].pk
+        elif len(instructors) > 1:
+            self.fields["instructor"].widget = forms.RadioSelect(
+                attrs={"class": "public-instructor-radio"}
+            )
+            self.fields["instructor"].queryset = Personnel.objects.filter(
+                pk__in=[i.pk for i in instructors]
+            ).order_by("name")
+            self.fields["instructor"].empty_label = None
+            self.fields["instructor"].error_messages = {
+                "required": "Please select your instructor.",
+            }
+        else:
+            self.fields["instructor"].queryset = Personnel.objects.none()
+
+    def _set_date_partials(self, prefix, value):
+        if not value:
+            return
+        self.fields[f"{prefix}_day"].initial = f"{value.day:02d}"
+        self.fields[f"{prefix}_month"].initial = f"{value.month:02d}"
+        self.fields[f"{prefix}_year"].initial = str(value.year)
+
+    def _combine_partial_date(self, cleaned_data, prefix, target_field, *, required, label):
+        existing = cleaned_data.get(target_field)
+        if existing:
+            return existing
+
+        day_raw = (cleaned_data.get(f"{prefix}_day") or "").strip()
+        month_raw = (cleaned_data.get(f"{prefix}_month") or "").strip()
+        year_raw = (cleaned_data.get(f"{prefix}_year") or "").strip()
+
+        if day_raw and month_raw and year_raw:
+            try:
+                parsed = date(int(year_raw), int(month_raw), int(day_raw))
+                cleaned_data[target_field] = parsed
+                return parsed
+            except (TypeError, ValueError):
+                self.add_error(target_field, f"Please enter a valid {label} (DD MM YYYY).")
+                return None
+
+        if day_raw or month_raw or year_raw:
+            self.add_error(target_field, f"Please enter the full {label} (day, month and year).")
+        elif required:
+            self.add_error(target_field, f"Please enter the {label}.")
+        return None
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if self.show_register_date:
+            self._combine_partial_date(
+                cleaned_data, "course_date", "date", required=True, label="course date"
+            )
+        else:
+            cleaned_data["date"] = timezone.localdate()
+
+        self._combine_partial_date(
+            cleaned_data, "dob", "date_of_birth", required=True, label="date of birth"
+        )
+
+        dob = cleaned_data.get("date_of_birth")
+        if dob and not self.errors.get("date_of_birth"):
+            today = timezone.localdate()
+            if dob >= today:
+                self.add_error("date_of_birth", "Date of birth must be before today.")
+            elif dob.year < 1900:
+                self.add_error("date_of_birth", "Please check the year entered.")
+
+        return cleaned_data
 
    
 class DelegateRegisterAdminForm(forms.ModelForm):

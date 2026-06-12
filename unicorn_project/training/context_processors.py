@@ -43,6 +43,7 @@ def globals(request):
         "ADMIN_INBOX_EMAIL": getattr(settings, "ADMIN_INBOX_EMAIL", ""),
         "OFFICE_PHONE": getattr(settings, "OFFICE_PHONE", ""),
         "APP_VERSION": getattr(settings, "APP_VERSION", ""),
+        "REGISTER_SHOW_DATE": getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG),
     }
 
 def logo_context(request):

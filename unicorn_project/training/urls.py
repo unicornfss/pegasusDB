@@ -69,6 +69,8 @@ urlpatterns = [
     path("app/instructor/day/<int:pk>/registers/pdf/", instv.instructor_day_registers_pdf, name="instructor_day_registers_pdf"),
 
     # ---------- Public delegate register ----------
+    path("r/<str:code>/qr.png", views.public_register_short_qr, name="public_register_short_qr"),
+    path("r/<str:code>/", views.public_register_short, name="public_register_short"),
     path("register/", views.public_delegate_register, name="public_delegate_register"),
     path("register/success/", views.public_delegate_register_success, name="public_delegate_register_success"),
     path("register/instructors/", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),
@@ -79,7 +81,6 @@ urlpatterns = [
 
     # ---------- Admin dashboard ----------
     path("app/admin/", views_admin.admin_dashboard, name="app_admin_dashboard"),
-    path("app/admin/courses/<uuid:pk>/", app_admin.course_form, name="admin_course_edit"),
     path("app/admin/exams/<int:pk>/", app_admin.exam_form, name="admin_exam_edit"),
     path("delegates/search/", views_admin.admin_delegate_search, name="admin_delegate_search"),
     path("app-admin/dashboard/", views_admin.admin_dashboard, name="admin_dashboard"),
@@ -103,6 +104,7 @@ urlpatterns = [
     # Course Types
     path("app/admin/courses/", app_admin.course_list, name="admin_course_list"),
     path("app/admin/courses/new/", app_admin.course_form, name="admin_course_new"),
+    path("app/admin/courses/preview-code/", app_admin.course_code_preview, name="admin_course_code_preview"),
     path("app/admin/courses/<uuid:pk>/", app_admin.course_form, name="admin_course_edit"),
     path("app/admin/courses/<uuid:pk>/delete/", app_admin.course_delete, name="admin_course_delete"),
     path("app/admin/course-types/", app_admin.course_list, name="admin_course_type_list"),  # alias

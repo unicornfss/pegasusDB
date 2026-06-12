@@ -247,38 +247,77 @@
   </div>
 </div>
 
-{% if dummy_businesses %}
+{% if dummy_businesses or practice_bookings %}
 <div class="card">
-  <div class="card-header d-flex justify-content-between align-items-center">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div class="d-flex align-items-center gap-2">
       <span>Practice / familiarisation bookings</span>
-      <span class="badge-pill">{{ dummy_businesses|length }}</span>
+      <span class="badge-pill">{{ practice_bookings|length }}</span>
     </div>
-    <button class="btn btn-outline-secondary btn-sm"
-            type="button"
-            data-bs-toggle="collapse"
-            data-bs-target="#practice-bookings-panel"
-            aria-expanded="false"
-            aria-controls="practice-bookings-panel">
-      Show options
-    </button>
-  </div>
-
-  <div id="practice-bookings-panel" class="collapse">
-    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
-      <div class="small text-muted">
-        Create a practice booking and then use the Registers, Exams, and Feedback links in your booking lists to test workflows.
-      </div>
+    {% if dummy_businesses %}
       <button class="btn btn-primary btn-sm"
               type="button"
               data-bs-toggle="modal"
               data-bs-target="#practiceBookingModal">
         <i class="bi bi-plus-circle me-1"></i>Create practice booking
       </button>
-    </div>
+    {% endif %}
+  </div>
+
+  <div class="card-body">
+    <p class="small text-muted mb-3">
+      Practice bookings use dummy businesses for testing. Admin emails are skipped; instructor test emails still work.
+      Open a booking to use Registers, Exams, and Feedback as normal.
+    </p>
+
+    {% if practice_bookings %}
+      <table class="table table-striped table-sm row-hover mb-0">
+        <thead>
+          <tr>
+            <th class="nowrap">Date</th>
+            <th>Ref</th>
+            <th class="nowrap">Start</th>
+            <th>Course</th>
+            <th>Business</th>
+            <th class="nowrap">Status</th>
+            <th class="w-0"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in practice_bookings %}
+          <tr data-href="{% url 'instructor_booking_detail' pk=b.id %}" tabindex="0" role="button">
+            <td class="nowrap">{{ b.course_date|date:"d M Y" }}</td>
+            <td class="nowrap">{{ b.course_reference|default:"—" }}</td>
+            <td class="nowrap">{% if b.start_time %}{{ b.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
+            <td>{{ b.course_type.name }}</td>
+            <td>{{ b.business.name }}</td>
+            <td class="nowrap">
+              {% if b.status == 'scheduled' %}
+                <span class="badge bg-secondary">Scheduled</span>
+              {% elif b.status == 'in_progress' %}
+                <span class="badge bg-primary">In progress</span>
+              {% elif b.status == 'awaiting_closure' %}
+                <span class="badge bg-warning text-dark">Awaiting closure</span>
+              {% elif b.status == 'completed' %}
+                <span class="badge bg-success">Completed</span>
+              {% else %}
+                <span class="badge bg-light text-dark">{{ b.get_status_display }}</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              <a class="btn btn-light btn-sm" href="{% url 'instructor_booking_detail' pk=b.id %}">Open</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="text-muted mb-0">No practice bookings yet.{% if dummy_businesses %} Use “Create practice booking” to add one.{% endif %}</p>
+    {% endif %}
   </div>
 </div>
 
+{% if dummy_businesses %}
 <div class="modal fade" id="practiceBookingModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -332,6 +371,7 @@ document.addEventListener('DOMContentLoaded', function () {
   syncPracticeCreateLink();
 });
 </script>
+{% endif %}
 {% endif %}
 
 {% endblock %}
