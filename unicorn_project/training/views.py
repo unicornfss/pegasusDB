@@ -1295,7 +1295,9 @@ def health_check(request):
         plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
         status["pending_migrations"] = len(plan)
         if plan:
-            status["next_migrations"] = [f"{app}.{name}" for app, name in plan[:5]]
+            status["next_migrations"] = [
+                migration.name for migration, _backwards in plan[:8]
+            ]
     except Exception as exc:
         status["migration_check"] = str(exc)
         return JsonResponse(status, status=503)
