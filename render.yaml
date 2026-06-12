@@ -7,6 +7,7 @@ services:
       pip install -r requirements.txt
       python manage.py collectstatic --noinput
       python manage.py migrate --noinput
+      python manage.py createcachetable
     startCommand: |
       gunicorn unicorn_project.wsgi:application --log-file - --preload
     envVars:
@@ -16,5 +17,44 @@ services:
         value: "False"
       - key: GOOGLE_MAPS_API_KEY
         sync: false
-      - key: DJANGO_ALLOWED_HOSTS
+      - key: ALLOWED_HOSTS
         value: "unicorn-django-starter.onrender.com,localhost,127.0.0.1"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: BOOKING_SCHEDULER_ENABLED
+        value: "true"
+
+  - type: worker
+    name: unicorn-telegram-bot
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py migrate --noinput
+      python manage.py createcachetable
+    startCommand: python manage.py telegram_poll
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        fromService:
+          type: web
+          name: unicorn-django-starter
+          envVarKey: DJANGO_SECRET_KEY
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DATABASE_URL
+        fromService:
+          type: web
+          name: unicorn-django-starter
+          envVarKey: DATABASE_URL
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: SITE_URL
+        sync: false
+      - key: BOOKING_SCHEDULER_ENABLED
+        value: "false"

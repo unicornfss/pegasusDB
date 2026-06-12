@@ -45,18 +45,38 @@ else:
 # ----- APIs ------------------------
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
-# --- Telegram bot (local polling on dev; webhook later on Render) ---
+# --- Telegram bot (local polling on dev; worker service on Render) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").lstrip("@")
-SITE_URL = os.getenv("SITE_URL", "http://127.0.0.1:8000").rstrip("/")
+SITE_URL = (os.getenv("SITE_URL", "") or "").rstrip("/")
+if not SITE_URL and RENDER_EXTERNAL_HOSTNAME:
+    SITE_URL = f"https://{RENDER_EXTERNAL_HOSTNAME}"
+if not SITE_URL:
+    SITE_URL = "http://127.0.0.1:8000"
 
-# Shared cache so runserver and telegram_poll can both read link tokens (local dev).
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
-        "LOCATION": BASE_DIR / ".django_cache",
+# Shared cache for Telegram link tokens (web + telegram_poll must see the same store).
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
     }
-}
+elif _is_postgres(DB_URL) and not DEBUG:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+            "LOCATION": "pegasus_cache_table",
+        }
+    }
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+            "LOCATION": BASE_DIR / ".django_cache",
+        }
+    }
 
 # --- Apps / Middleware ---------------------------------------
 INSTALLED_APPS = [

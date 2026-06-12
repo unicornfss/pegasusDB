@@ -115,6 +115,17 @@ Then on **Profile**, scan the QR code to link Telegram. Enable notification togg
 
 On local dev (`DEBUG=True`), instructors are notified for **all** bookings including practice/dummy ones. Each Telegram message adds a line to the booking notes.
 
+---
+
+## Telegram bot (Render production)
+
+After merge/deploy:
+
+1. Set on the **web** service: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and optionally `SITE_URL` (defaults from `RENDER_EXTERNAL_HOSTNAME` if omitted).
+2. The **unicorn-telegram-bot** worker runs `python manage.py telegram_poll` (see `render.yaml`).
+3. Link tokens use **Postgres cache** (`createcachetable` in the build) so web and worker share the same store.
+4. Optional: set `REDIS_URL` to use Redis instead of the database cache.
+
 After installing dependencies:
 
 ```powershell

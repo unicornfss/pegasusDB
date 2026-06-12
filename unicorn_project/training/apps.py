@@ -17,7 +17,10 @@ class TrainingConfig(AppConfig):
             # Avoid crashing the app if there's a typo during development
             print(f"Failed to import training.signals: {e}")
 
-        # 🔧 Start APScheduler only if enabled
+        # 🔧 Start APScheduler only if enabled (not in telegram_poll worker)
+        import sys
+        if "telegram_poll" in sys.argv:
+            return
         from django.conf import settings
         if os.environ.get("BOOKING_SCHEDULER_ENABLED", "true").lower() != "true":
             return
