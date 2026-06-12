@@ -1,0 +1,22 @@
+<div class="rating-scale-row" role="radiogroup">
+{% for group, options, index in widget.optgroups %}
+  {% for option in options %}
+  <label class="rating-scale-btn rating-scale-btn--{{ option.value|stringformat:'s' }}">
+    <input type="radio"
+           name="{{ widget.name }}"
+           value="{{ option.value|stringformat:'s' }}"
+           {% if option.selected %}checked{% endif %}
+           {% include "django/forms/widgets/attrs.html" %}>
+    <span class="scale-num">{{ option.label }}</span>
+    <span class="scale-word">
+      {% if option.value|stringformat:"s" == "1" %}Very poor
+      {% elif option.value|stringformat:"s" == "2" %}Poor
+      {% elif option.value|stringformat:"s" == "3" %}Fair
+      {% elif option.value|stringformat:"s" == "4" %}Good
+      {% elif option.value|stringformat:"s" == "5" %}Excellent
+      {% endif %}
+    </span>
+  </label>
+  {% endfor %}
+{% endfor %}
+</div>

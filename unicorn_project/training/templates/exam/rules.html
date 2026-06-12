@@ -1,49 +1,45 @@
 {% extends "public/base_public.html" %}
 {% load static %}
+
 {% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} (Rules){% endblock %}
-{# Replace the header so it shows logo + company name (no page title here) #}
-{% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
 {% endblock %}
+
+{% block header %}
+{% include "exam/_brand_header.html" with course_type=course_type exam=exam %}
+{% endblock %}
+
 {% block content %}
-<div class="container" style="max-width: 760px;">
-  <h1 class="h4 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
+<div class="exam-page">
+  <div class="exam-intro">
+    <p>Please read the rules carefully before you begin.</p>
+  </div>
 
-  <div class="card mb-3">
-    <div class="card-header">Before you begin</div>
-    <div class="card-body">
-      <ul class="mb-0">
+  <div class="exam-card mb-3">
+    <div class="exam-section">
+      <div class="exam-section-title">Before you begin</div>
+      <ul class="exam-rules-list">
         <li>This is an individual assessment. No talking or collaboration.</li>
-        <li><strong>No external devices or materials.</strong> Only the device you are using to take this exam may be used. Opening other apps/tabs/windows, using notes, or reference materials is not permitted.</li>
+        <li><strong>No external devices or materials.</strong> Only the device you are using to take this exam may be used. Opening other apps, tabs, windows, notes, or reference materials is not permitted.</li>
         <li>You have <strong>{{ minutes }}:{% if seconds < 10 %}0{% endif %}{{ seconds }}</strong> to complete {{ num_questions }} questions.</li>
-        <li>Pass mark: <strong>{{ pass_mark_percent }}%</strong>
-          (you must answer at least <strong>{{ required_correct }}</strong> correctly).
-        </li>
-
+        <li>Pass mark: <strong>{{ pass_mark_percent }}%</strong> (you must answer at least <strong>{{ required_correct }}</strong> correctly).</li>
         {% if viva_pass_percent and viva_required %}
-        <li>Viva threshold: <strong>{{ viva_pass_percent }}%</strong>
-          (a viva may be offered if you score at least <strong>{{ viva_required }}</strong>).
-        </li>
+        <li>Viva threshold: <strong>{{ viva_pass_percent }}%</strong> (a viva may be offered if you score at least <strong>{{ viva_required }}</strong>).</li>
         {% endif %}
-
         <li><strong>The timer runs continuously</strong> once started (it will not pause if you leave the page).</li>
-        {# Optional: uncomment if applicable #}
-        {# <li>Answers are saved as you go. If you briefly lose connection, continue answering; your device will re-sync when back online.</li> #}
       </ul>
     </div>
-  </div>
 
-  <div class="d-flex justify-content-between align-items-center">
-    <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_start' %}?examcode={{ exam.exam_code }}">
-      Back
-    </a>
-    <a class="btn btn-primary" href="{% url 'delegate_exam_run' %}?{{ qs }}">
-      I understand — start the exam
-    </a>
+    <div class="exam-footer">
+      <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_start' %}?examcode={{ exam.exam_code }}">
+        <i class="bi bi-arrow-left me-1"></i> Back
+      </a>
+      <a class="btn btn-primary exam-submit" href="{% url 'delegate_exam_run' %}?{{ qs }}">
+        I understand — start the exam
+      </a>
+    </div>
   </div>
 </div>
 {% endblock %}
-

@@ -3,66 +3,29 @@
 
 {% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}{% endblock %}
 
-{# Replace the header so it shows logo + company name (no page title here) #}
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
+{% endblock %}
+
 {% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+{% include "exam/_brand_header.html" with course_type=course_type exam=exam %}
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 720px;">
+<div class="exam-page">
+  <div class="exam-intro">
+    <p>Enter your details exactly as they appear on the course register.</p>
+  </div>
 
-  <h1 class="h4 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
-
-  <style>
-    html[data-color-scheme="night"] #exam-start-form,
-    html[data-color-scheme="night"] #exam-start-form .card-body,
-    html[data-color-scheme="night"] #exam-start-form .card-footer,
-    html[data-color-scheme="night"] #exam-start-form.card,
-    body.night-mode #exam-start-form,
-    body.night-mode #exam-start-form .card-body,
-    body.night-mode #exam-start-form .card-footer,
-    body.night-mode #exam-start-form.card {
-      background: #1c2838 !important;
-      color: #e7effb !important;
-      border-color: #334155 !important;
-    }
-
-    html[data-color-scheme="night"] #exam-start-form .form-label,
-    html[data-color-scheme="night"] #exam-start-form .form-text,
-    html[data-color-scheme="night"] #exam-start-form .text-danger,
-    body.night-mode #exam-start-form .form-label,
-    body.night-mode #exam-start-form .form-text,
-    body.night-mode #exam-start-form .text-danger {
-      color: #e7effb !important;
-    }
-
-    html[data-color-scheme="night"] #exam-start-form input[type="text"],
-    html[data-color-scheme="night"] #exam-start-form input[type="date"],
-    html[data-color-scheme="night"] #exam-start-form select,
-    body.night-mode #exam-start-form input[type="text"],
-    body.night-mode #exam-start-form input[type="date"],
-    body.night-mode #exam-start-form select {
-      background: #1f2d40 !important;
-      color: #eef5ff !important;
-      border-color: #4b6282 !important;
-    }
-
-    html[data-color-scheme="night"] #exam-start-form input::placeholder,
-    body.night-mode #exam-start-form input::placeholder {
-      color: #b8c8dd !important;
-    }
-  </style>
-
-  {% comment %}If the name/date matched the register, we show a green “continue” button. All banners/alerts are handled by Django messages in base.html.{% endcomment %}
   {% if can_continue %}
-    <div class="alert alert-success mb-3 d-flex justify-content-between align-items-center gap-3 flex-wrap">
-      <div>Details confirmed. Continue to exam rules, or edit and re-submit if anything is incorrect.</div>
-      <div class="d-flex gap-2">
+    <div class="exam-continue-banner" id="exam-continue-banner">
+      <div class="banner-text">
+        <i class="bi bi-check-circle-fill me-1"></i>
+        Details confirmed. Continue to exam rules, or edit and re-submit if anything is incorrect.
+      </div>
+      <div class="banner-actions">
         <button type="button" class="btn btn-outline-secondary btn-sm" id="edit-details-btn">Edit details</button>
-        <form method="get" action="{% url 'delegate_exam_rules' %}">
+        <form method="get" action="{% url 'delegate_exam_rules' %}" class="d-inline">
           <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
           <input type="hidden" name="name" value="{{ form.name.value|default_if_none:'' }}">
           <input type="hidden" name="date_of_birth" value="{{ form.date_of_birth.value|default_if_none:'' }}">
@@ -74,89 +37,292 @@
     </div>
   {% endif %}
 
-  <form method="post" class="card {% if can_continue %}d-none{% endif %}" id="exam-start-form" novalidate>
+  <form method="post" class="exam-card {% if can_continue %}d-none{% endif %}" id="exam-start-form" novalidate>
     {% csrf_token %}
-    <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
+    {{ form.exam_code }}
 
-    <div class="card-body row g-3">
-
-      <div class="col-md-6">
-        <label class="form-label d-block">Your full name</label>
-        {{ form.name }}
-        <div class="form-text">Enter your name exactly as on the register.</div>
-        {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+    {% if show_exam_date %}
+    <div class="exam-section">
+      <div class="exam-section-title">Exam date <span class="fw-normal text-lowercase">(development)</span></div>
+      <div class="dev-date-banner">
+        <i class="bi bi-tools"></i> Visible in development only — change this to match the course date on the register.
       </div>
-
-      <div class="col-md-3">
-        <label class="form-label d-block">Date of birth</label>
-        {{ form.date_of_birth }}
-        {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-      </div>
-
-      <div class="col-md-3">
-        <label class="form-label d-block">Exam date</label>
+      <div class="exam-field">
+        <label class="form-label">Date</label>
         {{ form.exam_date }}
+        <div class="dob-grid">
+          <div>
+            <div class="sub-label">Day</div>
+            {{ form.exam_date_day }}
+          </div>
+          <div>
+            <div class="sub-label">Month</div>
+            {{ form.exam_date_month }}
+          </div>
+          <div>
+            <div class="sub-label">Year</div>
+            {{ form.exam_date_year }}
+          </div>
+          <div>
+            <div class="sub-label d-none d-sm-block">&nbsp;</div>
+            <button type="button" class="btn btn-outline-secondary dob-picker-btn" id="examDatePickerBtn" title="Pick from calendar" aria-label="Pick exam date from calendar">
+              <i class="bi bi-calendar3"></i>
+            </button>
+            <input type="date" id="examDatePicker" class="visually-hidden" tabindex="-1" aria-hidden="true">
+          </div>
+        </div>
+        <div class="form-text mt-2">Enter DD MM YYYY, or tap the calendar if you prefer.</div>
         {% for e in form.exam_date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
       </div>
+    </div>
+    {% else %}
+      {{ form.exam_date }}
+    {% endif %}
 
-      <div class="col-md-6">
-        <label class="form-label d-block">Instructor</label>
-        {{ form.instructor }}
-        {% for e in form.instructor.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+    <div class="exam-section">
+      <div class="exam-section-title">Your details</div>
+      <div class="row g-3">
+        <div class="col-12">
+          <div class="exam-field">
+            <label class="form-label" for="{{ form.name.id_for_label }}">Your full name</label>
+            {{ form.name }}
+            <div class="form-text">Enter your name exactly as on the register.</div>
+            {% for e in form.name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="exam-field">
+            <label class="form-label">Date of birth</label>
+            {{ form.date_of_birth }}
+            <div class="dob-grid">
+              <div>
+                <div class="sub-label">Day</div>
+                {{ form.dob_day }}
+              </div>
+              <div>
+                <div class="sub-label">Month</div>
+                {{ form.dob_month }}
+              </div>
+              <div>
+                <div class="sub-label">Year</div>
+                {{ form.dob_year }}
+              </div>
+              <div>
+                <div class="sub-label d-none d-sm-block">&nbsp;</div>
+                <button type="button" class="btn btn-outline-secondary dob-picker-btn" id="dobPickerBtn" title="Pick from calendar" aria-label="Pick date of birth from calendar">
+                  <i class="bi bi-calendar3"></i>
+                </button>
+                <input type="date" id="dobPicker" class="visually-hidden" tabindex="-1" aria-hidden="true">
+              </div>
+            </div>
+            <div class="form-text mt-2">Enter DD MM YYYY, or tap the calendar if you prefer.</div>
+            {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
       </div>
-
     </div>
 
-    <div class="card-footer d-flex justify-content-between gap-2">
+    <div class="exam-section">
+      <div class="exam-section-title">Instructor</div>
+      <div id="instructor-content">
+        {% if single_instructor %}
+          {% if instructor_fallback %}
+            <p class="form-text mb-2">No instructor is scheduled for this course on the selected date.</p>
+          {% endif %}
+          <div class="instructor-readonly">
+            <i class="bi bi-person-badge" aria-hidden="true"></i>
+            <span>{{ single_instructor.name }}</span>
+          </div>
+          {{ form.instructor }}
+        {% elif instructors|length > 1 %}
+          {% if instructor_fallback %}
+            <p class="form-text mb-2">No instructor is scheduled for this course on the selected date. Please select your instructor below.</p>
+          {% endif %}
+          <div class="choice-list">
+            {% for radio in form.instructor %}
+              <label class="choice-card">
+                {{ radio.tag }}
+                <span>{{ radio.choice_label }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="exam-empty-note">No instructors are scheduled for <strong>{{ course_type.code }}</strong> on the selected date.</div>
+          {% if instructor_dev_hint %}
+            <div class="exam-dev-hint"><i class="bi bi-info-circle"></i> {{ instructor_dev_hint }}</div>
+          {% endif %}
+        {% endif %}
+      </div>
+      {% for e in form.instructor.errors %}<div class="text-danger small mt-2">{{ e }}</div>{% endfor %}
+    </div>
+
+    <div class="exam-footer">
       <a class="btn btn-outline-secondary" href="?examcode={{ exam.exam_code }}">Reset</a>
-      <button class="btn btn-primary">Check my details</button>
+      <button class="btn btn-primary exam-submit">Check my details</button>
     </div>
   </form>
 
-  <script>
-  (function () {
-    const dateInput = document.querySelector('input[name="exam_date"]');
-    const instrSelect = document.querySelector('select[name="instructor"]');
-    const editBtn = document.getElementById('edit-details-btn');
-    const startForm = document.getElementById('exam-start-form');
-    if (!dateInput || !instrSelect) return;
-
-    function updateInstructors() {
-      const d = dateInput.value;
-      if (!d) return;
-      const code = dateInput.closest('form').querySelector('[name="examcode"]').value || '';
-      fetch('/exam/instructors/?examcode=' + encodeURIComponent(code) + '&date=' + encodeURIComponent(d))
-        .then(function(r) { return r.json(); })
-        .then(function(resp) {
-          if (!resp.instructors || resp.instructors.length === 0) return; // API error, keep existing
-          var current = instrSelect.value;
-          instrSelect.innerHTML = '<option value="">----------</option>';
-          resp.instructors.forEach(function(i) {
-            var opt = document.createElement('option');
-            opt.value = i.id;
-            opt.textContent = i.name;
-            if (String(i.id) === String(current)) opt.selected = true;
-            instrSelect.appendChild(opt);
-          });
-          if (resp.instructors.length === 1) {
-            instrSelect.value = String(resp.instructors[0].id);
-          }
-        })
-        .catch(function() {});
-    }
-
-    dateInput.addEventListener('change', updateInstructors);
-    if (editBtn && startForm) {
-      editBtn.addEventListener('click', function () {
-        startForm.classList.remove('d-none');
-        editBtn.closest('.alert')?.classList.add('d-none');
-      });
-    }
-
-    updateInstructors();
-  })();
-  </script>
-
   {% include "legal/_inline_notice_exam.html" %}
 </div>
+
+<script>
+(function () {
+  const showExamDate = {{ show_exam_date|yesno:"true,false" }} || {{ REGISTER_SHOW_DATE|yesno:"true,false" }};
+  const examCode = "{{ exam.exam_code|escapejs }}";
+  const courseCode = "{{ course_type.code|escapejs }}";
+  const defaultExamDate = "{{ exam_date|date:'Y-m-d' }}";
+  const editBtn = document.getElementById('edit-details-btn');
+  const startForm = document.getElementById('exam-start-form');
+  const continueBanner = document.getElementById('exam-continue-banner');
+  const instructorContent = document.getElementById('instructor-content');
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
+  function escapeHtml(text) {
+    return String(text)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function currentExamDate() {
+    const hidden = document.querySelector('input[name="exam_date"]');
+    if (hidden && hidden.value) return hidden.value;
+    return defaultExamDate;
+  }
+
+  function renderInstructors(instructors, devHint, fallback) {
+    if (!instructorContent) return;
+
+    const fallbackNote = fallback
+      ? '<p class="form-text mb-2">No instructor is scheduled for this course on the selected date. Please select your instructor below.</p>'
+      : '';
+
+    if (!instructors.length) {
+      let html =
+        '<div class="exam-empty-note">No instructors are scheduled for <strong>' +
+        escapeHtml(courseCode) + '</strong> on the selected date.</div>';
+      if (devHint) {
+        html += '<div class="exam-dev-hint"><i class="bi bi-info-circle"></i> ' + escapeHtml(devHint) + '</div>';
+      }
+      instructorContent.innerHTML = html;
+      return;
+    }
+
+    if (instructors.length === 1) {
+      const inst = instructors[0];
+      const singleNote = fallback
+        ? '<p class="form-text mb-2">No instructor is scheduled for this course on the selected date.</p>'
+        : '';
+      instructorContent.innerHTML =
+        singleNote +
+        '<div class="instructor-readonly">' +
+          '<i class="bi bi-person-badge" aria-hidden="true"></i>' +
+          '<span>' + escapeHtml(inst.name) + '</span>' +
+        '</div>' +
+        '<input type="hidden" name="instructor" value="' + escapeHtml(String(inst.id)) + '">';
+      return;
+    }
+
+    let html = fallbackNote + '<div class="choice-list">';
+    instructors.forEach(function(inst){
+      html +=
+        '<label class="choice-card">' +
+          '<input type="radio" name="instructor" value="' + escapeHtml(String(inst.id)) + '" class="form-check-input">' +
+          '<span>' + escapeHtml(inst.name) + '</span>' +
+        '</label>';
+    });
+    html += '</div>';
+    instructorContent.innerHTML = html;
+  }
+
+  function refreshInstructors() {
+    const d = currentExamDate();
+    if (!d || !examCode) return;
+    fetch('/exam/instructors/?examcode=' + encodeURIComponent(examCode) + '&date=' + encodeURIComponent(d))
+      .then(function(r) { return r.json(); })
+      .then(function(resp) {
+        renderInstructors(resp.instructors || [], resp.dev_hint || '', !!resp.fallback);
+      })
+      .catch(function() {});
+  }
+
+  function setupSplitDate(config) {
+    const dayInput = document.getElementById(config.dayId);
+    const monthInput = document.getElementById(config.monthId);
+    const yearInput = document.getElementById(config.yearId);
+    const hiddenInput = document.querySelector(config.hiddenSelector);
+    const picker = document.getElementById(config.pickerId);
+    const pickerBtn = document.getElementById(config.pickerBtnId);
+    if (!dayInput || !monthInput || !yearInput || !hiddenInput) return;
+
+    function syncHiddenFromPartials() {
+      const d = dayInput.value.trim();
+      const m = monthInput.value.trim();
+      const y = yearInput.value.trim();
+      hiddenInput.value = (d && m && y && y.length === 4) ? `${y}-${pad2(m)}-${pad2(d)}` : '';
+      if (config.onChange) config.onChange(hiddenInput.value);
+    }
+
+    function syncPartialsFromIso(iso) {
+      if (!iso) return;
+      const parts = iso.split('-');
+      if (parts.length !== 3) return;
+      yearInput.value = parts[0];
+      monthInput.value = parts[1];
+      dayInput.value = parts[2];
+      hiddenInput.value = iso;
+      if (config.onChange) config.onChange(iso);
+    }
+
+    [dayInput, monthInput, yearInput].forEach(function(el){
+      el.addEventListener('input', syncHiddenFromPartials);
+    });
+
+    if (pickerBtn && picker) {
+      pickerBtn.addEventListener('click', function(){
+        if (hiddenInput.value) picker.value = hiddenInput.value;
+        if (typeof picker.showPicker === 'function') picker.showPicker();
+        else picker.click();
+      });
+      picker.addEventListener('change', function(){ syncPartialsFromIso(picker.value); });
+    }
+
+    if (hiddenInput.value) syncPartialsFromIso(hiddenInput.value);
+    else if (config.defaultIso) syncPartialsFromIso(config.defaultIso);
+  }
+
+  setupSplitDate({
+    dayId: 'dob-day',
+    monthId: 'dob-month',
+    yearId: 'dob-year',
+    hiddenSelector: 'input[name="date_of_birth"]',
+    pickerId: 'dobPicker',
+    pickerBtnId: 'dobPickerBtn',
+  });
+
+  if (showExamDate) {
+    setupSplitDate({
+      dayId: 'exam-date-day',
+      monthId: 'exam-date-month',
+      yearId: 'exam-date-year',
+      hiddenSelector: 'input[name="exam_date"]',
+      pickerId: 'examDatePicker',
+      pickerBtnId: 'examDatePickerBtn',
+      defaultIso: defaultExamDate,
+      onChange: refreshInstructors,
+    });
+  }
+
+  if (showExamDate) {
+    refreshInstructors();
+  }
+
+  if (editBtn && startForm) {
+    editBtn.addEventListener('click', function () {
+      startForm.classList.remove('d-none');
+      if (continueBanner) continueBanner.classList.add('d-none');
+    });
+  }
+})();
+</script>
 {% endblock %}

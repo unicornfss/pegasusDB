@@ -908,6 +908,11 @@ RATING_CHOICES = [(i, str(i)) for i in range(1, 6)]
 class SmileyRadioSelect(forms.RadioSelect):
     template_name = "widgets/smiley_radio.html"
 
+
+class RatingScaleSelect(forms.RadioSelect):
+    template_name = "widgets/rating_scale.html"
+    option_template_name = "django/forms/widgets/radio_option.html"
+
 EMOJI_1_TO_5 = (
     (1, "😟 1"),
     (2, "🙁 2"),
@@ -945,21 +950,21 @@ class FeedbackForm(forms.ModelForm):
         ]
         widgets = {
             # 1–5 radio widgets for all rating questions, including the two “Summary” ones:
-            "prior_knowledge":        forms.RadioSelect(choices=RATING_CHOICES),
-            "post_knowledge":         forms.RadioSelect(choices=RATING_CHOICES),
-            "q_purpose_clear":        forms.RadioSelect(choices=RATING_CHOICES),
-            "q_personal_needs":       forms.RadioSelect(choices=RATING_CHOICES),
-            "q_exercises_useful":     forms.RadioSelect(choices=RATING_CHOICES),
-            "q_structure":            forms.RadioSelect(choices=RATING_CHOICES),
-            "q_pace":                 forms.RadioSelect(choices=RATING_CHOICES),
-            "q_content_clear":        forms.RadioSelect(choices=RATING_CHOICES),
-            "q_instructor_knowledge": forms.RadioSelect(choices=RATING_CHOICES),
-            "q_materials_quality":    forms.RadioSelect(choices=RATING_CHOICES),
-            "q_books_quality":        forms.RadioSelect(choices=RATING_CHOICES),
-            "q_venue_suitable":       forms.RadioSelect(choices=RATING_CHOICES),
-            "q_benefit_at_work":      forms.RadioSelect(choices=RATING_CHOICES),   # <-- FIX
-            "q_benefit_outside":      forms.RadioSelect(choices=RATING_CHOICES),   # <-- FIX
-            "overall_rating":         forms.RadioSelect(choices=RATING_CHOICES),
+            "prior_knowledge":        RatingScaleSelect(choices=RATING_CHOICES),
+            "post_knowledge":         RatingScaleSelect(choices=RATING_CHOICES),
+            "q_purpose_clear":        RatingScaleSelect(choices=RATING_CHOICES),
+            "q_personal_needs":       RatingScaleSelect(choices=RATING_CHOICES),
+            "q_exercises_useful":     RatingScaleSelect(choices=RATING_CHOICES),
+            "q_structure":            RatingScaleSelect(choices=RATING_CHOICES),
+            "q_pace":                 RatingScaleSelect(choices=RATING_CHOICES),
+            "q_content_clear":        RatingScaleSelect(choices=RATING_CHOICES),
+            "q_instructor_knowledge": RatingScaleSelect(choices=RATING_CHOICES),
+            "q_materials_quality":    RatingScaleSelect(choices=RATING_CHOICES),
+            "q_books_quality":        RatingScaleSelect(choices=RATING_CHOICES),
+            "q_venue_suitable":       RatingScaleSelect(choices=RATING_CHOICES),
+            "q_benefit_at_work":      RatingScaleSelect(choices=RATING_CHOICES),
+            "q_benefit_outside":      RatingScaleSelect(choices=RATING_CHOICES),
+            "overall_rating":         RatingScaleSelect(choices=RATING_CHOICES),
 
             # the rest are normal inputs/textarea/checkbox:
             "comments":       forms.Textarea(attrs={"rows": 4, "class": "form-control"}),

@@ -1,17 +1,31 @@
 {% extends "public/base_public.html" %}
 {% load static %}
-{# Replace the header so it shows logo + company name (no page title here) #}
-{% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+
+{% block title %}{{ course_type.name }} — Exam unavailable{% endblock %}
+
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
 {% endblock %}
+
+{% block header %}
+{% include "exam/_brand_header.html" with course_type=course_type exam=exam %}
+{% endblock %}
+
 {% block content %}
-<div class="container mt-4">
-  <div class="alert alert-warning">
-    This exam has no questions configured yet.
+<div class="exam-page">
+  <div class="exam-card">
+    <div class="exam-section text-center py-2">
+      <span class="exam-icon d-inline-grid mb-3" style="width:3rem;height:3rem;border-radius:0.75rem;background:rgba(255,193,7,.15);color:#856404;font-size:1.35rem;">
+        <i class="bi bi-journal-x"></i>
+      </span>
+      <div class="exam-section-title">Not ready yet</div>
+      <p class="mb-3 text-muted" style="font-size:0.95rem;line-height:1.5;">
+        This exam has no questions configured yet. Please speak to your instructor.
+      </p>
+      <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_rules' %}?examcode={{ exam.exam_code }}">
+        <i class="bi bi-arrow-left me-1"></i> Back
+      </a>
+    </div>
   </div>
-  <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_rules' %}?examcode={{ exam.exam_code }}">Back</a>
 </div>
 {% endblock %}

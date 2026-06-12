@@ -1,0 +1,12 @@
+{% load static %}
+<div class="exam-brand d-flex align-items-center gap-3">
+  <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" class="exam-logo">
+  <div>
+    <div class="exam-brand-name">Unicorn Fire &amp; Safety Solutions</div>
+    {% if course_type and exam %}
+    <div class="exam-brand-subtitle">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</div>
+    {% elif page_subtitle %}
+    <div class="exam-brand-subtitle">{{ page_subtitle }}</div>
+    {% endif %}
+  </div>
+</div>

@@ -1,17 +1,25 @@
 {% extends "public/base_public.html" %}
 {% load static %}
-{# Replace the header so it shows logo + company name (no page title here) #}
-{% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+
+{% block title %}Exam — Already passed{% endblock %}
+
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
 {% endblock %}
+
+{% block header %}
+{% include "exam/_brand_header.html" with page_subtitle="Delegate exam" %}
+{% endblock %}
+
 {% block content %}
-<div class="container" style="max-width:600px; margin-top:40px;">
-  <div class="alert alert-success border-2 border" role="alert" style="font-size:1.15rem">
-    ✅ You have already passed this exam today.
+<div class="exam-page">
+  <div class="exam-result-hero pass">
+    <span class="result-icon"><i class="bi bi-check-circle-fill"></i></span>
+    <div class="result-title">You have already passed this exam today</div>
+    <div class="small mt-1">No further attempt is required for this session.</div>
   </div>
-  <a href="/" class="btn btn-primary mt-3">Return to home</a>
+  <div class="text-center">
+    <a href="/" class="btn btn-outline-secondary">Return to home</a>
+  </div>
 </div>
 {% endblock %}

@@ -162,75 +162,162 @@
     padding: 0.5rem 0.75rem;
     margin-bottom: 1rem;
   }
-  .rating-scale ul {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
+  .rating-scale-row {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.4rem;
+    width: 100%;
   }
-  .rating-scale li {
-    margin: 0;
-    padding: 0;
-    flex: 0 0 4.85rem;
-  }
-  .rating-scale label {
+  .rating-scale-btn {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.2rem;
+    gap: 0.15rem;
     margin: 0;
-    padding: 0.45rem 0.35rem;
-    width: 4.85rem;
-    height: 4.1rem;
+    padding: 0.5rem 0.2rem;
+    width: 100%;
+    min-height: 4rem;
     box-sizing: border-box;
-    border: 1px solid var(--app-border, rgba(15, 23, 42, .12));
+    border: 2px solid transparent;
     border-radius: 0.65rem;
-    background: var(--app-surface, #fff);
     cursor: pointer;
     line-height: 1.2;
-    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+    user-select: none;
+    transition: border-color .15s ease, box-shadow .15s ease, background .15s ease, transform .12s ease;
+  }
+  .rating-scale-btn:hover {
+    transform: translateY(-1px);
+  }
+  .rating-scale-btn input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
   .rating-scale .scale-num {
-    font-size: 1.05rem;
-    font-weight: 700;
-    color: var(--unicorn-red, #8B0000);
+    font-size: 1.15rem;
+    font-weight: 800;
     flex-shrink: 0;
+    line-height: 1;
   }
   .rating-scale .scale-word {
-    font-size: 0.58rem;
+    font-size: 0.52rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.02em;
-    color: var(--app-muted, #6b7280);
     text-align: center;
     width: 100%;
     line-height: 1.15;
-    min-height: 2.3em;
+    min-height: 2.2em;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow-wrap: anywhere;
+    opacity: 0.9;
   }
-  .rating-scale label:hover {
-    border-color: rgba(139, 0, 0, .35);
-    background: var(--app-surface-2, #f8fafc);
+  /* 1 = red → 5 = green */
+  .rating-scale-btn--1 {
+    background: rgba(220, 53, 69, .12);
+    border-color: rgba(220, 53, 69, .35);
   }
-  .rating-scale input[type="radio"] {
+  .rating-scale-btn--1 .scale-num { color: #b42318; }
+  .rating-scale-btn--1 .scale-word { color: #991b1b; }
+  .rating-scale-btn--2 {
+    background: rgba(234, 88, 12, .12);
+    border-color: rgba(234, 88, 12, .35);
+  }
+  .rating-scale-btn--2 .scale-num { color: #c2410c; }
+  .rating-scale-btn--2 .scale-word { color: #9a3412; }
+  .rating-scale-btn--3 {
+    background: rgba(202, 138, 4, .13);
+    border-color: rgba(202, 138, 4, .35);
+  }
+  .rating-scale-btn--3 .scale-num { color: #a16207; }
+  .rating-scale-btn--3 .scale-word { color: #854d0e; }
+  .rating-scale-btn--4 {
+    background: rgba(22, 163, 74, .12);
+    border-color: rgba(22, 163, 74, .35);
+  }
+  .rating-scale-btn--4 .scale-num { color: #15803d; }
+  .rating-scale-btn--4 .scale-word { color: #166534; }
+  .rating-scale-btn--5 {
+    background: rgba(21, 128, 61, .14);
+    border-color: rgba(21, 128, 61, .38);
+  }
+  .rating-scale-btn--5 .scale-num { color: #166534; }
+  .rating-scale-btn--5 .scale-word { color: #14532d; }
+  .rating-scale-row:has(input:checked) .rating-scale-btn:not(:has(input:checked)) {
+    opacity: 0.42;
+    filter: saturate(0.65);
+  }
+  .rating-scale-btn:has(input:checked) {
+    transform: scale(1.06);
+    z-index: 1;
+    border-width: 2px;
+  }
+  .rating-scale-btn:has(input:checked)::after {
+    content: "✓";
     position: absolute;
-    opacity: 0;
-    pointer-events: none;
+    top: 0.2rem;
+    right: 0.2rem;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    background: #fff;
+    font-size: 0.7rem;
+    font-weight: 900;
+    line-height: 1.15rem;
+    text-align: center;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
   }
-  .rating-scale label:has(input:checked) {
-    border-color: var(--unicorn-red, #8B0000);
-    box-shadow: 0 0 0 3px rgba(139, 0, 0, .12);
-    background: rgba(139, 0, 0, .04);
+  .rating-scale-btn--1:has(input:checked) {
+    background: #dc3545;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #dc3545, 0 4px 14px rgba(220, 53, 69, .45);
   }
-  .rating-scale label:has(input:checked) .scale-num {
-    color: var(--unicorn-red, #8B0000);
+  .rating-scale-btn--1:has(input:checked) .scale-num,
+  .rating-scale-btn--1:has(input:checked) .scale-word { color: #fff !important; }
+  .rating-scale-btn--1:has(input:checked)::after { color: #dc3545; }
+  .rating-scale-btn--2:has(input:checked) {
+    background: #ea580c;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #ea580c, 0 4px 14px rgba(234, 88, 12, .45);
   }
+  .rating-scale-btn--2:has(input:checked) .scale-num,
+  .rating-scale-btn--2:has(input:checked) .scale-word { color: #fff !important; }
+  .rating-scale-btn--2:has(input:checked)::after { color: #ea580c; }
+  .rating-scale-btn--3:has(input:checked) {
+    background: #ca8a04;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #ca8a04, 0 4px 14px rgba(202, 138, 4, .45);
+  }
+  .rating-scale-btn--3:has(input:checked) .scale-num,
+  .rating-scale-btn--3:has(input:checked) .scale-word { color: #fff !important; }
+  .rating-scale-btn--3:has(input:checked)::after { color: #ca8a04; }
+  .rating-scale-btn--4:has(input:checked) {
+    background: #16a34a;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #16a34a, 0 4px 14px rgba(22, 163, 74, .45);
+  }
+  .rating-scale-btn--4:has(input:checked) .scale-num,
+  .rating-scale-btn--4:has(input:checked) .scale-word { color: #fff !important; }
+  .rating-scale-btn--4:has(input:checked)::after { color: #16a34a; }
+  .rating-scale-btn--5:has(input:checked) {
+    background: #15803d;
+    border-color: #fff;
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px #15803d, 0 4px 14px rgba(21, 128, 61, .45);
+  }
+  .rating-scale-btn--5:has(input:checked) .scale-num,
+  .rating-scale-btn--5:has(input:checked) .scale-word { color: #fff !important; }
+  .rating-scale-btn--5:has(input:checked)::after { color: #15803d; }
   .opt-flag {
     color: var(--app-muted, #6b7280);
     font-weight: 400;
@@ -292,14 +379,28 @@
     background: #3d3200;
     border-color: #665500;
   }
-  body.night-mode .rating-scale label {
-    background: #1f2d40 !important;
-    border-color: #3f536f !important;
+  body.night-mode .rating-scale-btn:not(:has(input:checked)) {
+    opacity: 0.85;
+  }
+  body.night-mode .rating-scale-row:has(input:checked) .rating-scale-btn:not(:has(input:checked)) {
+    opacity: 0.35;
+    filter: saturate(0.5) brightness(0.85);
+  }
+  body.night-mode .rating-scale-btn:not(:has(input:checked)) .scale-num,
+  body.night-mode .rating-scale-btn:not(:has(input:checked)) .scale-word {
     color: #e7effb !important;
   }
-  body.night-mode .rating-scale label:hover,
-  body.night-mode .rating-scale label:has(input:checked) {
-    background: rgba(139, 0, 0, .18) !important;
+  body.night-mode .rating-scale-btn:has(input:checked) {
+    opacity: 1 !important;
+    filter: none !important;
+  }
+  body.night-mode .rating-scale-btn:has(input:checked) .scale-num,
+  body.night-mode .rating-scale-btn:has(input:checked) .scale-word {
+    color: #fff !important;
+  }
+  body.night-mode .rating-scale-btn:has(input:checked)::after {
+    background: #fff;
+    box-shadow: 0 1px 6px rgba(0, 0, 0, .45);
   }
   body.night-mode .callback-card {
     background: #1f2d40 !important;
@@ -423,15 +524,13 @@
 
     <div class="feedback-section">
       <div class="feedback-section-title">Knowledge levels</div>
-      <div class="row g-3">
-        <div class="col-md-6 feedback-question">
-          <label class="form-label">Knowledge before the course</label>
-          <div class="rating-scale">{{ form.prior_knowledge }}</div>
-        </div>
-        <div class="col-md-6 feedback-question">
-          <label class="form-label">Knowledge after the course</label>
-          <div class="rating-scale">{{ form.post_knowledge }}</div>
-        </div>
+      <div class="feedback-question">
+        <label class="form-label">Knowledge before the course</label>
+        <div class="rating-scale">{{ form.prior_knowledge }}</div>
+      </div>
+      <div class="feedback-question">
+        <label class="form-label">Knowledge after the course</label>
+        <div class="rating-scale">{{ form.post_knowledge }}</div>
       </div>
     </div>
 
@@ -563,40 +662,6 @@
       }
     });
   }
-
-  (function(){
-    const scaleWords = {
-      "1": "Very poor",
-      "2": "Poor",
-      "3": "Fair",
-      "4": "Good",
-      "5": "Excellent"
-    };
-
-    document.querySelectorAll('.rating-scale').forEach(group => {
-      group.querySelectorAll('label').forEach(lbl => {
-        const input = lbl.querySelector('input[type="radio"]');
-        if (!input) return;
-
-        const val = String(input.value);
-        const word = scaleWords[val];
-        if (!word) return;
-
-        while (input.nextSibling) lbl.removeChild(input.nextSibling);
-
-        const numSpan = document.createElement('span');
-        numSpan.className = 'scale-num';
-        numSpan.textContent = val;
-
-        const wordSpan = document.createElement('span');
-        wordSpan.className = 'scale-word';
-        wordSpan.textContent = word;
-
-        lbl.appendChild(numSpan);
-        lbl.appendChild(wordSpan);
-      });
-    });
-  })();
 
   (function(){
     const dateInput = document.getElementById('id_date');

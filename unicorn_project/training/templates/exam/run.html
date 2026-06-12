@@ -1,139 +1,78 @@
 {% extends "public/base_public.html" %}
 {% load static %}
+
 {% block title %}{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}{% endblock %}
-{# Replace the header so it shows logo + company name (no page title here) #}
+
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
+{% endblock %}
+
 {% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+{% include "exam/_brand_header.html" with course_type=course_type exam=exam %}
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 820px;">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h5 mb-0">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }}</h1>
-    <div class="badge bg-dark" id="timer">--:--</div>
+<div class="exam-page exam-page--wide">
+  <div class="exam-topbar">
+    <div class="exam-progress mb-0">Question {{ q_index }} of {{ q_total }}</div>
+    <div class="exam-timer" id="timer"><i class="bi bi-clock"></i> --:--</div>
   </div>
 
-  <div class="mb-2 text-muted">Question {{ q_index }} of {{ q_total }}</div>
-
-  <form method="post" class="card">
+  <form method="post" class="exam-card">
     {% csrf_token %}
     <input type="hidden" name="examcode" value="{{ exam.exam_code }}">
     <input type="hidden" name="attempt" value="{{ attempt.id }}">
     <input type="hidden" name="q" value="{{ q_index }}">
 
-    <div class="card-body">
-      <p class="lead mb-3 exam-question-text">{{ question.text }}</p>
+    <div class="exam-section">
+      <p class="exam-question-text mb-0">{{ question.text }}</p>
 
       {% if question.image_url %}
-        <div class="mb-3">
-          <img
-            src="{{ question.image_url }}"
-            alt="Question image"
-            class="img-fluid rounded border"
-            style="max-height: 360px; width: auto;"
-            loading="lazy"
-            referrerpolicy="no-referrer"
-            onerror="this.style.display='none';"
-          >
-        </div>
+        <img
+          src="{{ question.image_url }}"
+          alt="Question image"
+          class="exam-question-image img-fluid mt-3"
+          loading="lazy"
+          referrerpolicy="no-referrer"
+          onerror="this.style.display='none';"
+        >
       {% endif %}
 
-      <div class="answer-list d-flex flex-column gap-2">
+      <div class="choice-list mt-3">
         {% for a in answers %}
-          <label class="answer-option d-flex align-items-center gap-3 p-3 rounded border user-select-none"
-                 style="cursor:pointer;">
-            <input class="form-check-input flex-shrink-0 mt-0" type="radio" name="answer" value="{{ a.id }}"
+          <label class="choice-card">
+            <input class="form-check-input" type="radio" name="answer" value="{{ a.id }}"
                 {% if selected_pk == a.id %}checked{% endif %}>
-            <span class="fs-6">{{ a.text }}</span>
+            <span>{{ a.text }}</span>
           </label>
         {% endfor %}
       </div>
-
-      <style>
-        .exam-question-text { color: #1e293b; }
-
-        .answer-option { transition: background .15s, border-color .15s, box-shadow .15s; border-width: 2px !important; }
-        .answer-option:nth-child(odd) { background: #eef3ff; border-left: 6px solid #7fa7ff; }
-        .answer-option:nth-child(even) { background: #e4ecfb; border-left: 6px solid #5f8eea; }
-        .answer-option:hover { background: #d7e4ff; border-color: #3d7bfd !important; box-shadow: 0 0 0 2px rgba(13,110,253,.18); }
-        .answer-option.is-selected { background: #9ec5fe; border-color: #0a58ca !important; border-left-color: #084298; font-weight: 700; box-shadow: 0 0 0 3px rgba(13,110,253,.25); }
-
-        body.night-mode .exam-question-text {
-          color: #f2f7ff;
-          background: #1e2c3f;
-          border: 1px solid #3a4f6f;
-          border-left: 6px solid #7fb1ff;
-          border-radius: .5rem;
-          padding: .75rem .9rem;
-        }
-        body.night-mode .answer-option {
-          color: #e8f0fb;
-        }
-        body.night-mode .answer-option:nth-child(odd) {
-          background: #1f2d40;
-          border-left-color: #4c6f9f;
-        }
-        body.night-mode .answer-option:nth-child(even) {
-          background: #24344a;
-          border-left-color: #5f84b7;
-        }
-        body.night-mode .answer-option:hover {
-          background: #2a3e58;
-          border-color: #7fb1ff !important;
-          box-shadow: 0 0 0 2px rgba(127,177,255,.25);
-        }
-        body.night-mode .answer-option.is-selected {
-          background: #35547a;
-          border-left-color: #9ac2ff;
-          border-color: #9ac2ff !important;
-          color: #ffffff;
-          box-shadow: 0 0 0 3px rgba(154,194,255,.3);
-        }
-      </style>
-      <script>
-        (function(){
-          var opts = document.querySelectorAll('.answer-option');
-          function refresh(){
-            opts.forEach(function(lbl){
-              var inp = lbl.querySelector('input[type=radio]');
-              lbl.classList.toggle('is-selected', inp.checked);
-            });
-          }
-          opts.forEach(function(lbl){
-            lbl.addEventListener('click', function(){ setTimeout(refresh, 10); });
-          });
-          refresh();
-        })();
-      </script>
     </div>
 
-    <div class="card-footer d-flex justify-content-between">
-      <button name="prev" class="btn btn-outline-secondary" {% if q_index == 1 %}disabled{% endif %}>Back</button>
-
+    <div class="exam-footer">
+      <button name="prev" class="btn btn-outline-secondary" {% if q_index == 1 %}disabled{% endif %}>
+        <i class="bi bi-arrow-left me-1"></i> Back
+      </button>
       {% if q_index < q_total %}
-        <button name="next" class="btn btn-primary">Save & next</button>
+        <button name="next" class="btn btn-primary exam-submit">Save &amp; next</button>
       {% else %}
-        <button name="finish" class="btn btn-success">Finish exam</button>
+        <button name="finish" class="btn btn-success exam-submit">Finish exam</button>
       {% endif %}
     </div>
   </form>
 
-  <p class="small text-muted mt-2">Your answers are saved as you move through the questions.</p>
+  <p class="exam-hint">Your answers are saved as you move through the questions.</p>
 </div>
 
 <script>
 (function(){
-  // Countdown from remaining seconds supplied by server
   let remaining = {{ remaining|default:0 }};
   const timerEl = document.getElementById('timer');
 
   function render(){
     const m = Math.floor(remaining / 60);
     const s = remaining % 60;
-    timerEl.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    timerEl.innerHTML = '<i class="bi bi-clock"></i> ' + m + ':' + (s < 10 ? '0' : '') + s;
   }
   render();
 
@@ -141,9 +80,7 @@
     remaining -= 1;
     if (remaining <= 0) {
       clearInterval(tick);
-      // Auto-finish when client timer hits zero (server also enforces)
-      const url = "{% url 'delegate_exam_finish' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}";
-      window.location.href = url;
+      window.location.href = "{% url 'delegate_exam_finish' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}";
       return;
     }
     render();

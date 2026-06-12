@@ -1,47 +1,73 @@
 {% extends "public/base_public.html" %}
 {% load static %}
+
 {% block title %}{{ course_type.name }} — Results{% endblock %}
-{# Replace the header so it shows logo + company name (no page title here) #}
+
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
+{% endblock %}
+
 {% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+{% include "exam/_brand_header.html" with course_type=course_type exam=exam %}
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 760px;">
-  <h1 class="h5 mb-3">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} results</h1>
-
-  <div class="card mb-3">
-    <div class="card-body">
-      <p class="mb-2">
-        <strong>{{ attempt.delegate_name }}</strong> — {{ attempt.date_of_birth }}
-      </p>
-      {% widthratio attempt.score_correct attempt.total_questions 100 as score_percent %}
-      <p class="mb-0">
-        Score: <strong>{{ attempt.score_correct }}</strong> / {{ attempt.total_questions }}
-        (<strong>{% widthratio attempt.score_correct attempt.total_questions 100 %}%</strong>)
-      </p>
-
-
-      <p class="mb-0">
-        Pass mark: <strong>{{ exam.pass_mark_percent }}%</strong> (need {{ required_correct }})
-        {% if viva_required %}
-          <br>Viva threshold: <strong>{{ exam.viva_pass_percent }}%</strong> (need {{ viva_required }})
-        {% endif %}
-      </p>
-    </div>
+<div class="exam-page">
+  <div class="exam-intro">
+    <p>Your exam has been submitted. Results are below.</p>
   </div>
 
   {% if attempt.passed %}
-    <div class="alert alert-success">✅ Congratulations — you passed.</div>
+    <div class="exam-result-hero pass">
+      <span class="result-icon"><i class="bi bi-check-circle-fill"></i></span>
+      <div class="result-title">Congratulations — you passed</div>
+    </div>
   {% elif attempt.viva_eligible %}
-    <div class="alert alert-warning">ℹ️ You did not reach the pass mark, but you are <strong>eligible for viva</strong>.</div>
+    <div class="exam-result-hero viva">
+      <span class="result-icon"><i class="bi bi-info-circle-fill"></i></span>
+      <div class="result-title">Eligible for viva</div>
+      <div class="small">You did not reach the pass mark, but you may be offered a viva.</div>
+    </div>
   {% else %}
-    <div class="alert alert-danger">❌ Unfortunately, you did not meet the pass or viva thresholds.</div>
+    <div class="exam-result-hero fail">
+      <span class="result-icon"><i class="bi bi-x-circle-fill"></i></span>
+      <div class="result-title">Below pass threshold</div>
+      <div class="small">Unfortunately, you did not meet the pass or viva thresholds.</div>
+    </div>
   {% endif %}
 
-  <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_start' %}?examcode={{ exam.exam_code }}">Back</a>
+  <div class="exam-card mb-3">
+    <div class="exam-section exam-score-card">
+      <div class="exam-section-title">Your result</div>
+      <div class="exam-score-row">
+        <span>Candidate</span>
+        <strong>{{ attempt.delegate_name }}</strong>
+      </div>
+      <div class="exam-score-row">
+        <span>Date of birth</span>
+        <strong>{{ attempt.date_of_birth }}</strong>
+      </div>
+      <div class="exam-score-row">
+        <span>Score</span>
+        <strong>{{ attempt.score_correct }} / {{ attempt.total_questions }} ({% widthratio attempt.score_correct attempt.total_questions 100 %}%)</strong>
+      </div>
+      <div class="exam-score-row">
+        <span>Pass mark</span>
+        <strong>{{ exam.pass_mark_percent }}% (need {{ required_correct }})</strong>
+      </div>
+      {% if viva_required %}
+      <div class="exam-score-row">
+        <span>Viva threshold</span>
+        <strong>{{ exam.viva_pass_percent }}% (need {{ viva_required }})</strong>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="exam-footer">
+      <a class="btn btn-outline-secondary" href="{% url 'delegate_exam_start' %}?examcode={{ exam.exam_code }}">
+        <i class="bi bi-arrow-left me-1"></i> Back to exam start
+      </a>
+    </div>
+  </div>
 </div>
 {% endblock %}

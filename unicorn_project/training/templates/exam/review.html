@@ -1,98 +1,90 @@
 {% extends "public/base_public.html" %}
-{% load static %}
+{% load static dict_extras %}
+
 {% block title %}{{ course_type.name }} — Review{% endblock %}
-{# Replace the header so it shows logo + company name (no page title here) #}
-{% block header %}
-  <div class="d-flex align-items-center gap-3 py-2">
-    <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
-    <div class="fs-5 fw-semibold m-0">Unicorn Fire & Safety Solutions</div>
-  </div>
+
+{% block extra_head %}
+{% include "exam/_public_extra_head.html" %}
 {% endblock %}
 
-{% load dict_extras %}
+{% block header %}
+{% include "exam/_brand_header.html" with course_type=course_type exam=exam %}
+{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 860px;">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h1 class="h5 mb-0">{{ course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} review</h1>
-    <div class="badge bg-dark" id="timer">--:--</div>
+<div class="exam-page exam-page--wide">
+  <div class="exam-topbar">
+    <h1 class="exam-topbar-title">Review your answers</h1>
+    <div class="exam-timer" id="timer"><i class="bi bi-clock"></i> --:--</div>
   </div>
 
-  <div class="alert alert-info">
-    Review your answers below. You can go back to any question to change your choice.
+  <div class="exam-intro mb-3">
+    <p>Check each answer below. You can go back to any question to make changes before submitting.</p>
   </div>
 
   {% for q in questions %}
     {% with sel=chosen|get_item:q.id %}
-    <div class="card mb-3">
-      <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="exam-review-card">
+      <div class="review-head">
         <div>
-          <strong>Q{{ forloop.counter }}.</strong> {{ q.text }}
-
+          <div class="review-qnum">Question {{ forloop.counter }}</div>
+          <div class="review-text">{{ q.text }}</div>
           {% if q.image_url %}
-            <div class="mt-2">
-              <img
-                src="{{ q.image_url }}"
-                alt="Question image"
-                class="img-fluid rounded border"
-                style="max-height: 240px; width: auto;"
-                loading="lazy"
-                referrerpolicy="no-referrer"
-                onerror="this.style.display='none';"
-              >
-            </div>
+            <img
+              src="{{ q.image_url }}"
+              alt="Question image"
+              class="exam-question-image img-fluid mt-2"
+              style="max-height: 240px;"
+              loading="lazy"
+              referrerpolicy="no-referrer"
+              onerror="this.style.display='none';"
+            >
           {% endif %}
         </div>
-        <div>
-          <a class="btn btn-sm btn-outline-secondary"
-             href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q={{ forloop.counter }}">
-            Edit
-          </a>
-        </div>
+        <a class="btn btn-sm btn-outline-secondary flex-shrink-0"
+           href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q={{ forloop.counter }}">
+          Edit
+        </a>
       </div>
-      <div class="card-body p-0">
-        <ul class="list-group list-group-flush review-answers">
-          {% for a in q.answers.all %}
+      <ul class="review-answers">
+        {% for a in q.answers.all %}
+          <li class="{% if sel and sel.answer_id == a.id %}is-chosen{% else %}is-muted{% endif %}">
             {% if sel and sel.answer_id == a.id %}
-              <li class="list-group-item d-flex align-items-center gap-3 fw-semibold"
-                  style="background:#cfe2ff; border-left:5px solid #0d6efd; padding-left:1rem;">
-                <span class="badge bg-primary flex-shrink-0">&#10003; Your answer</span>
-                <span>{{ a.text }}</span>
-              </li>
+              <span class="chosen-badge">Your answer</span>
             {% else %}
-              <li class="list-group-item d-flex align-items-center gap-3 text-muted"
-                  style="border-left:5px solid transparent; padding-left:1rem;">
-                <span class="flex-shrink-0" style="width:84px;"></span>
-                <span>{{ a.text }}</span>
-              </li>
+              <span class="answer-spacer" aria-hidden="true"></span>
             {% endif %}
-          {% endfor %}
-        </ul>
-      </div>
+            <span>{{ a.text }}</span>
+          </li>
+        {% endfor %}
+      </ul>
       {% if not sel %}
-        <div class="card-footer text-danger">No answer selected.</div>
+        <div class="review-missing"><i class="bi bi-exclamation-circle me-1"></i> No answer selected.</div>
       {% endif %}
     </div>
     {% endwith %}
   {% endfor %}
 
-  <form method="post" class="d-flex justify-content-between align-items-center">
+  <form method="post" class="exam-card">
     {% csrf_token %}
-    <a class="btn btn-outline-secondary"
-       href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q=1">Back to questions</a>
-    <button class="btn btn-success">Submit and see results</button>
+    <div class="exam-footer mb-0">
+      <a class="btn btn-outline-secondary"
+         href="{% url 'delegate_exam_run' %}?examcode={{ exam.exam_code }}&attempt={{ attempt.id }}&q=1">
+        <i class="bi bi-arrow-left me-1"></i> Back to questions
+      </a>
+      <button class="btn btn-success exam-submit">Submit and see results</button>
+    </div>
   </form>
 </div>
 
 <script>
 (function(){
-  // simple countdown display
   let remaining = {{ remaining|default:0 }};
   const timerEl = document.getElementById('timer');
   function render(){
     const m = Math.floor(remaining/60);
     const s = remaining%60;
-    timerEl.textContent = m + ':' + (s<10?'0':'') + s;
+    timerEl.innerHTML = '<i class="bi bi-clock"></i> ' + m + ':' + (s<10?'0':'') + s;
   }
   render();
   const tick = setInterval(function(){
@@ -104,45 +96,4 @@
   }, 1000);
 })();
 </script>
-
-<style>
-/* Zebra striping for easier scan, with chosen answer still strongly highlighted */
-.review-answers .list-group-item:nth-child(odd) {
-  background: #eef3ff;
-  border-left-color: #7fa7ff !important;
-}
-.review-answers .list-group-item:nth-child(even) {
-  background: #e4ecfb;
-  border-left-color: #5f8eea !important;
-}
-.review-answers .list-group-item:hover {
-  background: #d7e4ff;
-}
-.review-answers .list-group-item .badge.bg-primary {
-  font-weight: 700;
-}
-
-body.night-mode .review-answers .list-group-item:nth-child(odd) {
-  background: #1f2d40;
-  border-left-color: #4c6f9f !important;
-  color: #d7e4f5 !important;
-}
-body.night-mode .review-answers .list-group-item:nth-child(even) {
-  background: #24344a;
-  border-left-color: #5f84b7 !important;
-  color: #d7e4f5 !important;
-}
-body.night-mode .review-answers .list-group-item:hover {
-  background: #2a3e58;
-}
-body.night-mode .review-answers .list-group-item[style*="background:#cfe2ff"] {
-  background: #35547a !important;
-  border-left-color: #9ac2ff !important;
-  color: #ffffff !important;
-}
-body.night-mode .review-answers .badge.bg-primary {
-  background-color: #7fb1ff !important;
-  color: #0d223f !important;
-}
-</style>
 {% endblock %}

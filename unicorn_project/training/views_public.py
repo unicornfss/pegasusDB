@@ -1,5 +1,6 @@
 from datetime import timedelta, datetime, date
 from threading import active_count
+from django.conf import settings
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Prefetch
@@ -51,6 +52,34 @@ def _result_value(att) -> str:
     """
     return (getattr(att, "result", "") or "").lower()
 
+def _show_exam_date_picker():
+    return getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
+
+
+def _resolve_exam_date_from_request(request, *, default):
+    """Resolve exam date from GET/POST (ISO hidden field or DD/MM/YYYY partials)."""
+    from .views import _parse_partial_date_from_post
+
+    if request.method == "POST":
+        raw = (request.POST.get("exam_date") or "").strip()
+        if raw:
+            try:
+                return date.fromisoformat(raw)
+            except ValueError:
+                pass
+        parsed = _parse_partial_date_from_post(request.POST, "exam_date")
+        if parsed:
+            return parsed
+    else:
+        raw = (request.GET.get("exam_date") or request.GET.get("date") or "").strip()
+        if raw:
+            try:
+                return date.fromisoformat(raw)
+            except ValueError:
+                pass
+    return default
+
+
 @ensure_csrf_cookie   # set csrftoken on GET
 @csrf_protect         # validate on POST
 def delegate_exam_start(request):
@@ -65,11 +94,28 @@ def delegate_exam_start(request):
 
     exam = get_object_or_404(Exam, exam_code=code)
     course_type = exam.course_type
+    show_exam_date = _show_exam_date_picker()
 
     can_continue = False
+    initial_exam_date = _resolve_exam_date_from_request(
+        request, default=timezone.localdate()
+    )
 
     if request.method == "POST":
-        form = DelegateExamStartForm(request.POST, initial={"exam_code": exam.exam_code})
+        exam_date_for_instructors = _resolve_exam_date_from_request(
+            request, default=timezone.localdate()
+        )
+        from .views import _resolve_public_register_instructors
+
+        instructors, instructor_fallback = _resolve_public_register_instructors(
+            course_type, exam_date_for_instructors
+        )
+        form = DelegateExamStartForm(
+            request.POST,
+            initial={"exam_code": exam.exam_code},
+            instructors=instructors,
+            show_exam_date=show_exam_date,
+        )
         if form.is_valid():
             # Normalise inputs
             raw_name = form.cleaned_data["name"]
@@ -128,53 +174,54 @@ def delegate_exam_start(request):
                     )
         # if form invalid, the form will show its field errors; no banner needed
     else:
-        initial_exam_date = timezone.localdate()
-        # Backward-compatible: accept both exam_date (current) and date (legacy links).
-        raw_date = request.GET.get("exam_date", "") or request.GET.get("date", "")
-        if raw_date:
-            try:
-                from datetime import date as _date
-                initial_exam_date = _date.fromisoformat(raw_date)
-            except ValueError:
-                pass
+        from .views import _resolve_public_register_instructors
+
+        instructors, instructor_fallback = _resolve_public_register_instructors(
+            course_type, initial_exam_date
+        )
         form = DelegateExamStartForm(
             initial={
                 "exam_code": exam.exam_code,
                 "exam_date": initial_exam_date,
-            }
+            },
+            instructors=instructors,
+            show_exam_date=show_exam_date,
         )
 
-    # Filter instructor dropdown to those with a booking for this course+date
     exam_date_for_filter = None
     if request.method == "POST" and form.is_bound:
-        try:
-            exam_date_for_filter = form.fields["exam_date"].clean(form.data.get("exam_date", ""))
-        except Exception:
-            pass
+        if form.is_valid():
+            exam_date_for_filter = form.cleaned_data.get("exam_date")
+        else:
+            exam_date_for_filter = _resolve_exam_date_from_request(
+                request, default=timezone.localdate()
+            )
     else:
-        # On GET, always filter by the resolved initial date (URL param or today)
         exam_date_for_filter = initial_exam_date
 
-    if exam_date_for_filter:
-        filtered_instructors = (
-            Personnel.objects
-            .filter(
-                bookings__course_type=course_type,
-                bookings__days__date=exam_date_for_filter,
-            )
-            .distinct()
-            .order_by("name")
-        )
-        if filtered_instructors.exists():
-            form.fields["instructor"].queryset = filtered_instructors
-            if request.method == "GET" and filtered_instructors.count() == 1:
-                form.fields["instructor"].initial = filtered_instructors.first().pk
+    from .views import _resolve_public_register_instructors, _dev_instructor_register_hint
+
+    instructors, instructor_fallback = _resolve_public_register_instructors(
+        course_type, exam_date_for_filter
+    )
+    single_instructor = instructors[0] if len(instructors) == 1 else None
+    instructor_dev_hint = (
+        _dev_instructor_register_hint(course_type, exam_date_for_filter)
+        if show_exam_date and not instructor_fallback and not instructors
+        else ""
+    )
 
     ctx = {
         "exam": exam,
         "course_type": course_type,
         "form": form,
         "can_continue": can_continue,
+        "show_exam_date": show_exam_date,
+        "exam_date": exam_date_for_filter,
+        "instructors": instructors,
+        "single_instructor": single_instructor,
+        "instructor_fallback": instructor_fallback,
+        "instructor_dev_hint": instructor_dev_hint,
     }
     return render(request, "exam/delegate_start.html", ctx)
 
@@ -182,31 +229,33 @@ from math import ceil
 # ...
 
 def exam_instructors_api(request):
-    """JSON: instructors who have a booking for a given exam's course type on a given date."""
+    """JSON: instructors for an exam's course on a given date (same rules as register)."""
     from django.http import JsonResponse
+    from .views import _dev_instructor_register_hint, _resolve_public_register_instructors
+
     code = (request.GET.get("examcode") or "").upper()
     raw_date = (request.GET.get("date") or "").strip()
     if not code or not raw_date:
         return JsonResponse({"instructors": []})
     try:
-        from datetime import date as _date
-        d = _date.fromisoformat(raw_date)
+        d = date.fromisoformat(raw_date)
     except ValueError:
         return JsonResponse({"instructors": []})
     exam = Exam.objects.filter(exam_code=code).select_related("course_type").first()
     if not exam:
         return JsonResponse({"instructors": []})
-    instructors = list(
-        Personnel.objects
-        .filter(bookings__course_type=exam.course_type, bookings__days__date=d)
-        .distinct()
-        .order_by("name")
-        .values("id", "name")
+    instructors, instructor_fallback = _resolve_public_register_instructors(
+        exam.course_type, d
     )
-    if not instructors:
-        # No booking match for this date — return all instructors as fallback
-        instructors = list(Personnel.objects.order_by("name").values("id", "name"))
-    return JsonResponse({"instructors": instructors})
+    payload = {
+        "instructors": [{"id": i.id, "name": i.name} for i in instructors],
+        "fallback": instructor_fallback,
+    }
+    if not instructor_fallback:
+        hint = _dev_instructor_register_hint(exam.course_type, d)
+        if hint:
+            payload["dev_hint"] = hint
+    return JsonResponse(payload)
 
 
 @ensure_csrf_cookie
