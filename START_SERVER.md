@@ -108,30 +108,41 @@ TELEGRAM_BOT_USERNAME=your_dev_bot_username_without_at
 SITE_URL=http://127.0.0.1:8000
 ```
 
-Do **not** use the production bot token/username locally while testing live linking.
-
 Run **two** terminals:
 
 1. Django (as usual): `.\runserver.bat`
 2. Telegram polling: `.\telegram_poll.bat`
 
-**Stop `telegram_poll.bat`** whenever you test QR linking on the live site — only one process may poll a bot token at a time, and local `.env` uses a different `DJANGO_SECRET_KEY` than Render.
+Local dev uses **polling** (not webhooks). `telegram_poll.bat` clears any webhook on the dev bot when it starts.
 
-Then on **Profile**, scan the QR code to link Telegram. Enable notification toggles and save.
+Then on **Profile**, scan the QR code to link Telegram.
 
 ---
 
 ## Telegram bot (Render production)
 
-1. Set on **both** the **web** service and **unicorn-telegram-bot** worker:
-   - `TELEGRAM_BOT_TOKEN` — production bot token from @BotFather
-   - `TELEGRAM_BOT_USERNAME` — production bot username (no `@`)
-   - `SITE_URL=https://unicorn.adminforge.co.uk`
-2. Worker must share `DJANGO_SECRET_KEY` with web (see `render.yaml` `fromService`).
-3. Ensure the **unicorn-telegram-bot** worker is running (`python manage.py telegram_poll`).
-4. Link tokens are signed with `DJANGO_SECRET_KEY` (no shared cache required).
+Production uses a **webhook on the existing web service** — no separate worker, no extra monthly cost.
 
-**Same Telegram user account** on your phone is fine for dev and prod. **Same bot token** in dev and prod is not — use two bots, or stop local polling when using live.
+Set on the **web** service:
+
+| Variable | Value |
+|----------|--------|
+| `TELEGRAM_BOT_TOKEN` | Production bot token from @BotFather |
+| `TELEGRAM_BOT_USERNAME` | `Unicornfsscombot` (no `@`) |
+| `TELEGRAM_WEBHOOK_SECRET` | Long random string (Render can generate) |
+| `SITE_URL` | `https://unicorn.adminforge.co.uk` |
+
+Each deploy runs `python manage.py telegram_set_webhook` to register:
+
+`https://unicorn.adminforge.co.uk/telegram/webhook/<secret>/`
+
+**After first deploy**, if linking fails, run in **Render Shell** on the web service:
+
+```
+python manage.py telegram_set_webhook
+```
+
+Use a **dev bot** locally and the **production bot** on Render. Same Telegram user account on your phone is fine.
 
 After installing dependencies:
 

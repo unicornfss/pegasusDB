@@ -16,9 +16,7 @@ NOTIFICATION_LABELS = {
 
 
 def should_notify_booking(booking) -> bool:
-    """On production, skip dummy/practice businesses. On DEBUG dev, notify all."""
-    if booking.is_dummy_business and not settings.DEBUG:
-        return False
+    """Practice/dummy bookings are notified with a clear not-real banner at the top."""
     return True
 
 

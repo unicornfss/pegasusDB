@@ -3,5 +3,7 @@ DJANGO_SECRET_KEY=dev-change-me
 GOOGLE_MAPS_API_KEY=YOUR_BROWSER_PLACES_KEY_HERE
 TELEGRAM_BOT_TOKEN=your_bot_token_from_BotFather
 TELEGRAM_BOT_USERNAME=your_bot_username_without_at
+# Optional locally — production uses webhook; dev uses telegram_poll (no secret needed)
+# TELEGRAM_WEBHOOK_SECRET=
 SITE_URL=http://127.0.0.1:8000
 DJANGO_DEBUG=True

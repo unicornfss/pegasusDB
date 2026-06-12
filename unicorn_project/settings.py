@@ -75,9 +75,10 @@ else:
 # ----- APIs ------------------------
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
-# --- Telegram bot (local polling on dev; worker service on Render) ---
+# --- Telegram bot (webhook on production; local polling via telegram_poll) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").lstrip("@")
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "").strip()
 SITE_URL = (os.getenv("SITE_URL", "") or "").rstrip("/")
 if not SITE_URL and RENDER_EXTERNAL_HOSTNAME:
     SITE_URL = f"https://{RENDER_EXTERNAL_HOSTNAME}"

@@ -2,6 +2,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from ..models import Booking
+from .booking_details import _list_disclaimer_lines, google_maps_url_for_booking, prepend_notification_disclaimer
 
 
 def personnel_for_chat_id(chat_id: str):
@@ -41,7 +42,8 @@ def format_bookings_list(bookings):
     if not bookings:
         return "You have no upcoming bookings."
 
-    lines = ["<b>Your upcoming bookings</b>", ""]
+    lines = list(_list_disclaimer_lines(bookings))
+    lines.extend(["<b>Your upcoming bookings</b>", ""])
     for i, booking in enumerate(bookings, start=1):
         ref = booking.course_reference or "—"
         course = getattr(booking.course_type, "name", "") or "Course"
@@ -55,9 +57,6 @@ def format_bookings_list(bookings):
         lines.append("")
     lines.append("Use /directions REF to get directions for a booking reference.")
     return "\n".join(lines).strip()
-
-
-from .booking_details import google_maps_url_for_booking
 
 
 def format_directions_message(booking):
@@ -78,4 +77,5 @@ def format_directions_message(booking):
     if maps_url:
         lines.append("")
         lines.append(f'<a href="{maps_url}">Open in Google Maps</a>')
-    return "\n".join(line for line in lines if line is not None).strip()
+    body = "\n".join(line for line in lines if line is not None).strip()
+    return prepend_notification_disclaimer(body, booking)

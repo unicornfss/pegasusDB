@@ -1,8 +1,9 @@
+import asyncio
 import logging
 
 from django.core.management.base import BaseCommand
 
-from unicorn_project.training.utils.telegram_bot import run_polling
+from unicorn_project.training.utils.telegram_bot import clear_webhook, run_polling
 
 logger = logging.getLogger(__name__)
 
@@ -12,4 +13,5 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         logging.basicConfig(level=logging.INFO)
+        asyncio.run(clear_webhook())
         run_polling()

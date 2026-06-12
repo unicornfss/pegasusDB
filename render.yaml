@@ -9,6 +9,7 @@ services:
       python manage.py check
     preDeployCommand: |
       python manage.py deploy_setup
+      python manage.py telegram_set_webhook
     startCommand: |
       gunicorn unicorn_project.wsgi:application --log-file -
     envVars:
@@ -28,36 +29,7 @@ services:
         sync: false
       - key: TELEGRAM_BOT_USERNAME
         sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
       - key: BOOKING_SCHEDULER_ENABLED
         value: "true"
-
-  - type: worker
-    name: unicorn-telegram-bot
-    env: python
-    plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-    preDeployCommand: |
-      python manage.py deploy_setup
-    startCommand: python manage.py telegram_poll
-    envVars:
-      - key: DJANGO_SECRET_KEY
-        fromService:
-          type: web
-          name: unicorn-django-starter
-          envVarKey: DJANGO_SECRET_KEY
-      - key: DJANGO_DEBUG
-        value: "False"
-      - key: DATABASE_URL
-        fromService:
-          type: web
-          name: unicorn-django-starter
-          envVarKey: DATABASE_URL
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_BOT_USERNAME
-        sync: false
-      - key: SITE_URL
-        value: "https://unicorn.adminforge.co.uk"
-      - key: BOOKING_SCHEDULER_ENABLED
-        value: "false"

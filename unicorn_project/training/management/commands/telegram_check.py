@@ -45,17 +45,17 @@ class Command(BaseCommand):
             return
 
         if info.url:
+            self.stdout.write(f"Webhook URL: {info.url}")
             self.stderr.write(
                 self.style.WARNING(
-                    f"Webhook is set to {info.url!r} — polling will not receive updates. "
-                    "Run telegram_poll once to clear it, or deleteWebhook via Bot API."
+                    "Webhook is active — polling (telegram_poll) will not receive updates. "
+                    "Use telegram_set_webhook --clear before local polling."
                 )
             )
         else:
-            self.stdout.write("No webhook configured (polling mode OK).")
+            self.stdout.write("No webhook configured (polling mode OK for local dev).")
 
         self.stdout.write(
-            "\nReminder: only ONE process may poll a bot token at a time.\n"
-            "  Dev  → runserver + telegram_poll.bat (dev token only)\n"
-            "  Live → Render unicorn-telegram-bot worker only (stop local poll)"
+            "\nProduction: webhook on the web service (see telegram_set_webhook).\n"
+            "Local dev: runserver + telegram_poll.bat with a separate dev bot."
         )

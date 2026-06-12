@@ -1,16 +1,53 @@
+import asyncio
 import base64
 import io
+import json
+import logging
+import secrets
 
 import qrcode
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import redirect
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from .models import Personnel
+from .utils.telegram_bot import process_webhook_update
 from .utils.telegram_link import create_link_token
+
+logger = logging.getLogger(__name__)
+
+
+@csrf_exempt
+@require_POST
+def telegram_webhook(request, secret: str):
+    """
+    Telegram Bot API webhook (production).
+    Registered via `python manage.py telegram_set_webhook` on deploy.
+    """
+    expected = (settings.TELEGRAM_WEBHOOK_SECRET or "").strip()
+    if not expected or not secrets.compare_digest(secret, expected):
+        return HttpResponseForbidden("invalid secret")
+
+    header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not header or not secrets.compare_digest(header, expected):
+        return HttpResponseForbidden("invalid secret token")
+
+    try:
+        payload = json.loads(request.body)
+    except json.JSONDecodeError:
+        return HttpResponse("bad json", status=400)
+
+    try:
+        asyncio.run(process_webhook_update(payload))
+    except Exception:
+        logger.exception("Telegram webhook processing failed")
+        return HttpResponse("error", status=500)
+
+    return HttpResponse("ok")
 
 
 @login_required

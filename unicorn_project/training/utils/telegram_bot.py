@@ -2,6 +2,7 @@ import logging
 import sys
 
 from django.conf import settings
+from telegram import Update
 from telegram.ext import Application, CommandHandler
 
 from .telegram_handlers import bookings_command, directions_command, help_command, start_command
@@ -39,6 +40,50 @@ def build_application() -> Application:
     return app
 
 
+def webhook_url() -> str:
+    secret = (settings.TELEGRAM_WEBHOOK_SECRET or "").strip()
+    site = (getattr(settings, "SITE_URL", "") or "").rstrip("/")
+    if not secret or not site:
+        return ""
+    return f"{site}/telegram/webhook/{secret}/"
+
+
+async def process_webhook_update(update_data: dict) -> None:
+    """Handle one inbound Telegram update posted to our webhook."""
+    application = build_application()
+    async with application:
+        update = Update.de_json(update_data, application.bot)
+        await application.process_update(update)
+
+
+async def set_production_webhook() -> str:
+    """Register HTTPS webhook with Telegram (production only)."""
+    secret = (settings.TELEGRAM_WEBHOOK_SECRET or "").strip()
+    site = (getattr(settings, "SITE_URL", "") or "").rstrip("/")
+    if not secret:
+        raise RuntimeError("TELEGRAM_WEBHOOK_SECRET is not set")
+    if not site.startswith("https://"):
+        raise RuntimeError(f"SITE_URL must be https for Telegram webhook (got {site!r})")
+
+    url = webhook_url()
+    application = build_application()
+    async with application:
+        await application.bot.set_webhook(
+            url=url,
+            secret_token=secret,
+            drop_pending_updates=True,
+        )
+        me = await application.bot.get_me()
+        logger.info("Telegram webhook registered for @%s -> %s", me.username, url)
+    return url
+
+
+async def clear_webhook() -> None:
+    application = build_application()
+    async with application:
+        await application.bot.delete_webhook(drop_pending_updates=False)
+
+
 def run_polling():
     configured = (settings.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@")
     logger.info("Starting Telegram bot polling (configured as @%s)…", configured or "?")
@@ -55,7 +100,7 @@ def run_polling():
             print(
                 "\nERROR: Another process is already polling this bot token (HTTP 409).\n"
                 "  • Stop telegram_poll.bat elsewhere, or\n"
-                "  • Remove this token from the Render worker if testing locally, or\n"
+                "  • Run `python manage.py telegram_set_webhook --clear` if the bot has a production webhook, or\n"
                 "  • Use a separate dev bot token in .env (not the live production token).\n",
                 file=sys.stderr,
                 flush=True,

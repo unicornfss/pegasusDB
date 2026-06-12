@@ -26,6 +26,75 @@ NOTIFICATION_HEADINGS = {
 GREETING_TYPES = frozenset({"new_booking", "resend", "booking_reminder"})
 
 
+def notification_disclaimer_lines(booking, *, html=True):
+    """
+    Banner lines for the top of booking notifications (Telegram HTML or plain email).
+    Shown on dev (DEBUG) for every message, and on practice/dummy bookings in production.
+    """
+    lines = []
+    if settings.DEBUG:
+        if html:
+            lines.extend([
+                "⚠️ <b>DEV / TEST — NOT A REAL BOOKING</b>",
+                "<i>Sent from a development environment. Do not treat this as a live course.</i>",
+            ])
+        else:
+            lines.extend([
+                "DEV / TEST — NOT A REAL BOOKING",
+                "Sent from a development environment. Do not treat this as a live course.",
+            ])
+    elif getattr(booking, "is_dummy_business", False):
+        if html:
+            lines.extend([
+                "⚠️ <b>PRACTICE BOOKING — NOT A REAL BOOKING</b>",
+                "<i>Familiarisation / practice only. This is not a live customer booking.</i>",
+            ])
+        else:
+            lines.extend([
+                "PRACTICE BOOKING — NOT A REAL BOOKING",
+                "Familiarisation / practice only. This is not a live customer booking.",
+            ])
+    if lines:
+        lines.append("")
+    return lines
+
+
+def prepend_notification_disclaimer(body, booking, *, html=True):
+    banner = notification_disclaimer_lines(booking, html=html)
+    if not banner:
+        return body
+    return "\n".join(banner + [body])
+
+
+def _list_disclaimer_lines(bookings, *, html=True):
+    """Disclaimer for /bookings list when dev or any practice booking is included."""
+    if settings.DEBUG:
+        if html:
+            return [
+                "⚠️ <b>DEV / TEST — NOT REAL BOOKINGS</b>",
+                "<i>Development environment — courses listed may be for testing only.</i>",
+                "",
+            ]
+        return [
+            "DEV / TEST — NOT REAL BOOKINGS",
+            "Development environment — courses listed may be for testing only.",
+            "",
+        ]
+    if any(getattr(b, "is_dummy_business", False) for b in bookings):
+        if html:
+            return [
+                "⚠️ <b>PRACTICE BOOKINGS BELOW — NOT REAL BOOKINGS</b>",
+                "<i>Items marked (practice) are familiarisation bookings only.</i>",
+                "",
+            ]
+        return [
+            "PRACTICE BOOKINGS BELOW — NOT REAL BOOKINGS",
+            "Items marked (practice) are familiarisation bookings only.",
+            "",
+        ]
+    return []
+
+
 def _format_time(value):
     if not value:
         return ""
@@ -161,9 +230,6 @@ def _format_booking_details_block(booking, *, highlight=None):
         mark = "✏️ " if "status" in highlight else ""
         lines.append(f"{mark}ℹ️ <b>Status:</b> {escape(str(status))}")
 
-    if booking.is_dummy_business:
-        lines.append("🧪 <i>Practice / dummy booking</i>")
-
     if booking.status == "cancelled" and booking.cancel_reason:
         mark = "✏️ " if "status" in highlight else ""
         lines.append(f"{mark}❌ <b>Reason:</b> {escape(booking.cancel_reason)}")
@@ -241,27 +307,29 @@ def format_booking_telegram_message(booking, *, notification_type, intro=None, c
     if notification_type in GREETING_TYPES:
         lines = [_greeting_line(booking, notification_type), ""]
         lines.extend(_format_booking_details_block(booking))
-        return "\n".join(lines)
+        return prepend_notification_disclaimer("\n".join(lines), booking)
 
     if notification_type == "booking_changes" and changed_areas:
         if intro is None:
             intro = "A booking assigned to you has been updated."
-        return _format_notified_change_message(
+        body = _format_notified_change_message(
             booking,
             heading_key="booking_changes",
             intro=intro,
             changed_areas=changed_areas,
         )
+        return prepend_notification_disclaimer(body, booking)
 
     if notification_type == "booking_cancellation":
         if intro is None:
             intro = "A booking assigned to you has been cancelled."
-        return _format_notified_change_message(
+        body = _format_notified_change_message(
             booking,
             heading_key="booking_cancellation",
             intro=intro,
             changed_areas=changed_areas or [CHANGE_CANCELLATION],
         )
+        return prepend_notification_disclaimer(body, booking)
 
     heading = NOTIFICATION_HEADINGS.get(notification_type, "Booking notification")
     lines = [f"<b>{escape(heading)}</b>"]
@@ -296,9 +364,6 @@ def format_booking_telegram_message(booking, *, notification_type, intro=None, c
     if status:
         lines.append(f"ℹ️ <b>Status:</b> {escape(str(status))}")
 
-    if booking.is_dummy_business:
-        lines.append("🧪 <i>Practice / dummy booking</i>")
-
     if booking.status == "cancelled" and booking.cancel_reason:
         lines.append(f"❌ <b>Reason:</b> {escape(booking.cancel_reason)}")
 
@@ -315,4 +380,4 @@ def format_booking_telegram_message(booking, *, notification_type, intro=None, c
         path = reverse("instructor_booking_detail", args=[booking.pk])
         lines.append(f'\n🔗 <a href="{site}{path}">Open booking in Pegasus</a>')
 
-    return "\n".join(lines)
+    return prepend_notification_disclaimer("\n".join(lines), booking)
