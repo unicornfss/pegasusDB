@@ -113,11 +113,12 @@
     margin-right: 0.25rem;
   }
   .register-qr-wrap {
-    padding: 0.75rem;
-    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    padding: 0.65rem;
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .08));
     border-radius: 0.65rem;
-    background: var(--app-surface-2, #f8fafc);
+    background: #fff;
     display: inline-block;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, .04);
   }
   .comp-table thead th {
     font-size: 0.78rem;
@@ -155,19 +156,194 @@
   .course-type-page .field-fee {
     max-width: 14rem;
   }
-  .course-type-page .register-links-panel {
-    flex: 1 1 28rem;
+  .course-panels-row {
+    margin-bottom: 0.15rem;
+  }
+  .collapsible-card {
+    transition: box-shadow 0.22s ease, border-color 0.22s ease, transform 0.22s ease;
+    border-color: rgba(15, 23, 42, .09);
+  }
+  .collapsible-card:hover {
+    box-shadow: 0 6px 20px rgba(15, 23, 42, .07);
+    border-color: rgba(15, 23, 42, .12);
+  }
+  .collapsible-card .card-header-toggle {
+    width: 100%;
+    border: none;
+    margin: 0;
+    text-align: left;
+    cursor: pointer;
+    padding: 0.95rem 1.15rem 0.95rem 1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: linear-gradient(90deg, rgba(139, 0, 0, .05) 0%, var(--app-surface-2, #f8fafc) 38%);
+    border-bottom: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: inherit;
+    position: relative;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+  .collapsible-card .card-header-toggle::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.65rem;
+    bottom: 0.65rem;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--unicorn-red, #8B0000);
+    opacity: 0.75;
+  }
+  .collapsible-card .card-header-toggle:hover {
+    background: linear-gradient(90deg, rgba(139, 0, 0, .08) 0%, rgba(248, 250, 252, .98) 42%);
+  }
+  .collapsible-card .card-header-toggle:not(.collapsed) {
+    border-bottom-color: var(--app-border, rgba(15, 23, 42, .08));
+    background: linear-gradient(90deg, rgba(139, 0, 0, .07) 0%, #fff 45%);
+  }
+  .collapsible-card .card-header-toggle:focus-visible {
+    outline: 2px solid var(--unicorn-red, #8B0000);
+    outline-offset: -2px;
+  }
+  .collapsible-card .header-icon-badge {
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: 0.55rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65);
+  }
+  .collapsible-card .header-icon-badge--comp {
+    background: rgba(13, 110, 253, .12);
+    color: #0b5ed7;
+  }
+  .collapsible-card .header-icon-badge--exam {
+    background: rgba(255, 193, 7, .18);
+    color: #b58100;
+  }
+  .collapsible-card .header-icon-badge--qr {
+    background: rgba(139, 0, 0, .12);
+    color: var(--unicorn-red, #8B0000);
+  }
+  .collapsible-card .card-header-title {
+    flex: 1 1 auto;
     min-width: 0;
+    line-height: 1.3;
   }
-  .course-type-page .register-qr-panel {
-    flex: 0 0 auto;
+  .collapsible-card .header-meta-pill {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .07);
+    color: var(--app-muted, #6b7280);
+    white-space: nowrap;
   }
-  @media (min-width: 1200px) {
-    .course-type-page .register-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 2rem;
-    }
+  .collapsible-card .toggle-chevron-wrap {
+    width: 1.85rem;
+    height: 1.85rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, .06);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s ease;
+  }
+  .collapsible-card .card-header-toggle:hover .toggle-chevron-wrap {
+    background: rgba(139, 0, 0, .1);
+  }
+  .collapsible-card .toggle-chevron {
+    transition: transform 0.22s ease;
+    opacity: 0.65;
+    font-size: 0.8rem;
+  }
+  .collapsible-card .card-header-toggle:not(.collapsed) .toggle-chevron {
+    transform: rotate(180deg);
+    opacity: 0.85;
+  }
+  .collapsible-card .card-body {
+    background: linear-gradient(180deg, rgba(248, 250, 252, .55) 0%, var(--app-surface, #fff) 1.75rem);
+    padding: 1.2rem 1.15rem 1.25rem;
+  }
+  .collapsible-card .collapse:not(.show) + .card-body,
+  .collapsible-card .collapse:not(.show) .card-body {
+    border-top: none;
+  }
+  .delegate-qr-grid {
+    --qr-tile-gap: 1rem;
+  }
+  .delegate-qr-tile {
+    height: 100%;
+    border: 1px solid rgba(15, 23, 42, .08);
+    border-radius: 0.85rem;
+    padding: 1.05rem 1.05rem 1.1rem;
+    background: linear-gradient(165deg, #fff 0%, rgba(248, 250, 252, .92) 100%);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  }
+  .delegate-qr-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, .08);
+    border-color: rgba(15, 23, 42, .12);
+  }
+  .delegate-qr-tile .tile-head {
+    display: flex;
+    gap: 0.65rem;
+    align-items: flex-start;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid rgba(15, 23, 42, .06);
+  }
+  .delegate-qr-tile .tile-icon-wrap {
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.05rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+  }
+  .delegate-qr-tile--register .tile-icon-wrap {
+    background: rgba(13, 110, 253, .12);
+    color: #0b5ed7;
+  }
+  .delegate-qr-tile--feedback .tile-icon-wrap {
+    background: rgba(25, 135, 84, .12);
+    color: #157347;
+  }
+  .delegate-qr-tile--exam .tile-icon-wrap {
+    background: rgba(139, 0, 0, .11);
+    color: var(--unicorn-red, #8B0000);
+  }
+  .delegate-qr-tile .tile-title {
+    font-weight: 600;
+    font-size: 0.88rem;
+    line-height: 1.25;
+    margin-bottom: 0.15rem;
+  }
+  .delegate-qr-tile .tile-title code {
+    font-size: 0.82em;
+    color: var(--unicorn-red, #8B0000);
+  }
+  .delegate-qr-tile .tile-desc {
+    font-size: 0.78rem;
+    color: var(--app-muted, #6b7280);
+    line-height: 1.35;
+  }
+  .delegate-qr-tile .qr-actions {
+    margin-top: 0.15rem;
+  }
+  .delegate-qr-panel-intro {
+    max-width: 42rem;
   }
   .course-type-header .header-actions {
     display: flex;
@@ -190,7 +366,7 @@
       {% if not is_new_course and object.name %}
         <div class="subtitle">{{ object.name }}</div>
       {% elif is_new_course %}
-        <div class="subtitle">Set up course details, competencies, exams, and registration links.</div>
+        <div class="subtitle">Set up course details, competencies, exams, and delegate QR codes.</div>
       {% endif %}
     </div>
     <div class="header-actions">
@@ -343,105 +519,19 @@
     </div>
   </div>
 
-  {# ── Delegate registration & feedback links ── #}
-  <div class="row g-3">
-    <div class="col-lg-6">
-      {% if register_links %}
-      <div class="admin-form-card h-100">
-        <div class="card-header">
-          <i class="bi bi-qr-code"></i> Delegate registration
-        </div>
-        <div class="card-body">
-          {% if object.is_suspended %}
-          <div class="alert alert-warning py-2 px-3 small">
-            Suspended — registration links will not accept new delegates until reactivated.
-          </div>
-          {% endif %}
-          <p class="text-muted small mb-3">
-            Short link or QR — opens the register form with this course pre-selected.
-          </p>
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">Short link</label>
-            <div class="input-group input-group-sm">
-              <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.short_url }}" id="register-short-url">
-              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-short-url" title="Copy">
-                <i class="bi bi-clipboard"></i>
-              </button>
-              <a class="btn btn-outline-primary" href="{{ register_links.short_url }}" target="_blank" rel="noopener" title="Open">
-                <i class="bi bi-box-arrow-up-right"></i>
-              </a>
-            </div>
-          </div>
-          <div class="text-center">
-            <div class="register-qr-wrap d-inline-block mb-2">
-              <img src="{{ register_links.qr_url }}" alt="Registration QR for {{ object.code }}" class="img-fluid" style="max-width: 140px;">
-            </div>
-            <div>
-              <a class="btn btn-sm btn-outline-primary" href="{{ register_links.qr_url }}" download="{{ register_links.download_name }}">
-                <i class="bi bi-download"></i> Download QR
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-      {% elif not is_new_course %}
-      <div class="admin-form-card h-100">
-        <div class="card-header"><i class="bi bi-qr-code"></i> Delegate registration</div>
-        <div class="card-body text-muted small mb-0">Save this course type to generate links.</div>
-      </div>
-      {% endif %}
-    </div>
-
-    <div class="col-lg-6">
-      {% if feedback_links %}
-      <div class="admin-form-card h-100">
-        <div class="card-header">
-          <i class="bi bi-chat-left-text"></i> Course feedback
-        </div>
-        <div class="card-body">
-          <p class="text-muted small mb-3">
-            Short link or QR — opens the feedback form with this course pre-selected.
-          </p>
-          <div class="mb-3">
-            <label class="form-label fw-semibold small">Short link</label>
-            <div class="input-group input-group-sm">
-              <input type="text" class="form-control js-copy-source" readonly value="{{ feedback_links.short_url }}" id="feedback-short-url">
-              <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#feedback-short-url" title="Copy">
-                <i class="bi bi-clipboard"></i>
-              </button>
-              <a class="btn btn-outline-primary" href="{{ feedback_links.short_url }}" target="_blank" rel="noopener" title="Open">
-                <i class="bi bi-box-arrow-up-right"></i>
-              </a>
-            </div>
-          </div>
-          <div class="text-center">
-            <div class="register-qr-wrap d-inline-block mb-2">
-              <img src="{{ feedback_links.qr_url }}" alt="Feedback QR for {{ object.code }}" class="img-fluid" style="max-width: 140px;">
-            </div>
-            <div>
-              <a class="btn btn-sm btn-outline-primary" href="{{ feedback_links.qr_url }}" download="{{ feedback_links.download_name }}">
-                <i class="bi bi-download"></i> Download QR
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-      {% elif not is_new_course %}
-      <div class="admin-form-card h-100">
-        <div class="card-header"><i class="bi bi-chat-left-text"></i> Course feedback</div>
-        <div class="card-body text-muted small mb-0">Save this course type to generate links.</div>
-      </div>
-      {% endif %}
-    </div>
-  </div>
-
-  {# ── Competencies & exams ── #}
-  <div class="row g-3">
-    <div class="col-12 col-xl-6">
-      <div class="admin-form-card h-100 mb-0">
-        <div class="card-header">
-          <i class="bi bi-list-check"></i> Competencies
-        </div>
+  {# ── Competencies & exams (collapsed by default) ── #}
+  <div class="row g-3 course-panels-row">
+    <div class="col-12 {% if form.has_exam.value or form.number_of_exams.errors %}col-xl-6{% endif %}" id="competencies-column">
+      <div class="admin-form-card collapsible-card h-100 mb-0">
+        <button class="card-header-toggle {% if not formset.errors %}collapsed{% endif %}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#competencies-panel"
+                aria-expanded="{% if formset.errors %}true{% else %}false{% endif %}" aria-controls="competencies-panel">
+          <span class="header-icon-badge header-icon-badge--comp"><i class="bi bi-list-check"></i></span>
+          <span class="card-header-title">Competencies</span>
+          <span class="header-meta-pill">{{ formset.forms|length }} item{{ formset.forms|length|pluralize }}</span>
+          <span class="toggle-chevron-wrap ms-auto"><i class="bi bi-chevron-down toggle-chevron"></i></span>
+        </button>
+        <div class="collapse {% if formset.errors %}show{% endif %}" id="competencies-panel">
         <div class="card-body">
           {{ formset.management_form }}
 
@@ -513,15 +603,23 @@
             </tr>
           </template>
         </div>
+        </div>
       </div>
     </div>
 
-    <div class="col-12 col-xl-6">
-      <div class="admin-form-card h-100 mb-0" id="exams-accordion-item"
-           {% if not form.has_exam.value and not form.number_of_exams.errors %}style="display:none;"{% endif %}>
-        <div class="card-header">
-          <i class="bi bi-journal-text"></i> Exams
-        </div>
+    <div class="col-12 col-xl-6 {% if not form.has_exam.value and not form.number_of_exams.errors %}d-none{% endif %}" id="exams-column">
+      <div class="admin-form-card collapsible-card h-100 mb-0">
+        <button class="card-header-toggle {% if not form.number_of_exams.errors %}collapsed{% endif %}" type="button"
+                data-bs-toggle="collapse" data-bs-target="#exams-panel"
+                aria-expanded="{% if form.number_of_exams.errors %}true{% else %}false{% endif %}" aria-controls="exams-panel">
+          <span class="header-icon-badge header-icon-badge--exam"><i class="bi bi-journal-text"></i></span>
+          <span class="card-header-title">Exams</span>
+          {% if object and form.has_exam.value %}
+          <span class="header-meta-pill">{{ object.exams.count }} exam{{ object.exams.count|pluralize }}</span>
+          {% endif %}
+          <span class="toggle-chevron-wrap ms-auto"><i class="bi bi-chevron-down toggle-chevron"></i></span>
+        </button>
+        <div class="collapse {% if form.number_of_exams.errors %}show{% endif %}" id="exams-panel">
         <div class="card-body">
           {% if form.has_exam.value %}
             {% if form.number_of_exams.value %}
@@ -568,7 +666,145 @@
             <p class="text-muted mb-0">Enable “This course has theoretical exam(s)” above to configure exams.</p>
           {% endif %}
         </div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  {# ── Delegate QR codes (collapsed by default) ── #}
+  <div class="admin-form-card collapsible-card mb-0">
+    <button class="card-header-toggle collapsed" type="button"
+            data-bs-toggle="collapse" data-bs-target="#delegate-qr-panel"
+            aria-expanded="false" aria-controls="delegate-qr-panel">
+      <span class="header-icon-badge header-icon-badge--qr"><i class="bi bi-qr-code-scan"></i></span>
+      <span class="card-header-title">Delegate QR codes</span>
+      {% if delegate_qr_count %}
+      <span class="header-meta-pill">{{ delegate_qr_count }} code{{ delegate_qr_count|pluralize }}</span>
+      {% endif %}
+      <span class="toggle-chevron-wrap ms-auto"><i class="bi bi-chevron-down toggle-chevron"></i></span>
+    </button>
+    <div class="collapse" id="delegate-qr-panel">
+    <div class="card-body">
+      {% if register_links or feedback_links or exam_links %}
+        {% if object.is_suspended %}
+        <div class="alert alert-warning py-2 px-3 small mb-3">
+          Suspended — registration links will not accept new delegates until reactivated.
+        </div>
+        {% endif %}
+        <p class="text-muted small mb-3 mb-md-4 delegate-qr-panel-intro">
+          Short links and QR codes for delegate registration, feedback, and exams on this course.
+        </p>
+        <div class="row g-3 delegate-qr-grid">
+          {% if register_links %}
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="delegate-qr-tile delegate-qr-tile--register">
+              <div class="tile-head">
+                <span class="tile-icon-wrap"><i class="bi bi-person-plus"></i></span>
+                <div>
+                  <div class="tile-title">Registration</div>
+                  <div class="tile-desc">Register form with course pre-selected</div>
+                </div>
+              </div>
+              <label class="form-label fw-semibold small mb-1">Short link</label>
+              <div class="input-group input-group-sm mb-3">
+                <input type="text" class="form-control js-copy-source" readonly value="{{ register_links.short_url }}" id="register-short-url">
+                <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#register-short-url" title="Copy">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+                <a class="btn btn-outline-primary" href="{{ register_links.short_url }}" target="_blank" rel="noopener" title="Open">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+              </div>
+              <div class="text-center qr-actions">
+                <div class="register-qr-wrap d-inline-block mb-2">
+                  <img src="{{ register_links.qr_url }}" alt="Registration QR for {{ object.code }}" class="img-fluid" style="max-width: 120px;">
+                </div>
+                <div>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ register_links.qr_url }}" download="{{ register_links.download_name }}">
+                    <i class="bi bi-download"></i> Download QR
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if feedback_links %}
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="delegate-qr-tile delegate-qr-tile--feedback">
+              <div class="tile-head">
+                <span class="tile-icon-wrap"><i class="bi bi-chat-left-text"></i></span>
+                <div>
+                  <div class="tile-title">Feedback</div>
+                  <div class="tile-desc">Feedback form with course pre-selected</div>
+                </div>
+              </div>
+              <label class="form-label fw-semibold small mb-1">Short link</label>
+              <div class="input-group input-group-sm mb-3">
+                <input type="text" class="form-control js-copy-source" readonly value="{{ feedback_links.short_url }}" id="feedback-short-url">
+                <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#feedback-short-url" title="Copy">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+                <a class="btn btn-outline-primary" href="{{ feedback_links.short_url }}" target="_blank" rel="noopener" title="Open">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+              </div>
+              <div class="text-center qr-actions">
+                <div class="register-qr-wrap d-inline-block mb-2">
+                  <img src="{{ feedback_links.qr_url }}" alt="Feedback QR for {{ object.code }}" class="img-fluid" style="max-width: 120px;">
+                </div>
+                <div>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ feedback_links.qr_url }}" download="{{ feedback_links.download_name }}">
+                    <i class="bi bi-download"></i> Download QR
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% for link in exam_links %}
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="delegate-qr-tile delegate-qr-tile--exam">
+              <div class="tile-head">
+                <span class="tile-icon-wrap"><i class="bi bi-journal-check"></i></span>
+                <div>
+                  <div class="tile-title">Exam {{ link.sequence }} — <code>{{ link.exam_code }}</code></div>
+                  {% if link.title %}
+                  <div class="tile-desc">{{ link.title }}</div>
+                  {% else %}
+                  <div class="tile-desc">Exam start with this exam pre-selected</div>
+                  {% endif %}
+                </div>
+              </div>
+              <label class="form-label fw-semibold small mb-1">Short link</label>
+              <div class="input-group input-group-sm mb-3">
+                <input type="text" class="form-control js-copy-source" readonly value="{{ link.short_url }}" id="exam-short-url-{{ link.exam_code }}">
+                <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#exam-short-url-{{ link.exam_code }}" title="Copy">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+                <a class="btn btn-outline-primary" href="{{ link.short_url }}" target="_blank" rel="noopener" title="Open">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+              </div>
+              <div class="text-center qr-actions">
+                <div class="register-qr-wrap d-inline-block mb-2">
+                  <img src="{{ link.qr_url }}" alt="Exam QR for {{ link.exam_code }}" class="img-fluid" style="max-width: 120px;">
+                </div>
+                <div>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ link.qr_url }}" download="{{ link.download_name }}">
+                    <i class="bi bi-download"></i> Download QR
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="text-muted small mb-0">Save this course type to generate QR codes.</p>
+      {% endif %}
+    </div>
     </div>
   </div>
 
@@ -650,12 +886,14 @@
   function syncExamFields(){
     var has = q('input[name="has_exam"]') || q('#id_has_exam');
     var numWrap = document.getElementById('number-of-exams-wrapper');
-    var examsItem = document.getElementById('exams-accordion-item');
+    var examsCol = document.getElementById('exams-column');
+    var compCol = document.getElementById('competencies-column');
     var num = q('input[name="number_of_exams"]') || q('#id_number_of_exams');
     if(!has) return;
     var show = !!has.checked;
     if (numWrap) numWrap.style.display = show ? '' : 'none';
-    if (examsItem) examsItem.style.display = show ? '' : 'none';
+    if (examsCol) examsCol.classList.toggle('d-none', !show);
+    if (compCol) compCol.classList.toggle('col-xl-6', show);
     if (num) { if (show) num.setAttribute('required','required'); else num.removeAttribute('required'); }
   }
   document.addEventListener('DOMContentLoaded', function(){

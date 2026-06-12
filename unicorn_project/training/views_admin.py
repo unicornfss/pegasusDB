@@ -720,6 +720,8 @@ def course_form(request, pk=None):
 
     register_links = None
     feedback_links = None
+    exam_links = []
+    delegate_qr_count = 0
     if pk and (ct.code or "").strip():
         from .utils.register_links import (
             course_register_full_url,
@@ -729,6 +731,7 @@ def course_form(request, pk=None):
             course_feedback_full_url,
             course_feedback_short_url,
         )
+        from .utils.exam_links import exam_full_url, exam_short_url
 
         register_links = {
             "short_url": course_register_short_url(request, ct.code),
@@ -742,6 +745,25 @@ def course_form(request, pk=None):
             "qr_url": reverse("public_feedback_short_qr", kwargs={"code": ct.code}),
             "download_name": f"feedback-{ct.code}.png",
         }
+        if ct.has_exam:
+            for ex in ct.exams.order_by("sequence"):
+                code = (ex.exam_code or "").strip()
+                if not code:
+                    continue
+                exam_links.append({
+                    "sequence": ex.sequence,
+                    "exam_code": code,
+                    "title": ex.title,
+                    "short_url": exam_short_url(request, code),
+                    "full_url": exam_full_url(request, code),
+                    "qr_url": reverse("public_exam_short_qr", kwargs={"code": code}),
+                    "download_name": f"exam-{code}.png",
+                })
+        delegate_qr_count = (
+            (1 if register_links else 0)
+            + (1 if feedback_links else 0)
+            + len(exam_links)
+        )
 
     course_code_preview_url = ""
     if not pk:
@@ -757,6 +779,8 @@ def course_form(request, pk=None):
         "object": ct,
         "register_links": register_links,
         "feedback_links": feedback_links,
+        "exam_links": exam_links,
+        "delegate_qr_count": delegate_qr_count,
         "cancel_url": reverse("admin_course_list"),
         "is_new_course": pk is None,
         "course_code_preview_url": course_code_preview_url,

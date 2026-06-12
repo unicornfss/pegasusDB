@@ -209,6 +209,8 @@ urlpatterns = [
     # ---------- Public Feedback (QR-driven form) ----------
     path("f/<str:code>/qr.png", views.public_feedback_short_qr, name="public_feedback_short_qr"),
     path("f/<str:code>/", views.public_feedback_short, name="public_feedback_short"),
+    path("e/<str:code>/qr.png", views.public_exam_short_qr, name="public_exam_short_qr"),
+    path("e/<str:code>/", views.public_exam_short, name="public_exam_short"),
     path("feedback/", views.public_feedback_form, name="public_feedback_form"),
     path("feedback/thanks/", views.public_feedback_thanks, name="public_feedback_thanks"),
     path("feedback/<uuid:pk>/pdf/", views.public_feedback_pdf, name="public_feedback_pdf"),

@@ -7,8 +7,8 @@ from unicorn_project.version import APP_VERSION
 # --- Paths ----------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# --- Load .env (local dev only; platform env vars take precedence) ---
-load_dotenv(BASE_DIR / ".env", override=False)
+# --- Load .env: project file wins over machine/shell env vars when present ---
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # --- Core -----------------------------------------------------
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-key-change-me")

@@ -327,6 +327,35 @@ def public_feedback_short_qr(request, code):
     return HttpResponse(png, content_type="image/png")
 
 
+def _exam_by_code(code: str):
+    from .models import Exam
+
+    return Exam.objects.filter(exam_code__iexact=(code or "").strip()).first()
+
+
+@require_GET
+def public_exam_short(request, code):
+    """Short URL for delegate exam entry: /e/<exam_code>/ → /exam/?examcode=…"""
+    exam = _exam_by_code(code)
+    if not exam:
+        return HttpResponse("Exam not found.", status=404)
+    target = f"{reverse('delegate_exam_start')}?{urlencode({'examcode': exam.exam_code})}"
+    return redirect(target)
+
+
+@require_GET
+def public_exam_short_qr(request, code):
+    """PNG QR code encoding the short exam URL for an exam."""
+    from .utils.exam_links import exam_short_url
+    from .utils.register_links import qr_png_bytes
+
+    exam = _exam_by_code(code)
+    if not exam:
+        return HttpResponse(status=404)
+    png = qr_png_bytes(exam_short_url(request, exam.exam_code))
+    return HttpResponse(png, content_type="image/png")
+
+
 def public_delegate_register(request):
     """
     Public delegate register page.
