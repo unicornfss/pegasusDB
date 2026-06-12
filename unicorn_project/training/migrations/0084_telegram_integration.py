@@ -7,6 +7,9 @@ def drop_legacy_telegram_tables(apps, schema_editor):
         if schema_editor.connection.vendor == "sqlite":
             cursor.execute("DROP TABLE IF EXISTS training_telegramnotification")
             cursor.execute("DROP TABLE IF EXISTS training_telegramaccount")
+        elif schema_editor.connection.vendor == "postgresql":
+            cursor.execute("DROP TABLE IF EXISTS training_telegramnotification CASCADE")
+            cursor.execute("DROP TABLE IF EXISTS training_telegramaccount CASCADE")
 
 
 def _personnel_columns(connection):
@@ -38,6 +41,23 @@ def _table_exists(connection, table_name):
             )
             return cursor.fetchone() is not None
     return False
+
+
+def _notification_columns(connection):
+    with connection.cursor() as cursor:
+        if connection.vendor == "postgresql":
+            cursor.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'training_telegramnotification'
+                """
+            )
+            return {row[0] for row in cursor.fetchall()}
+        if connection.vendor == "sqlite":
+            cursor.execute("PRAGMA table_info(training_telegramnotification)")
+            return {row[1] for row in cursor.fetchall()}
+    return set()
 
 
 def apply_telegram_integration(apps, schema_editor):
@@ -95,6 +115,17 @@ def apply_telegram_integration(apps, schema_editor):
             schema_editor.execute(sqlite_sql)
 
     if not _table_exists(connection, "training_telegramnotification"):
+        TelegramNotification = apps.get_model("training", "TelegramNotification")
+        schema_editor.create_model(TelegramNotification)
+        return
+
+    columns = _notification_columns(connection)
+    if "personnel_id" not in columns:
+        with connection.cursor() as cursor:
+            if connection.vendor == "postgresql":
+                cursor.execute("DROP TABLE training_telegramnotification CASCADE")
+            elif connection.vendor == "sqlite":
+                cursor.execute("DROP TABLE training_telegramnotification")
         TelegramNotification = apps.get_model("training", "TelegramNotification")
         schema_editor.create_model(TelegramNotification)
 
