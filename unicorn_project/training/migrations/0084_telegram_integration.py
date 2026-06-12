@@ -12,7 +12,7 @@ def drop_legacy_telegram_tables(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("training", "0082_personnel_default_dashboard_role"),
+        ("training", "0083_coursetype_is_suspended"),
     ]
 
     operations = [

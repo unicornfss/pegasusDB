@@ -21,7 +21,7 @@ def drop_orphan_is_practice_booking(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("training", "0083_telegram_integration"),
+        ("training", "0084_telegram_integration"),
     ]
 
     operations = [
