@@ -413,6 +413,8 @@
       {% for err in form.instructor.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
     </div>
 
+    {% include "public/_session_picker.html" with section_class="feedback-section" title_class="feedback-section-title" %}
+
     <div class="feedback-section">
       <div class="feedback-section-title">Knowledge levels</div>
       <div class="row g-3">

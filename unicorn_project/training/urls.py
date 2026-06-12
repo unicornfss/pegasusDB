@@ -103,7 +103,9 @@ urlpatterns = [
     path("app/admin/locations/create-ajax/", app_admin.admin_location_create_ajax, name="admin_location_create_ajax"),
     path("app/admin/locations/<uuid:pk>/update-ajax/", app_admin.admin_location_update_ajax, name="admin_location_update_ajax"),
     path("app/admin/locations/<uuid:pk>/delete-ajax/", app_admin.admin_location_delete_ajax, name="admin_location_delete_ajax"),
+    path("app/admin/locations/<uuid:pk>/unarchive-ajax/", app_admin.admin_location_unarchive_ajax, name="admin_location_unarchive_ajax"),
     path("app/admin/locations/<uuid:pk>/", app_admin.location_edit, name="admin_location_edit"),
+    path("app/admin/locations/<uuid:pk>/unarchive/", app_admin.location_unarchive, name="admin_location_unarchive"),
     path("app/admin/locations/<uuid:pk>/delete/", app_admin.location_delete, name="admin_location_delete"),
 
 

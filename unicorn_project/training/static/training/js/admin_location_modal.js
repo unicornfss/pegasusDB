@@ -75,18 +75,22 @@
     const copySel = document.getElementById("add-loc-copy-contact");
     if (copySel) copySel.value = "";
     clearErrors();
-    updateModalMode(false);
+    updateModalMode(false, false);
     const addressInput = document.getElementById("add-loc-address");
     if (addressInput) {
       delete addressInput.dataset.placesVisibleAttached;
     }
   }
 
-  function updateModalMode(isEdit) {
+  function updateModalMode(isEdit, isArchived) {
     const title = document.getElementById("AddLocationModalLabel");
     const deleteBtn = document.getElementById("add-location-delete");
+    const unarchiveBtn = document.getElementById("add-location-unarchive");
+    const archivedNotice = document.getElementById("add-location-archived-notice");
     if (title) title.textContent = isEdit ? "Edit training location" : "Add training location";
-    if (deleteBtn) deleteBtn.classList.toggle("d-none", !isEdit);
+    if (deleteBtn) deleteBtn.classList.toggle("d-none", !isEdit || isArchived);
+    if (unarchiveBtn) unarchiveBtn.classList.toggle("d-none", !isEdit || !isArchived);
+    if (archivedNotice) archivedNotice.classList.toggle("d-none", !isEdit || !isArchived);
   }
 
   function rebuildContactCopyOptions(excludeId) {
@@ -205,7 +209,7 @@
     }
     resetForm();
     rebuildContactCopyOptions();
-    updateModalMode(false);
+    updateModalMode(false, false);
     showModal();
   }
 
@@ -220,7 +224,7 @@
     resetForm();
     fillFormFromLocation({ ...loc, id: String(locationId) });
     rebuildContactCopyOptions(locationId);
-    updateModalMode(true);
+    updateModalMode(true, loc.is_active === false);
     showModal();
   }
 
@@ -315,6 +319,47 @@
     }
   }
 
+  async function unarchiveLocation() {
+    const locationId = fieldValue("add-loc-id");
+    if (!locationId || !config.unarchiveUrlTemplate) return;
+
+    const msg = "Restore this location so it can be used for new bookings again?";
+    if (!window.confirm(msg)) return;
+
+    const unarchiveBtn = document.getElementById("add-location-unarchive");
+    if (unarchiveBtn) unarchiveBtn.disabled = true;
+
+    try {
+      const url = config.unarchiveUrlTemplate.replace("{id}", encodeURIComponent(locationId));
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: {
+          "X-CSRFToken": csrfToken(),
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok) {
+        showErrors(data.errors || { _: ["Could not restore location."] });
+        return;
+      }
+
+      const map = getLocationsMap();
+      if (data.location) {
+        map[data.location.id] = data.location;
+      }
+      setLocationsMap(map);
+
+      hideModal();
+      if (config.onUnarchived) config.onUnarchived(data, locationId);
+    } catch (err) {
+      console.error(err);
+      showErrors({});
+    } finally {
+      if (unarchiveBtn) unarchiveBtn.disabled = false;
+    }
+  }
+
   function bindEvents() {
     const el = modalEl();
     if (!el || el.dataset.adminLocationModalBound === "1") return;
@@ -328,6 +373,7 @@
 
     document.getElementById("add-location-save")?.addEventListener("click", saveLocation);
     document.getElementById("add-location-delete")?.addEventListener("click", deleteLocation);
+    document.getElementById("add-location-unarchive")?.addEventListener("click", unarchiveLocation);
     document.getElementById("add-loc-copy-contact")?.addEventListener("change", applyContactFromCopy);
   }
 
@@ -337,12 +383,14 @@
         createUrl: options.createUrl,
         updateUrlTemplate: options.updateUrlTemplate,
         deleteUrlTemplate: options.deleteUrlTemplate,
+        unarchiveUrlTemplate: options.unarchiveUrlTemplate || null,
         businessId: options.businessId || null,
         getBusinessId: options.getBusinessId || null,
         locationsMap: options.locationsMap || null,
         getLocationsMap: options.getLocationsMap || null,
         onSaved: options.onSaved || null,
         onDeleted: options.onDeleted || null,
+        onUnarchived: options.onUnarchived || null,
         onCancelAdd: options.onCancelAdd || null,
       };
       bindEvents();

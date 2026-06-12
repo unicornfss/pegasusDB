@@ -165,24 +165,30 @@ def _resolve_public_register_instructors(course, day_date):
 
 def _booking_day_for_public_register(course, reg_date, instructor, *, instructor_fallback=False):
     """Find the BookingDay row to attach a public delegate registration to."""
-    if not course or not reg_date:
-        return None
+    from .utils.public_sessions import resolve_booking_day
 
-    qs = BookingDay.objects.filter(
-        booking__course_type=course,
-        date=reg_date,
+    return resolve_booking_day(
+        course,
+        reg_date,
+        instructor,
+        instructor_fallback=instructor_fallback,
     )
-    if not _register_dev_mode():
-        qs = qs.filter(booking__status__in=_ACTIVE_BOOKING_STATUSES)
 
-    if not instructor_fallback and instructor:
-        matched = qs.filter(
-            Q(booking__instructor=instructor) | Q(instructor=instructor)
-        ).order_by("id").first()
-        if matched:
-            return matched
 
-    return qs.order_by("id").first()
+def _public_matching_sessions(course, day_date, single_instructor, request, *, url_day_code=""):
+    """Sessions for the picker when one QR covers multiple slots the same day."""
+    if url_day_code or not course or not day_date:
+        return []
+    instructor = single_instructor
+    if not instructor and request.method == "POST":
+        inst_id = (request.POST.get("instructor") or "").strip()
+        if inst_id:
+            instructor = Personnel.objects.filter(pk=inst_id).first()
+    if not instructor:
+        return []
+    from .utils.public_sessions import session_choices
+
+    return session_choices(course, day_date, instructor)
 
 # --- home redirect --------------------------------------------
 
@@ -296,8 +302,10 @@ def public_delegate_register(request):
     """
 
     # 0) Optional exact day binding (used by dummy/test booking quick links)
-    day_code = (request.GET.get("day") or request.POST.get("day_code") or "").strip()
+    url_day_code = (request.GET.get("day") or "").strip()
+    day_code = url_day_code or (request.POST.get("day_code") or "").strip()
     selected_day = None
+    session_errors = []
     if day_code:
         selected_day = (
             BookingDay.objects
@@ -381,6 +389,13 @@ def public_delegate_register(request):
         if course and not instructor_fallback
         else ""
     )
+    matching_sessions = _public_matching_sessions(
+        course,
+        register_date,
+        single_instructor,
+        request,
+        url_day_code=url_day_code,
+    )
 
     if request.method == "POST" and form.is_valid():
         delegate = form.save(commit=False)
@@ -397,13 +412,27 @@ def public_delegate_register(request):
         elif course and inst and form.cleaned_data.get("date"):
             reg_date = form.cleaned_data["date"]
             _, submit_fallback = _resolve_public_register_instructors(course, reg_date)
-            bd = _booking_day_for_public_register(
-                course,
-                reg_date,
-                inst,
-                instructor_fallback=submit_fallback,
-            )
-            if not bd:
+            posted_day_code = (request.POST.get("day_code") or "").strip()
+            from .utils.public_sessions import matching_booking_days, resolve_booking_day
+
+            if submit_fallback:
+                bd = resolve_booking_day(
+                    course, reg_date, inst, instructor_fallback=True
+                )
+            else:
+                days = matching_booking_days(course, reg_date, inst)
+                if len(days) > 1 and not posted_day_code:
+                    session_errors = ["Please select which session you attended."]
+                    form.add_error(None, session_errors[0])
+                    bd = None
+                else:
+                    bd = resolve_booking_day(
+                        course,
+                        reg_date,
+                        inst,
+                        day_code=posted_day_code,
+                    )
+            if not bd and not form.errors:
                 form.add_error(
                     "date",
                     "No course session was found for that course and date.",
@@ -439,6 +468,9 @@ def public_delegate_register(request):
             "instructor_dev_hint": instructor_dev_hint,
             "instructor_fallback": instructor_fallback,
             "registration_unavailable": registration_unavailable,
+            "matching_sessions": matching_sessions,
+            "posted_day_code": (request.POST.get("day_code") or "").strip(),
+            "session_errors": session_errors,
         },
     )
 
@@ -870,6 +902,20 @@ def public_feedback_form(request):
     course_q = request.GET.get("course") or request.GET.get("ct") or ""
     prefilled_course = _resolve_course_type(course_q)
 
+    url_day_code = (request.GET.get("day") or "").strip()
+    day_code = url_day_code or (request.POST.get("day_code") or "").strip()
+    selected_day = None
+    session_errors = []
+    if day_code:
+        selected_day = (
+            BookingDay.objects
+            .select_related("booking__course_type", "booking__instructor", "instructor", "booking")
+            .filter(day_code=day_code)
+            .first()
+        )
+    if selected_day and selected_day.booking and selected_day.booking.course_type:
+        prefilled_course = selected_day.booking.course_type
+
     show_feedback_date = getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
     feedback_date = timezone.localdate()
     if show_feedback_date:
@@ -883,12 +929,19 @@ def public_feedback_form(request):
                 feedback_date = parsed
 
     init = {"date": feedback_date}
-    inst_q = request.GET.get("instructor") or ""
-    if inst_q:
+    inst_q = (request.GET.get("instructor") or "").strip()
+    if selected_day:
+        feedback_date = selected_day.date
+        init["date"] = feedback_date
+    if inst_q and not selected_day:
         try:
             init["instructor"] = Personnel.objects.get(pk=inst_q)
         except Personnel.DoesNotExist:
             pass
+    elif selected_day:
+        inst = selected_day.instructor or selected_day.booking.instructor
+        if inst:
+            init["instructor"] = inst
 
     course = prefilled_course
     if not course and request.method == "POST":
@@ -901,7 +954,13 @@ def public_feedback_form(request):
 
     instructors = []
     instructor_fallback = False
-    if course:
+    if selected_day:
+        possible_ids = [selected_day.instructor_id, selected_day.booking.instructor_id]
+        instructor_ids = [pid for pid in possible_ids if pid]
+        instructors = list(
+            Personnel.objects.filter(pk__in=instructor_ids).distinct().order_by("name")
+        )
+    elif course:
         instructors, instructor_fallback = _resolve_public_register_instructors(course, feedback_date)
 
     form = PublicFeedbackForm(
@@ -921,6 +980,13 @@ def public_feedback_form(request):
         if course and not instructor_fallback and not instructors
         else ""
     )
+    matching_sessions = _public_matching_sessions(
+        course,
+        feedback_date,
+        single_instructor,
+        request,
+        url_day_code=url_day_code,
+    )
 
     if request.method == "POST" and form.is_valid():
         cd = form.cleaned_data
@@ -930,52 +996,65 @@ def public_feedback_form(request):
         inst = cd.get("instructor")
 
         booking = None
-        if course and the_date and inst:
-            booking = (
-                Booking.objects
-                .filter(
-                    course_type=course,
-                    instructor=inst,
+        if selected_day:
+            booking = selected_day.booking
+        elif course and the_date and inst:
+            _, submit_fallback = _resolve_public_register_instructors(course, the_date)
+            posted_day_code = (request.POST.get("day_code") or "").strip()
+            from .utils.public_sessions import matching_booking_days, resolve_booking_day
+
+            booking_day = None
+            if submit_fallback:
+                booking_day = resolve_booking_day(
+                    course, the_date, inst, instructor_fallback=True
                 )
-                .filter(
-                    Q(course_date=the_date) | Q(days__date=the_date)
-                )
-                .distinct()
-                .order_by("created_at")
-                .first()
+            else:
+                days = matching_booking_days(course, the_date, inst)
+                if len(days) > 1 and not posted_day_code:
+                    session_errors = ["Please select which session you attended."]
+                    form.add_error(None, session_errors[0])
+                else:
+                    booking_day = resolve_booking_day(
+                        course,
+                        the_date,
+                        inst,
+                        day_code=posted_day_code,
+                    )
+            if booking_day:
+                booking = booking_day.booking
+
+        if not form.errors:
+            FeedbackResponse.objects.create(
+                booking     = booking,
+                course_type = course,
+                date        = the_date,
+                instructor  = inst,
+
+                overall_rating         = cd.get("overall_rating"),
+                prior_knowledge        = cd.get("prior_knowledge"),
+                post_knowledge         = cd.get("post_knowledge"),
+                q_purpose_clear        = cd.get("q_purpose_clear"),
+                q_personal_needs       = cd.get("q_personal_needs"),
+                q_exercises_useful     = cd.get("q_exercises_useful"),
+                q_structure            = cd.get("q_structure"),
+                q_pace                 = cd.get("q_pace"),
+                q_content_clear        = cd.get("q_content_clear"),
+                q_instructor_knowledge = cd.get("q_instructor_knowledge"),
+                q_materials_quality    = cd.get("q_materials_quality"),
+                q_books_quality        = cd.get("q_books_quality"),
+                q_venue_suitable       = cd.get("q_venue_suitable"),
+                q_benefit_at_work      = cd.get("q_benefit_at_work"),
+                q_benefit_outside      = cd.get("q_benefit_outside"),
+
+                comments       = cd.get("comments") or "",
+                wants_callback = cd.get("wants_callback") or False,
+                contact_name   = cd.get("contact_name") or "",
+                contact_email  = cd.get("contact_email") or "",
+                contact_phone  = cd.get("contact_phone") or "",
             )
 
-        FeedbackResponse.objects.create(
-            booking     = booking,
-            course_type = course,
-            date        = the_date,
-            instructor  = inst,
-
-            overall_rating         = cd.get("overall_rating"),
-            prior_knowledge        = cd.get("prior_knowledge"),
-            post_knowledge         = cd.get("post_knowledge"),
-            q_purpose_clear        = cd.get("q_purpose_clear"),
-            q_personal_needs       = cd.get("q_personal_needs"),
-            q_exercises_useful     = cd.get("q_exercises_useful"),
-            q_structure            = cd.get("q_structure"),
-            q_pace                 = cd.get("q_pace"),
-            q_content_clear        = cd.get("q_content_clear"),
-            q_instructor_knowledge = cd.get("q_instructor_knowledge"),
-            q_materials_quality    = cd.get("q_materials_quality"),
-            q_books_quality        = cd.get("q_books_quality"),
-            q_venue_suitable       = cd.get("q_venue_suitable"),
-            q_benefit_at_work      = cd.get("q_benefit_at_work"),
-            q_benefit_outside      = cd.get("q_benefit_outside"),
-
-            comments       = cd.get("comments") or "",
-            wants_callback = cd.get("wants_callback") or False,
-            contact_name   = cd.get("contact_name") or "",
-            contact_email  = cd.get("contact_email") or "",
-            contact_phone  = cd.get("contact_phone") or "",
-        )
-
-        messages.success(request, "Thanks for your feedback!")
-        return redirect("public_feedback_thanks")
+            messages.success(request, "Thanks for your feedback!")
+            return redirect("public_feedback_thanks")
 
     from .utils.course_types import bookable_course_types
 
@@ -991,6 +1070,9 @@ def public_feedback_form(request):
             "show_feedback_date": show_feedback_date,
             "instructor_fallback": instructor_fallback,
             "instructor_dev_hint": instructor_dev_hint,
+            "matching_sessions": matching_sessions,
+            "posted_day_code": (request.POST.get("day_code") or "").strip(),
+            "session_errors": session_errors,
         },
     )
 

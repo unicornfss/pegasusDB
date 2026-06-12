@@ -494,6 +494,35 @@ def admin_location_delete_ajax(request, pk):
 
 
 @admin_required
+@require_http_methods(["POST"])
+def admin_location_unarchive_ajax(request, pk):
+    """Restore an archived training location from the admin modal."""
+    loc = get_object_or_404(TrainingLocation, pk=pk)
+    name = loc.name
+    if not loc.is_active:
+        loc.is_active = True
+        loc.save(update_fields=["is_active"])
+
+    return JsonResponse({
+        "ok": True,
+        "location": {
+            "id": str(loc.id),
+            "name": loc.name or "",
+            "property_name": loc.property_name or "",
+            "business_id": str(loc.business_id),
+            "contact_name": loc.contact_name or "",
+            "telephone": loc.telephone or "",
+            "email": loc.email or "",
+            "address_line": loc.address_line or "",
+            "town": loc.town or "",
+            "postcode": loc.postcode or "",
+            "is_active": loc.is_active,
+        },
+        "message": f'Location "{name}" restored.',
+    })
+
+
+@admin_required
 def location_edit(request, pk):
     loc = get_object_or_404(TrainingLocation, pk=pk)
     biz = loc.business
@@ -523,10 +552,27 @@ def location_edit(request, pk):
         "title": f"Edit Location – {biz.name}",
         "form": form,
         "business": biz,
+        "location": loc,
         "other_locations": other_locations,
         "back_url": reverse("admin_business_edit", args=[biz.id]),
         "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,
     })
+
+
+@admin_required
+@require_http_methods(["POST"])
+def location_unarchive(request, pk):
+    loc = get_object_or_404(TrainingLocation, pk=pk)
+    business_pk = loc.business_id
+    name = loc.name
+    if not loc.is_active:
+        loc.is_active = True
+        loc.save(update_fields=["is_active"])
+        messages.success(request, f'Location "{name}" restored.')
+    if business_pk:
+        return redirect("admin_business_edit", pk=business_pk)
+    return redirect("admin_business_list")
+
 
 @admin_required
 @require_http_methods(["POST"])

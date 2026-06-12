@@ -8,6 +8,9 @@
       </div>
       <div class="modal-body">
         <input type="hidden" id="add-loc-id" value="">
+        <div id="add-location-archived-notice" class="alert alert-secondary d-none small mb-3">
+          This location is archived and will not appear when creating new bookings until you restore it.
+        </div>
         <div id="add-location-errors" class="alert alert-danger d-none small mb-3"></div>
         <div class="row g-3">
           <div class="col-md-6">
@@ -60,7 +63,10 @@
         </div>
       </div>
       <div class="modal-footer justify-content-between">
-        <div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-success d-none" id="add-location-unarchive">
+            <i class="bi bi-arrow-counterclockwise"></i> Restore location
+          </button>
           <button type="button" class="btn btn-outline-warning d-none" id="add-location-delete">
             <i class="bi bi-archive"></i> Delete / Archive
           </button>

@@ -574,9 +574,13 @@
 
     deleteUrlTemplate: "{% url 'admin_location_delete_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
 
+    unarchiveUrlTemplate: "{% url 'admin_location_unarchive_ajax' '00000000-0000-0000-0000-000000000000' %}".replace("00000000-0000-0000-0000-000000000000", "{id}"),
+
     onSaved: function () { window.location.reload(); },
 
     onDeleted: function () { window.location.reload(); },
+
+    onUnarchived: function () { window.location.reload(); },
 
   });
 

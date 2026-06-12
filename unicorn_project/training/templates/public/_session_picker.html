@@ -1,0 +1,21 @@
+{# Session picker when the same course runs more than once on one day (e.g. two 0.5-day slots). #}
+{% if matching_sessions|length > 1 %}
+  <div class="{% if section_class %}{{ section_class }}{% else %}register-section{% endif %}">
+    <div class="{% if title_class %}{{ title_class }}{% else %}register-section-title{% endif %}">Session</div>
+    <p class="form-text mb-2">This course runs more than once today — please select your session.</p>
+    <div class="choice-list">
+      {% for s in matching_sessions %}
+        <label class="choice-card">
+          <input type="radio" name="day_code" value="{{ s.day_code }}" required
+                 {% if posted_day_code == s.day_code %}checked{% endif %}>
+          <span>{{ s.label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+    {% for err in session_errors %}
+      <div class="text-danger small mt-2">{{ err }}</div>
+    {% endfor %}
+  </div>
+{% elif matching_sessions|length == 1 %}
+  <input type="hidden" name="day_code" value="{{ matching_sessions.0.day_code }}">
+{% endif %}

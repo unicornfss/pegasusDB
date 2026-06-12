@@ -4,6 +4,12 @@
 {% block content %}
 <h3 class="mb-3">{{ title }}</h3>
 
+{% if location and not location.is_active %}
+<div class="alert alert-secondary">
+  This location is archived and will not appear when creating new bookings until you restore it.
+</div>
+{% endif %}
+
 <form method="post" class="mb-4">
   {% csrf_token %}
   {% if form.non_field_errors %}
@@ -89,16 +95,28 @@
     <button class="btn btn-success" type="submit" name="save_return" value="1">Save and return</button>
 
     {% if form.instance.pk %}
-      {# DELETE: submit this same form to the delete URL; skip validation; confirm first #}
-      <button
-        type="submit"
-        class="btn btn-warning ms-auto"
-        formaction="{% url 'admin_location_delete' form.instance.pk %}"
-        formmethod="post"
-        formnovalidate
-        onclick="return confirm('If this location has NO bookings, it will be permanently deleted.\n\nIf it HAS been used for bookings, it will be archived instead (so history is preserved).\n\nProceed?');">
-        <i class="bi bi-archive"></i> Delete / Archive
-      </button>
+      {% if location and not location.is_active %}
+        <button
+          type="submit"
+          class="btn btn-outline-success ms-auto"
+          formaction="{% url 'admin_location_unarchive' form.instance.pk %}"
+          formmethod="post"
+          formnovalidate
+          onclick="return confirm('Restore this location so it can be used for new bookings again?');">
+          <i class="bi bi-arrow-counterclockwise"></i> Restore location
+        </button>
+      {% else %}
+        {# DELETE: submit this same form to the delete URL; skip validation; confirm first #}
+        <button
+          type="submit"
+          class="btn btn-warning ms-auto"
+          formaction="{% url 'admin_location_delete' form.instance.pk %}"
+          formmethod="post"
+          formnovalidate
+          onclick="return confirm('If this location has NO bookings, it will be permanently deleted.\n\nIf it HAS been used for bookings, it will be archived instead (so history is preserved).\n\nProceed?');">
+          <i class="bi bi-archive"></i> Delete / Archive
+        </button>
+      {% endif %}
     {% endif %}
   </div>
 </form>
