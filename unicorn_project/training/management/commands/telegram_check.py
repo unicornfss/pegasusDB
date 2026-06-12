@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from django.conf import settings
@@ -10,6 +11,9 @@ class Command(BaseCommand):
     help = "Check Telegram bot token, username, and whether polling/webhook is active."
 
     def handle(self, *args, **options):
+        asyncio.run(self._check())
+
+    async def _check(self):
         token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
         configured_username = (settings.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@")
 
@@ -19,7 +23,7 @@ class Command(BaseCommand):
 
         bot = Bot(token)
         try:
-            me = bot.get_me()
+            me = await bot.get_me()
         except TelegramError as exc:
             self.stderr.write(self.style.ERROR(f"Token invalid or Telegram unreachable: {exc}"))
             return
@@ -35,7 +39,7 @@ class Command(BaseCommand):
             self.stdout.write(f"Configured username matches: @{me.username}")
 
         try:
-            info = bot.get_webhook_info()
+            info = await bot.get_webhook_info()
         except TelegramError as exc:
             self.stderr.write(self.style.ERROR(f"Could not read webhook info: {exc}"))
             return
