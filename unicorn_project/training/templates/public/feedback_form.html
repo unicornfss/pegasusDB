@@ -330,6 +330,10 @@
   <form method="post" novalidate id="feedback-form" class="feedback-card">
     {% csrf_token %}
 
+    {% if day_code %}
+      <input type="hidden" name="day_code" value="{{ day_code }}">
+    {% endif %}
+
     {% if course_type %}
       <input type="hidden"
              id="id_course_type"
@@ -413,7 +417,9 @@
       {% for err in form.instructor.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
     </div>
 
+    <div id="session-content">
     {% include "public/_session_picker.html" with section_class="feedback-section" title_class="feedback-section-title" %}
+    </div>
 
     <div class="feedback-section">
       <div class="feedback-section-title">Knowledge levels</div>
@@ -543,6 +549,7 @@
 
 <script>
   const showFeedbackDate = {{ show_feedback_date|yesno:"true,false" }};
+  const boundDayCode = "{{ day_code|escapejs }}";
 
   const courseSelect = document.getElementById('courseSelect');
   if (courseSelect) {
@@ -554,15 +561,6 @@
         if (!showFeedbackDate) params.delete('date');
         window.location.search = params.toString();
       }
-    });
-  }
-
-  const feedbackDateEl = document.getElementById('id_date');
-  if (feedbackDateEl && showFeedbackDate && feedbackDateEl.type !== 'hidden') {
-    feedbackDateEl.addEventListener('change', function(){
-      const params = new URLSearchParams(window.location.search);
-      if (this.value) params.set('date', this.value);
-      window.location.search = params.toString();
     });
   }
 
@@ -598,6 +596,184 @@
         lbl.appendChild(wordSpan);
       });
     });
+  })();
+
+  (function(){
+    const dateInput = document.getElementById('id_date');
+    const instructorContent = document.getElementById('instructor-content');
+    const defaultFeedbackDate = "{{ feedback_date|date:'Y-m-d' }}";
+
+    function currentFeedbackDate() {
+      if (showFeedbackDate && dateInput && dateInput.value) return dateInput.value;
+      return defaultFeedbackDate;
+    }
+
+    if (dateInput && !dateInput.value) dateInput.value = defaultFeedbackDate;
+
+    function currentCourseCode() {
+      const hidden = document.getElementById('id_course_type');
+      if (hidden && hidden.dataset.code) return hidden.dataset.code.trim();
+      const sel = document.getElementById('courseSelect');
+      if (sel && sel.selectedIndex >= 0) {
+        const opt = sel.options[sel.selectedIndex];
+        return (opt.dataset && opt.dataset.code) ? opt.dataset.code.trim() : "";
+      }
+      return "";
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function renderInstructors(instructors, devHint, fallback) {
+      if (!instructorContent) return;
+
+      const fallbackNote = fallback
+        ? '<p class="form-text mb-2">No instructor is scheduled for this course on the selected date. Please select your instructor below.</p>'
+        : '';
+
+      if (!instructors.length) {
+        const courseCode = currentCourseCode();
+        let html =
+          '<div class="feedback-empty-note">No instructors are scheduled for ' +
+          (courseCode ? '<strong>' + escapeHtml(courseCode) + '</strong> ' : 'this course ') +
+          'on the selected date.</div>';
+        if (devHint) {
+          html += '<div class="form-text mt-2"><i class="bi bi-info-circle"></i> ' + escapeHtml(devHint) + '</div>';
+        }
+        instructorContent.innerHTML = html;
+        return;
+      }
+
+      if (instructors.length === 1) {
+        const inst = instructors[0];
+        const singleNote = fallback
+          ? '<p class="form-text mb-2">No instructor is scheduled for this course on the selected date.</p>'
+          : '';
+        instructorContent.innerHTML =
+          singleNote +
+          '<div class="instructor-readonly">' +
+            '<i class="bi bi-person-badge" aria-hidden="true"></i>' +
+            '<span>' + escapeHtml(inst.name) + '</span>' +
+          '</div>' +
+          '<input type="hidden" name="instructor" value="' + escapeHtml(String(inst.id)) + '">';
+        return;
+      }
+
+      let html = fallbackNote + '<div class="choice-list">';
+      instructors.forEach(function(inst){
+        html +=
+          '<label class="choice-card">' +
+            '<input type="radio" name="instructor" value="' + escapeHtml(String(inst.id)) + '" class="form-check-input">' +
+            '<span>' + escapeHtml(inst.name) + '</span>' +
+          '</label>';
+      });
+      html += '</div>';
+      instructorContent.innerHTML = html;
+    }
+
+    function currentInstructorId() {
+      const hidden = document.querySelector('input[name="instructor"][type="hidden"]');
+      if (hidden && hidden.value) return hidden.value.trim();
+      const checked = document.querySelector('input[name="instructor"]:checked');
+      return checked ? checked.value.trim() : '';
+    }
+
+    function renderSessions(sessions) {
+      const sessionContent = document.getElementById('session-content');
+      if (!sessionContent) return;
+
+      if (!sessions || !sessions.length) {
+        sessionContent.innerHTML = '';
+        return;
+      }
+
+      if (sessions.length === 1) {
+        sessionContent.innerHTML =
+          '<input type="hidden" name="day_code" value="' + escapeHtml(sessions[0].day_code) + '">';
+        return;
+      }
+
+      let html =
+        '<div class="feedback-section">' +
+          '<div class="feedback-section-title">Session</div>' +
+          '<p class="form-text mb-2">This course runs more than once on this date — please select your session.</p>' +
+          '<div class="choice-list">';
+      sessions.forEach(function(session) {
+        html +=
+          '<label class="choice-card">' +
+            '<input type="radio" name="day_code" value="' + escapeHtml(session.day_code) + '" required>' +
+            '<span>' + escapeHtml(session.label) + '</span>' +
+          '</label>';
+      });
+      html += '</div></div>';
+      sessionContent.innerHTML = html;
+    }
+
+    async function refreshSessions() {
+      if (boundDayCode) return;
+
+      const code = currentCourseCode();
+      const instId = currentInstructorId();
+      const sessionContent = document.getElementById('session-content');
+      if (!sessionContent || !code || !instId) {
+        renderSessions([]);
+        return;
+      }
+
+      const url = new URL("{% url 'public_delegate_sessions_api' %}", window.location.origin);
+      url.searchParams.set("course", code);
+      url.searchParams.set("date", currentFeedbackDate());
+      url.searchParams.set("instructor", instId);
+
+      try {
+        const res = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
+        const data = await res.json();
+        renderSessions(data.sessions || []);
+      } catch (e) {
+        console.error("Failed to load sessions", e);
+        renderSessions([]);
+      }
+    }
+
+    async function refreshInstructors() {
+      const code = currentCourseCode();
+      if (!instructorContent || !code) return;
+
+      const url = new URL("{% url 'public_delegate_instructors_api' %}", window.location.origin);
+      url.searchParams.set("course", code);
+      url.searchParams.set("date", currentFeedbackDate());
+
+      try {
+        const res = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
+        const data = await res.json();
+        renderInstructors(data.instructors || [], data.dev_hint || '', !!data.fallback);
+        await refreshSessions();
+      } catch (e) {
+        console.error("Failed to load instructors", e);
+        renderSessions([]);
+      }
+    }
+
+    if (instructorContent) {
+      instructorContent.addEventListener('change', function(e) {
+        if (e.target && e.target.name === 'instructor') {
+          refreshSessions();
+        }
+      });
+    }
+
+    if (dateInput && showFeedbackDate) {
+      dateInput.addEventListener('change', function() {
+        refreshInstructors();
+      });
+    }
+
+    if (currentCourseCode()) {
+      refreshInstructors();
+    }
   })();
 
   (function(){

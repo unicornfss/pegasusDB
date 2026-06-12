@@ -2,7 +2,7 @@
 {% if matching_sessions|length > 1 %}
   <div class="{% if section_class %}{{ section_class }}{% else %}register-section{% endif %}">
     <div class="{% if title_class %}{{ title_class }}{% else %}register-section-title{% endif %}">Session</div>
-    <p class="form-text mb-2">This course runs more than once today — please select your session.</p>
+    <p class="form-text mb-2">This course runs more than once on this date — please select your session.</p>
     <div class="choice-list">
       {% for s in matching_sessions %}
         <label class="choice-card">

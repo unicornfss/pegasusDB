@@ -180,8 +180,10 @@ def _public_matching_sessions(course, day_date, single_instructor, request, *, u
     if url_day_code or not course or not day_date:
         return []
     instructor = single_instructor
-    if not instructor and request.method == "POST":
-        inst_id = (request.POST.get("instructor") or "").strip()
+    if not instructor:
+        inst_id = (request.GET.get("instructor") or "").strip()
+        if not inst_id and request.method == "POST":
+            inst_id = (request.POST.get("instructor") or "").strip()
         if inst_id:
             instructor = Personnel.objects.filter(pk=inst_id).first()
     if not instructor:
@@ -217,7 +219,7 @@ def public_delegate_instructors_api(request):
     JSON:  /register/instructors?ct=EFAAW&date=2025-10-21
     Returns [{id, name}, ...] for the instructor select.
     """
-    code = (request.GET.get("ct") or request.GET.get("code") or "").strip()
+    code = (request.GET.get("ct") or request.GET.get("code") or request.GET.get("course") or "").strip()
     date_str = (request.GET.get("date") or request.GET.get("d") or "").strip()
     day_date = _parse_yyyy_mm_dd(date_str) or timezone.localdate()
 
@@ -235,6 +237,39 @@ def public_delegate_instructors_api(request):
         if hint:
             payload["dev_hint"] = hint
     return JsonResponse(payload)
+
+
+@require_GET
+def public_delegate_sessions_api(request):
+    """
+    JSON: /register/sessions/?ct=SA&date=2026-07-13&instructor=<uuid>
+    Returns session choices when the same course runs more than once on one day.
+    """
+    if (request.GET.get("day") or "").strip():
+        return JsonResponse({"sessions": []})
+
+    code = (request.GET.get("ct") or request.GET.get("code") or request.GET.get("course") or "").strip()
+    date_str = (request.GET.get("date") or request.GET.get("d") or "").strip()
+    inst_id = (request.GET.get("instructor") or "").strip()
+    day_date = _parse_yyyy_mm_dd(date_str) or timezone.localdate()
+
+    course = CourseType.objects.filter(code__iexact=code).first()
+    if not course or not inst_id:
+        return JsonResponse({"sessions": []})
+
+    instructor = Personnel.objects.filter(pk=inst_id).first()
+    if not instructor:
+        return JsonResponse({"sessions": []})
+
+    from .utils.public_sessions import session_choices
+
+    sessions = session_choices(course, day_date, instructor)
+    return JsonResponse({
+        "sessions": [
+            {"day_code": s["day_code"], "label": s["label"]}
+            for s in sessions
+        ],
+    })
 
 
 def _course_type_by_register_code(code: str):
@@ -446,8 +481,8 @@ def public_delegate_register(request):
             success_params = {}
             if course and getattr(course, "code", None):
                 success_params["ct"] = course.code
-            if day_code:
-                success_params["day"] = day_code
+            if show_register_date and form.cleaned_data.get("date"):
+                success_params["date"] = form.cleaned_data["date"].isoformat()
             success_url = reverse("public_delegate_register_success")
             if success_params:
                 success_url = f"{success_url}?{urlencode(success_params)}"
@@ -480,13 +515,10 @@ def public_delegate_register_success(request):
     params = {}
     ct = (request.GET.get("ct") or "").strip()
     date = (request.GET.get("date") or "").strip()
-    day = (request.GET.get("day") or "").strip()
     if ct:
         params["ct"] = ct
     if date:
         params["date"] = date
-    if day:
-        params["day"] = day
 
     register_another_url = reverse("public_delegate_register")
     if params:
@@ -1073,6 +1105,8 @@ def public_feedback_form(request):
             "matching_sessions": matching_sessions,
             "posted_day_code": (request.POST.get("day_code") or "").strip(),
             "session_errors": session_errors,
+            "day_code": day_code,
+            "feedback_date": feedback_date,
         },
     )
 

@@ -403,7 +403,9 @@
       {% for err in form.instructor.errors %}<div class="text-danger small mt-2">{{ err }}</div>{% endfor %}
     </div>
 
+    <div id="session-content">
     {% include "public/_session_picker.html" %}
+    </div>
 
     {# ── Health ── #}
     <div class="register-section">
@@ -434,6 +436,7 @@
 
 <script>
   const showRegisterDate = {{ show_register_date|yesno:"true,false" }} || {{ REGISTER_SHOW_DATE|yesno:"true,false" }};
+  const boundDayCode = "{{ day_code|escapejs }}";
   const courseSelect = document.getElementById('courseSelect');
   if (courseSelect) {
     courseSelect.addEventListener('change', function(){
@@ -579,6 +582,70 @@
       instructorContent.innerHTML = html;
     }
 
+    function currentInstructorId() {
+      const hidden = document.querySelector('input[name="instructor"][type="hidden"]');
+      if (hidden && hidden.value) return hidden.value.trim();
+      const checked = document.querySelector('input[name="instructor"]:checked');
+      return checked ? checked.value.trim() : '';
+    }
+
+    function renderSessions(sessions) {
+      const sessionContent = document.getElementById('session-content');
+      if (!sessionContent) return;
+
+      if (!sessions || !sessions.length) {
+        sessionContent.innerHTML = '';
+        return;
+      }
+
+      if (sessions.length === 1) {
+        sessionContent.innerHTML =
+          '<input type="hidden" name="day_code" value="' + escapeHtml(sessions[0].day_code) + '">';
+        return;
+      }
+
+      let html =
+        '<div class="register-section">' +
+          '<div class="register-section-title">Session</div>' +
+          '<p class="form-text mb-2">This course runs more than once on this date — please select your session.</p>' +
+          '<div class="choice-list">';
+      sessions.forEach(function(session) {
+        html +=
+          '<label class="choice-card">' +
+            '<input type="radio" name="day_code" value="' + escapeHtml(session.day_code) + '" required>' +
+            '<span>' + escapeHtml(session.label) + '</span>' +
+          '</label>';
+      });
+      html += '</div></div>';
+      sessionContent.innerHTML = html;
+    }
+
+    async function refreshSessions() {
+      if (boundDayCode) return;
+
+      const code = currentCourseCode();
+      const instId = currentInstructorId();
+      const sessionContent = document.getElementById('session-content');
+      if (!sessionContent || !code || !instId) {
+        renderSessions([]);
+        return;
+      }
+
+      const url = new URL("{% url 'public_delegate_sessions_api' %}", window.location.origin);
+      url.searchParams.set("ct", code);
+      url.searchParams.set("date", currentRegisterDate());
+      url.searchParams.set("instructor", instId);
+
+      try {
+        const res = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
+        const data = await res.json();
+        renderSessions(data.sessions || []);
+      } catch (e) {
+        console.error("Failed to load sessions", e);
+        renderSessions([]);
+      }
+    }
+
     async function refreshInstructors() {
       const code = currentCourseCode();
       if (!instructorContent || !code) return;
@@ -591,9 +658,19 @@
         const res = await fetch(url.toString(), { headers: { "Accept": "application/json" } });
         const data = await res.json();
         renderInstructors(data.instructors || [], data.dev_hint || '', !!data.fallback);
+        await refreshSessions();
       } catch (e) {
         console.error("Failed to load instructors", e);
+        renderSessions([]);
       }
+    }
+
+    if (instructorContent) {
+      instructorContent.addEventListener('change', function(e) {
+        if (e.target && e.target.name === 'instructor') {
+          refreshSessions();
+        }
+      });
     }
 
     if (courseSelect) {

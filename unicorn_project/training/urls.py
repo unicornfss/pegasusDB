@@ -77,6 +77,7 @@ urlpatterns = [
     path("register/", views.public_delegate_register, name="public_delegate_register"),
     path("register/success/", views.public_delegate_register_success, name="public_delegate_register_success"),
     path("register/instructors/", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),
+    path("register/sessions/", views.public_delegate_sessions_api, name="public_delegate_sessions_api"),
 
     # ---------- Public/API helpers ----------
     path("public/attendance/<int:booking_day_id>/", views.public_attendance, name="public_attendance"),
