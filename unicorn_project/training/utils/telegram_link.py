@@ -1,9 +1,12 @@
 import hashlib
 import hmac
+import logging
 import time
 import uuid
 
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 LINK_TTL_SECONDS = 3600
 
@@ -32,27 +35,37 @@ def consume_link_token(token: str):
     token = (token or "").strip()
     parts = token.split("-")
     if len(parts) != 3:
+        logger.warning("Telegram link rejected: expected 3 token parts, got %s", len(parts))
         return None
 
     pid_hex, issued_at_str, digest = parts
     if len(pid_hex) != 32 or len(digest) != 12:
+        logger.warning("Telegram link rejected: malformed token segments")
         return None
 
     try:
         issued_at = int(issued_at_str)
     except ValueError:
+        logger.warning("Telegram link rejected: invalid timestamp")
         return None
 
     age = time.time() - issued_at
     if age < 0 or age > LINK_TTL_SECONDS:
+        logger.warning("Telegram link rejected: token age %ss (ttl %ss)", int(age), LINK_TTL_SECONDS)
         return None
 
     payload = f"{pid_hex}.{issued_at}".encode()
     expected = hmac.new(_link_secret(), payload, hashlib.sha256).hexdigest()[:12]
     if not hmac.compare_digest(digest, expected):
+        logger.warning(
+            "Telegram link rejected: HMAC mismatch — token was not signed with this "
+            "server's DJANGO_SECRET_KEY (often caused by local telegram_poll using the "
+            "production bot token, or web/worker secret mismatch on Render)."
+        )
         return None
 
     try:
         return str(uuid.UUID(hex=pid_hex))
     except ValueError:
+        logger.warning("Telegram link rejected: invalid personnel UUID")
         return None

@@ -96,35 +96,42 @@ python manage.py migrate
 
 ---
 
-## Telegram bot (local dev, `telegram_bot` branch)
+## Telegram bot (local dev)
 
-Add these to your `.env` (enter the token yourself — do not paste it in chat):
+Use a **separate test bot** from production (create a second bot via @BotFather).
+
+Add these to your `.env` — **token and username must be from the same bot**:
 
 ```
-TELEGRAM_BOT_TOKEN=your_bot_token_from_BotFather
-TELEGRAM_BOT_USERNAME=your_bot_username_without_at
+TELEGRAM_BOT_TOKEN=your_dev_bot_token_from_BotFather
+TELEGRAM_BOT_USERNAME=your_dev_bot_username_without_at
 SITE_URL=http://127.0.0.1:8000
 ```
+
+Do **not** use the production bot token/username locally while testing live linking.
 
 Run **two** terminals:
 
 1. Django (as usual): `.\runserver.bat`
 2. Telegram polling: `.\telegram_poll.bat`
 
-Then on **Profile**, scan the QR code to link Telegram. Enable notification toggles and save.
+**Stop `telegram_poll.bat`** whenever you test QR linking on the live site — only one process may poll a bot token at a time, and local `.env` uses a different `DJANGO_SECRET_KEY` than Render.
 
-On local dev (`DEBUG=True`), instructors are notified for **all** bookings including practice/dummy ones. Each Telegram message adds a line to the booking notes.
+Then on **Profile**, scan the QR code to link Telegram. Enable notification toggles and save.
 
 ---
 
 ## Telegram bot (Render production)
 
-After merge/deploy:
+1. Set on **both** the **web** service and **unicorn-telegram-bot** worker:
+   - `TELEGRAM_BOT_TOKEN` — production bot token from @BotFather
+   - `TELEGRAM_BOT_USERNAME` — production bot username (no `@`)
+   - `SITE_URL=https://unicorn.adminforge.co.uk`
+2. Worker must share `DJANGO_SECRET_KEY` with web (see `render.yaml` `fromService`).
+3. Ensure the **unicorn-telegram-bot** worker is running (`python manage.py telegram_poll`).
+4. Link tokens are signed with `DJANGO_SECRET_KEY` (no shared cache required).
 
-1. Set on the **web** service: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME`, and optionally `SITE_URL` (defaults from `RENDER_EXTERNAL_HOSTNAME` if omitted).
-2. The **unicorn-telegram-bot** worker runs `python manage.py telegram_poll` (see `render.yaml`).
-3. Link tokens use **Postgres cache** (`createcachetable` in the build) so web and worker share the same store.
-4. Optional: set `REDIS_URL` to use Redis instead of the database cache.
+**Same Telegram user account** on your phone is fine for dev and prod. **Same bot token** in dev and prod is not — use two bots, or stop local polling when using live.
 
 After installing dependencies:
 
