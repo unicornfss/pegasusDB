@@ -8,11 +8,8 @@ services:
       python manage.py collectstatic --noinput
       python manage.py check
     preDeployCommand: |
-      python manage.py migrate --noinput
-      python manage.py createcachetable
+      python manage.py deploy_setup
     startCommand: |
-      python manage.py migrate --noinput
-      python manage.py createcachetable
       gunicorn unicorn_project.wsgi:application --log-file -
     envVars:
       - key: DJANGO_SECRET_KEY
@@ -41,12 +38,8 @@ services:
     buildCommand: |
       pip install -r requirements.txt
     preDeployCommand: |
-      python manage.py migrate --noinput
-      python manage.py createcachetable
-    startCommand: |
-      python manage.py migrate --noinput
-      python manage.py createcachetable
-      python manage.py telegram_poll
+      python manage.py deploy_setup
+    startCommand: python manage.py telegram_poll
     envVars:
       - key: DJANGO_SECRET_KEY
         fromService:
