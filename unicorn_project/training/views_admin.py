@@ -17,7 +17,7 @@ from django.db import transaction
 from django.db.models import Q, Count, Min, Max, Avg
 from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
-from django.http import HttpResponseForbidden, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponseForbidden, HttpResponse, JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse, NoReverseMatch
 from django.utils import timezone
@@ -48,7 +48,14 @@ from .forms import (
 from .views_instructor import _feedback_queryset_for_booking, list_course_receipts_drive, render_invoice_pdf_via_preview
 from .utils.certificates import build_certificates_pdf_for_booking, _unique_delegates_for_booking
 from .google_oauth import get_drive_service
-from .services.dummy_bookings import delete_dummy_booking_tree
+from .services.dummy_bookings import (
+    admin_may_view_booking,
+    delete_dummy_booking_tree,
+    filter_bookings_visible_to_admin,
+    filter_delegate_registers_visible_to_admin,
+    get_admin_booking_day_or_404,
+    get_admin_booking_or_404,
+)
 
 
 
@@ -284,11 +291,12 @@ def business_form(request, pk=None):
     f_to     = request.GET.get("b_to") or ""
 
     if obj:
-        base = (
+        base = filter_bookings_visible_to_admin(
+            request.user,
             Booking.objects
             .filter(business=obj)
             .select_related("course_type", "instructor", "training_location")
-            .annotate(first_day=Min("days__date"))   # earliest day from related BookingDay rows
+            .annotate(first_day=Min("days__date")),
         )
 
         # Distinct statuses present for this business (for tabs)
@@ -893,6 +901,8 @@ def booking_list(request):
     if date_to:
         qs = qs.filter(course_date__lte=date_to)
 
+    qs = filter_bookings_visible_to_admin(request.user, qs)
+
     # ----- sorting
     sort_key = (request.GET.get("o") or "date").strip()
     sort_dir = (request.GET.get("dir") or "desc").strip()  # asc|desc
@@ -1126,7 +1136,7 @@ def booking_form(request, pk=None):
     - On POST: save and replace BookingDay rows from hidden JSON ('booking_days' or 'days_json').
     - On GET: send booking_days_initial_json so the days table repopulates.
     """
-    obj = get_object_or_404(Booking, pk=pk) if pk else None
+    obj = get_admin_booking_or_404(request.user, pk) if pk else None
 
     if request.method == "POST":
         from .utils.booking_change_detection import (
@@ -1319,6 +1329,10 @@ def booking_form(request, pk=None):
                 )
                 if changed_areas:
                     notify_booking_changes(booking_for_notify, changed_areas=changed_areas)
+
+            from .utils.travel_time import update_booking_travel_duration
+
+            update_booking_travel_duration(booking)
 
             messages.success(request, "Booking saved.")
             if "save_return" in request.POST:
@@ -1567,7 +1581,7 @@ def admin_invoice_pdf(request, pk):
     preview so we reuse the exact same PDF builder.
     """
     # Optional: you can still check an invoice exists and bounce back nicely
-    booking = get_object_or_404(Booking, pk=pk)
+    booking = get_admin_booking_or_404(request.user, pk)
     if booking.is_dummy_business:
         messages.info(request, "Invoices are hidden for dummy businesses in admin screens.")
         return redirect("admin_booking_edit", pk=booking.pk)
@@ -1587,7 +1601,7 @@ def admin_booking_certificates_selected(request, pk):
     Called via GET with one or more ?delegate_id=<id> params.
     If none are provided, behaves like 'all certificates'.
     """
-    booking = get_object_or_404(Booking, pk=pk)
+    booking = get_admin_booking_or_404(request.user, pk)
 
     ids = request.GET.getlist("delegate_id")
     registers = None
@@ -1616,9 +1630,10 @@ def admin_booking_certificates_selected(request, pk):
 @admin_required
 @require_http_methods(["GET", "POST"])
 def booking_delete(request, pk):
-    booking = get_object_or_404(
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
         Booking.objects.select_related("business", "course_type", "training_location"),
-        pk=pk
     )
 
     if request.method == "POST":
@@ -1643,9 +1658,10 @@ def booking_delete(request, pk):
 @admin_required
 @require_http_methods(["GET", "POST"])
 def booking_cancel(request, pk):
-    booking = get_object_or_404(
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
         Booking.objects.select_related("business", "course_type", "training_location"),
-        pk=pk
     )
 
     if request.method == "POST":
@@ -1671,9 +1687,10 @@ def booking_cancel(request, pk):
 @admin_required
 @require_http_methods(["GET", "POST"])
 def booking_reinstate(request, pk):
-    booking = get_object_or_404(
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
         Booking.objects.select_related("business", "course_type", "training_location"),
-        pk=pk
     )
 
     if request.method == "POST":
@@ -1702,11 +1719,12 @@ def booking_reinstate(request, pk):
 @admin_required
 @require_http_methods(["POST"])
 def admin_booking_telegram_send(request, pk):
-    booking = get_object_or_404(
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
         Booking.objects.select_related(
             "instructor", "course_type", "business", "training_location"
         ).prefetch_related("days"),
-        pk=pk,
     )
     from .utils.booking_notifications import notify_resend
 
@@ -1728,9 +1746,10 @@ def booking_unlock(request, pk):
     - Sets status back to 'awaiting_closure'
     - Optionally clears the two 'manual submission to follow' flags
     """
-    booking = get_object_or_404(
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
         Booking.objects.select_related("business", "course_type", "training_location"),
-        pk=pk
     )
 
     if request.method == "POST":
@@ -1945,6 +1964,8 @@ def admin_delegate_search(request):
             Q(employee_id__icontains=query) |
             Q(notes__icontains=query)
         )
+
+    qs = filter_delegate_registers_visible_to_admin(request.user, qs)
 
     # Order so earlier days for a course come first
     qs = qs.order_by(
@@ -2185,6 +2206,8 @@ def admin_certificate_name_edit(request, reg_pk: int):
         pk=reg_pk,
     )
     booking = register.booking_day.booking
+    if not admin_may_view_booking(request.user, booking):
+        raise Http404("Register not found.")
 
     if request.method == "POST":
         # Checkbox: revert to original delegate name?
@@ -2295,9 +2318,10 @@ def booking_day_registers(request, pk):
     """
     Admin page to view/edit delegates for a specific BookingDay.
     """
-    day = get_object_or_404(
+    day = get_admin_booking_day_or_404(
+        request.user,
+        pk,
         BookingDay.objects.select_related("booking", "booking__course_type", "booking__business"),
-        pk=pk
     )
 
     # Formset to edit multiple delegates quickly
@@ -2350,13 +2374,14 @@ def booking_day_registers(request, pk: int):
     return just the delegates table so it can be injected into the Registers tab
     without reloading the whole page.
     """
-    day = get_object_or_404(
+    day = get_admin_booking_day_or_404(
+        request.user,
+        pk,
         BookingDay.objects.select_related(
             "booking__course_type",
             "booking__business",
             "booking__instructor",
         ),
-        pk=pk,
     )
 
     registers = (
@@ -2409,7 +2434,9 @@ def booking_day_registers(request, pk: int):
 @admin_required
 @require_http_methods(["GET", "POST"])
 def delegate_register_delete(request, pk: int):
-    reg = get_object_or_404(DelegateRegister.objects.select_related("booking_day", "instructor"), pk=pk)
+    reg = get_object_or_404(DelegateRegister.objects.select_related("booking_day__booking"), pk=pk)
+    if not admin_may_view_booking(request.user, reg.booking_day.booking):
+        raise Http404("Register not found.")
     back = reverse("admin_booking_day_registers", args=[reg.booking_day_id]) if reg.booking_day_id else reverse("admin_booking_list")
 
     if request.method == "POST":
@@ -2597,13 +2624,14 @@ def admin_dashboard(request):
 def api_courses_today(request):
     today = timezone.localdate()
 
-    bookings = (
+    bookings = filter_bookings_visible_to_admin(
+        request.user,
         Booking.objects.filter(
             days__date=today,
             status__in=["scheduled", "in_progress", "awaiting_closure"],
         )
         .select_related("instructor", "business", "training_location", "course_type")
-        .distinct()
+        .distinct(),
     )
 
     results = []
@@ -2628,14 +2656,15 @@ def api_courses_today(request):
 def api_courses_awaiting_closure(request):
     today = timezone.localdate()
 
-    bookings = (
+    bookings = filter_bookings_visible_to_admin(
+        request.user,
         Booking.objects.filter(
             status="awaiting_closure",
             days__date__lt=today,
         )
         .select_related("instructor", "business", "training_location", "course_type")
         .prefetch_related("days")
-        .distinct()
+        .distinct(),
     )
 
     results = []
@@ -2666,15 +2695,16 @@ def api_courses_in_7_days(request):
     today = timezone.localdate()
     target = today + timedelta(days=7)
 
-    bookings = (
+    bookings = filter_bookings_visible_to_admin(
+        request.user,
         Booking.objects.filter(
             days__date__gt=today,
             days__date__lte=target,
-            status="scheduled",  # only scheduled courses 7 days out
+            status="scheduled",
         )
         .select_related("instructor", "business", "training_location", "course_type")
         .prefetch_related("days")
-        .distinct()
+        .distinct(),
     )
 
     results = []

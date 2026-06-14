@@ -12,6 +12,7 @@ from django.utils.dateparse import parse_date
 from django.utils.timezone import now
 from django.db.models import Q
 from .models import Booking, Exam, DelegateRegister, ExamAnswer, ExamAttempt, ExamAttemptAnswer, ExamQuestion, Personnel, CourseType
+from .services.assessment_exams import recompute_outcomes_for_exam_attempt
 from .forms_exam import DelegateExamStartForm
 from django.views.decorators.csrf import ensure_csrf_cookie, csrf_protect
 from django.views.decorators.http import require_http_methods
@@ -844,6 +845,7 @@ def _score_attempt(attempt: ExamAttempt):
         attempt.finished_at = timezone.now()
 
     attempt.save()
+    recompute_outcomes_for_exam_attempt(attempt)
     return required, viva_required
 
 def delegate_exam_finish(request):

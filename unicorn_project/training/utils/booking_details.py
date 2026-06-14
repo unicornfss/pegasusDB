@@ -303,6 +303,14 @@ def format_booking_resend_telegram_message(booking):
     return format_booking_telegram_message(booking, notification_type="resend")
 
 
+def format_booking_details_lookup_message(booking):
+    """Full booking block for /bookings drill-down (no notification greeting)."""
+    ref = booking.course_reference or "—"
+    lines = [f"<b>Booking details — {escape(ref)}</b>", ""]
+    lines.extend(_format_booking_details_block(booking))
+    return prepend_notification_disclaimer("\n".join(lines), booking)
+
+
 def format_booking_telegram_message(booking, *, notification_type, intro=None, changed_areas=None):
     if notification_type in GREETING_TYPES:
         lines = [_greeting_line(booking, notification_type), ""]

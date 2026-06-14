@@ -33,7 +33,7 @@
                             <ul class="mt-2 ps-4 border-start border-3 small">
                                 {% for booking in incomplete_registers %}
                                     <li class="mb-1">
-                                        <a href="{% url 'instructor_booking_detail' booking.pk %}#registers-tab"
+                                        <a href="{% url 'instructor_booking_detail' booking.pk %}#days-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
                                             · {{ booking.days.first.date|date:"j M Y" }}
@@ -146,11 +146,24 @@
                 {% if todays_days %}
                     {% for d in todays_days %}
                         <div class="p-3 border rounded mb-3">
-                            <h5 class="fw-bold">{{ d.booking.course_text }}</h5>
-
-                            <p class="mb-1"><strong>Location:</strong> {{ d.booking.location }}</p>
-                            <p class="mb-1"><strong>Start:</strong> {{ d.start_time|default:"N/A" }}</p>
-                            <p class="mb-3"><strong>Delegates:</strong> {{ d.booking.delegate_count }}</p>
+                            <p class="mb-1"><strong>Course type:</strong> {{ d.booking.course_type.name }}</p>
+                            <p class="mb-1"><strong>Business:</strong> {{ d.booking.business.name }}</p>
+                            <p class="mb-1"><strong>Location:</strong>
+                                {% if d.booking.training_location %}
+                                    {{ d.booking.training_location.name }}{% if d.booking.training_address_for_map %} — {{ d.booking.training_address_for_map }}{% endif %}
+                                {% else %}
+                                    <span class="text-muted">TBC</span>
+                                {% endif %}
+                            </p>
+                            <p class="mb-3"><strong>Start:</strong>
+                                {% if d.start_time %}
+                                    {{ d.start_time|time:"H:i" }}
+                                {% elif d.booking.start_time %}
+                                    {{ d.booking.start_time|time:"H:i" }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </p>
 
                             <a href="{% url 'instructor_booking_detail' d.booking.pk %}"
                                class="btn btn-primary me-2">

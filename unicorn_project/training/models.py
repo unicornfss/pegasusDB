@@ -275,8 +275,26 @@ class Personnel(models.Model):
     )
     notify_reminders_telegram = models.BooleanField(
         default=False,
-        help_text="Telegram reminder before upcoming bookings.",
+        help_text="Telegram departure reminder on the course day.",
     )
+    notify_upcoming_bookings_telegram = models.BooleanField(
+        default=False,
+        help_text="Telegram reminders before upcoming bookings (days chosen on profile).",
+    )
+    upcoming_reminder_days_1 = models.PositiveSmallIntegerField(null=True, blank=True)
+    upcoming_reminder_days_2 = models.PositiveSmallIntegerField(null=True, blank=True)
+    upcoming_reminder_days_3 = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    def upcoming_reminder_offsets(self):
+        offsets = []
+        for value in (
+            self.upcoming_reminder_days_1,
+            self.upcoming_reminder_days_2,
+            self.upcoming_reminder_days_3,
+        ):
+            if value and value > 0 and value not in offsets:
+                offsets.append(int(value))
+        return sorted(offsets, reverse=True)
 
     @property
     def avatar_initial(self):
@@ -474,6 +492,11 @@ class Booking(models.Model):
     allow_mileage_claim = models.BooleanField(default=True)
     mileage_fee = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     allow_accommodation = models.BooleanField(default=False)
+    travel_duration_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="One-way driving time (seconds) from instructor to venue via Google Maps.",
+    )
 
     # snapshot of location’s contact (prefilled, editable)
     contact_name   = models.CharField(max_length=200, blank=True)
@@ -702,6 +725,7 @@ class BookingDay(models.Model):
     )
     
     note = models.CharField(max_length=255, blank=True, default="")
+    departure_reminder_sent_at = models.DateTimeField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
         # auto-generate if missing

@@ -56,6 +56,35 @@ for host in ALLOWED_HOSTS:
     for origin in (f"https://{host}", f"http://{host}"):
         if origin not in CSRF_TRUSTED_ORIGINS:
             CSRF_TRUSTED_ORIGINS.append(origin)
+
+
+def _dev_lan_origin(port: int = 8000) -> str | None:
+    """Best-effort LAN IP for phone/tablet testing on the same Wi-Fi."""
+    import socket
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            ip = sock.getsockname()[0]
+        if ip and not ip.startswith("127."):
+            return f"http://{ip}:{port}"
+    except OSError:
+        return None
+    return None
+
+
+if DEBUG:
+    _dev_port = int(os.getenv("DEV_SERVER_PORT", "8000"))
+    for _origin in (
+        f"http://127.0.0.1:{_dev_port}",
+        f"http://localhost:{_dev_port}",
+        _dev_lan_origin(_dev_port),
+    ):
+        if _origin and _origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(_origin)
+    _dev_site = os.getenv("DEV_SITE_URL", "").strip().rstrip("/")
+    if _dev_site and _dev_site not in CSRF_TRUSTED_ORIGINS:
+        CSRF_TRUSTED_ORIGINS.append(_dev_site)
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 if not DEBUG:
     SESSION_COOKIE_SECURE = True
@@ -74,6 +103,8 @@ else:
 
 # ----- APIs ------------------------
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
+DEPARTURE_REMINDER_BUFFER_MINUTES = int(os.getenv("DEPARTURE_REMINDER_BUFFER_MINUTES", "30"))
+DEPARTURE_MORNING_TODAY_TIME = os.getenv("DEPARTURE_MORNING_TODAY_TIME", "07:00")
 
 # --- Telegram bot (webhook on production; local polling via telegram_poll) ---
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

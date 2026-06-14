@@ -36,7 +36,7 @@
       <i class="bi bi-list"></i>
     </button>
     <div class="d-flex align-items-center gap-2">
-      <img src="{% static 'training/img/' %}{{ current_logo }}" alt="Unicorn logo" height="125" class="brand-logo d-block mx-auto">
+      <img src="{% static 'training/img/' %}{{ current_logo }}" alt="Unicorn logo" height="40" class="brand-logo d-block">
       <strong>Unicorn</strong>
     </div>
   </header>
@@ -55,15 +55,15 @@
           <img src="{% static 'training/img/' %}{{ current_logo }}" height="36" alt="">
           <strong id="sidebarLabel">Unicorn</strong>
         </div>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        <button type="button" class="btn-close btn-close-white" data-sidebar-dismiss aria-label="Close"></button>
       </div>
 
       {# Offcanvas body holds your existing sidebar content #}
       <div class="offcanvas-body p-3 d-flex flex-column">
 
-        {# Centered brand #}
-        <div class="brand text-center mb-2">
-          <img src="{% static 'training/img/' %}{{ current_logo }}" height="150" alt="Unicorn logo"
+        {# Centered brand (desktop sidebar — hidden on mobile; mobile uses offcanvas header) #}
+        <div class="brand sidebar-brand text-center mb-2">
+          <img src="{% static 'training/img/' %}{{ current_logo }}" alt="Unicorn logo"
                class="brand-logo d-block mx-auto">
           <strong class="d-block mt-1">Unicorn</strong>
         </div>
@@ -71,11 +71,11 @@
         {# Centered clock #}
         <div class="small mb-3 text-center" id="clock" aria-live="polite"></div>
         
-        <nav class="nav-tree" aria-label="Main navigation">
+        <nav class="nav-tree" aria-label="Main navigation" data-default-menu-group="{{ current_role|default:'' }}">
 
     {# ===================== ADMIN MENU ===================== #}
     {% if is_admin %}
-    <div class="menu-group collapsed" data-menu-group="admin">
+    <div class="menu-group{% if current_role != 'admin' %} collapsed{% endif %}" data-menu-group="admin">
         <div class="menu-group-header">
             <span>Admin menu</span>
             <span class="menu-group-chevron bi bi-chevron-down"></span>
@@ -146,14 +146,14 @@
 
     {# ===================== INSTRUCTOR MENU ===================== #}
     {% if is_instructor %}
-    <div class="menu-group collapsed" data-menu-group="instructor">
+    <div class="menu-group{% if current_role != 'instructor' %} collapsed{% endif %}" data-menu-group="instructor">
         <div class="menu-group-header">
             <span>Instructor menu</span>
             <span class="menu-group-chevron bi bi-chevron-down"></span>
         </div>
         <div class="menu-group-content">
 
-            <a class="leaf {% if request.resolver_match.url_name == 'instructor_home' %}active{% endif %}"
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_home' or request.resolver_match.url_name == 'instructor_dashboard' %}active{% endif %}"
                href="{% url 'instructor_home' %}">
                 <i class="bi bi-speedometer"></i> Instructor dashboard
             </a>
@@ -190,7 +190,7 @@
 
     {# ===================== ENGINEER MENU ===================== #}
     {% if is_engineer %}
-    <div class="menu-group collapsed" data-menu-group="engineer">
+    <div class="menu-group{% if current_role != 'engineer' %} collapsed{% endif %}" data-menu-group="engineer">
         <div class="menu-group-header">
             <span>Engineer menu</span>
             <span class="menu-group-chevron bi bi-chevron-down"></span>
@@ -209,7 +209,7 @@
 
     {# ===================== INSPECTOR MENU ===================== #}
     {% if is_inspector %}
-    <div class="menu-group collapsed" data-menu-group="inspector">
+    <div class="menu-group{% if current_role != 'inspector' %} collapsed{% endif %}" data-menu-group="inspector">
         <div class="menu-group-header">
             <span>Inspector menu</span>
             <span class="menu-group-chevron bi bi-chevron-down"></span>
@@ -526,7 +526,12 @@
       } else if (groups.length === 1) {
         setActiveGroup(groups[0]);
       } else {
-        setActiveGroup(groups[0]);
+        const navTree = document.querySelector('.sidebar .nav-tree');
+        const preferredKey = navTree ? navTree.dataset.defaultMenuGroup : '';
+        const preferredGroup = preferredKey
+          ? document.querySelector(`.sidebar .menu-group[data-menu-group="${preferredKey}"]`)
+          : null;
+        setActiveGroup(preferredGroup || groups[0]);
       }
 
       groups.forEach(function (group) {

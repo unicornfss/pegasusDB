@@ -48,8 +48,16 @@ from .utils.invoice import (
     render_invoice_file,     # if you want to choose prefer_pdf=False somewhere
     send_invoice_email,      # email helper with dev/admin routing
 )
-from .utils.certificates import build_certificates_pdf_for_booking
+from .utils.certificates import (
+    build_certificates_pdf_for_booking,
+    _unique_delegates_for_booking as cert_pass_delegates_for_booking,
+)
 from .services.dummy_bookings import delete_dummy_booking_tree
+from .services.assessment_exams import (
+    build_assessment_exam_matrix,
+    recompute_delegate_outcome,
+    recompute_outcomes_for_exam_attempt,
+)
 
 SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9 _\-\(\)\.&]")
 
@@ -474,7 +482,12 @@ def instructor_dashboard(request):
     todays_days = (
         BookingDay.objects
         .filter(instructor=personnel, date=today)
-        .select_related("booking")
+        .select_related(
+            "booking",
+            "booking__training_location",
+            "booking__business",
+            "booking__course_type",
+        )
         .order_by("start_time")
     )
 
@@ -1189,7 +1202,9 @@ def instructor_dummy_booking_new(request, business_id):
                 )
 
             from .utils.booking_notifications import notify_new_booking
+            from .utils.travel_time import update_booking_travel_duration
 
+            update_booking_travel_duration(booking)
             notify_new_booking(booking)
 
             messages.success(request, f"Practice booking created for {business.name}.")
@@ -1423,6 +1438,13 @@ def _assessment_context(booking, user):
             competencies = [c for c in competencies if c.id in ticked_comp_ids]
             opt_slots = [s for s in opt_slots if s.get("selected") and s["selected"].id in ticked_comp_ids]
 
+    # Exam rows / auto-pass exam rules apply only to open courses. Completed
+    # bookings keep the legacy matrix exactly as recorded at closure.
+    if booking.status == 'completed':
+        course_exams_matrix, exam_matrix_rows = [], []
+    else:
+        course_exams_matrix, exam_matrix_rows = build_assessment_exam_matrix(booking, delegates)
+
     return {
         "delegates": delegates,
         "competencies": competencies,
@@ -1434,6 +1456,9 @@ def _assessment_context(booking, user):
         "selected_optional_count": selection_ctx["selected_optional_count"],
         "existing": existing,
         "levels": levels,
+        "course_exams_matrix": course_exams_matrix,
+        "exam_matrix_rows": exam_matrix_rows,
+        "has_course_exams": bool(course_exams_matrix),
     }
 
 
@@ -2224,12 +2249,18 @@ def instructor_booking_detail(request, pk):
     from .views_instructor import _invoicing_tab_context
     from .views_instructor import _assessment_context
 
+    active_tab = request.POST.get("active_tab") or request.GET.get("tab", "")
+    if active_tab.endswith("-pane"):
+        active_tab = active_tab[:-5]
+    if not active_tab:
+        active_tab = "days" if request.GET.get("day") else "course-info"
+
     ctx = {
         "title": booking.course_type.name,
         "booking": booking,
         "invoice": inv,
         "is_locked": is_locked,
-        "active_tab": request.POST.get("active_tab") or request.GET.get("tab", ""),
+        "active_tab": active_tab,
     }
 
     # ✅ Closure prerequisites and readiness
@@ -2357,7 +2388,7 @@ def instructor_booking_detail(request, pk):
 
     # If someone manually uses ?tab=exams for a course with no exams, force tab back
     if ctx.get("active_tab") == "exams" and not has_exam:
-        ctx["active_tab"] = ""
+        ctx["active_tab"] = "course-info"
     
     # -------------------------------------------------------
     # Build day_rows for template
@@ -2541,6 +2572,10 @@ def instructor_booking_detail(request, pk):
     except Exception:
         ctx["communication_log_entries"] = []
 
+    ctx["cert_delegates"] = (
+        cert_pass_delegates_for_booking(booking) if is_locked else []
+    )
+
     return render(request, "instructor/booking_detail.html", ctx)
 
 @login_required
@@ -2572,7 +2607,14 @@ def instructor_assessment_autosave(request, pk):
     except CourseCompetency.DoesNotExist:
         return JsonResponse({"ok": False, "error": "Competency not found"}, status=404)
 
-    allowed_ids = _assessment_selection_context(reg.booking_day.booking)["required_competency_ids"]
+    allowed_ids = set(
+        _assessment_selection_context(reg.booking_day.booking)["required_competency_ids"]
+    )
+    allowed_ids.update(
+        CompetencyAssessment.objects.filter(register=reg).values_list(
+            "course_competency_id", flat=True
+        )
+    )
     if comp.id not in allowed_ids:
         return JsonResponse(
             {"ok": False, "error": "This competency is not enabled for this course assessment."},
@@ -2622,6 +2664,11 @@ def instructor_assessment_autosave(request, pk):
 
     else:
         # record was just created; defaults already set
+        pass
+
+    try:
+        recompute_delegate_outcome(reg.booking_day.booking, reg)
+    except Exception:
         pass
 
     return JsonResponse({"ok": True})
@@ -3470,6 +3517,11 @@ def instructor_assessment_save(request, pk):
             if request.POST.get(f"level_{rid}_{cid}", "na") not in {"c", "e"}:
                 all_competent = False
                 break
+
+        if all_competent and booking.status != "completed":
+            from .services.assessment_exams import delegate_exams_all_passed
+            all_competent = delegate_exams_all_passed(booking, reg)
+
         final_outcome = "pass" if all_competent else posted_outcome
 
         if getattr(reg, "outcome", None) != final_outcome:
@@ -3633,6 +3685,27 @@ def instructor_assessment_pdf(request, pk):
                 x += del_w
 
             y -= row_h
+
+        if booking.status != "completed":
+            from .services.assessment_exams import build_assessment_exam_matrix
+            _, exam_matrix_rows = build_assessment_exam_matrix(booking, page_delegates)
+            for row in exam_matrix_rows:
+                if y - row_h < bottom + 20 * mm:
+                    footer()
+                    c.showPage()
+                    y = draw_page_header()
+
+                c.setFont("Helvetica", 9)
+                c.rect(left, y - row_h, comp_w, row_h)
+                c.drawString(left + 2 * mm, y - row_h + 2 * mm, f"Exam {row['exam'].sequence}"[:80])
+
+                x = left + comp_w
+                for cell in row["cells"]:
+                    c.rect(x, y - row_h, del_w, row_h)
+                    c.setFont("Helvetica-Bold", 9)
+                    c.drawCentredString(x + del_w / 2, y - row_h + 2 * mm, cell["label"][:12])
+                    x += del_w
+                y -= row_h
 
         # Outcome row
         c.setFillGray(0.94)
@@ -4890,65 +4963,7 @@ def instructor_attempt_review(request, attempt_id: int):
     return render(request, "instructor/exams/attempt_review.html", ctx)
 
 
-@login_required
-def instructor_attempt_incorrect(request, attempt_id: int):
-    """
-    Show incorrect answers, allow viva decision (with edit), and authorise re-test.
-    When authorising a re-test, set a 60-minute expiry window.
-    """
-    attempt = get_object_or_404(
-        ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor"),
-        pk=attempt_id
-    )
-    if not _can_view_attempt(request.user, attempt):
-        return HttpResponseForbidden("Not allowed.")
-
-    # --- POST: save viva decision (unconditional save when posted) ---
-    if request.method == "POST" and request.POST.get("save_viva") == "1":
-        outcome = (request.POST.get("viva_outcome") or "").strip().lower()
-        notes   = (request.POST.get("viva_notes") or "").strip()
-
-        if outcome in ("pass", "fail"):
-            # Persist everything explicitly
-            attempt.passed = (outcome == "pass")
-            attempt.viva_result = outcome
-            attempt.viva_notes = notes
-            attempt.viva_eligible = False
-            if not getattr(attempt, "finished_at", None):
-                attempt.finished_at = now()
-            attempt.viva_decided_at = now()
-            attempt.viva_decided_by = getattr(request.user, "personnel", None)
-
-            attempt.save()
-            messages.success(request, "Viva decision saved.")
-        else:
-            messages.error(request, "Viva not saved: invalid outcome posted.")
-
-        return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
-                        f"{'?' + request.GET.urlencode() if request.GET else ''}")
-
-
-
-    # --- POST: authorise a re-test (60-minute window) ---
-    if request.method == "POST" and "authorise" in request.POST:
-        # Allow authorisation only if the attempt is not a pass
-        if getattr(attempt, "passed", False):
-            messages.error(request, "This attempt is a pass. You can only authorise a re-test for failed attempts.")
-            return redirect(request.get_full_path())
-
-        # Set/refresh 60-minute authorisation window
-        attempt.retake_authorised = True
-        attempt.retake_authorised_until = now() + timedelta(minutes=60)
-        attempt.save(update_fields=["retake_authorised", "retake_authorised_until"])
-
-        messages.success(
-            request,
-            "Re-test authorised for this delegate for the next 60 minutes."
-        )
-        # Redirect back (keeps ?back=...&tab=exams)
-        return redirect(request.get_full_path())
-
-    # --- DATA for display ---
+def _build_attempt_incorrect_context(request, attempt):
     wrong = (
         ExamAttemptAnswer.objects
         .select_related("question", "answer")
@@ -4963,62 +4978,143 @@ def instructor_attempt_incorrect(request, attempt_id: int):
     viva_decided_by = getattr(attempt, "viva_decided_by", None)
     viva_notes = getattr(attempt, "viva_notes", "")
 
-    # Only allow edit mode if a viva decision already exists
     edit_mode = (request.GET.get("edit_viva") == "1") and bool(viva_decided_at)
-
-    # Show the viva form only when they are eligible and no decision yet, or if explicitly editing
     show_viva_form = (viva_eligible and not viva_decided_at) or edit_mode
 
-    # Preselect radio only when the viva form is being show
     viva_selected = None
     if show_viva_form:
         existing = (getattr(attempt, "viva_result", "") or "").lower()
         if existing in ("pass", "fail"):
             viva_selected = existing
 
-    # If a viva decision truly exists, build a summary; otherwise, do not show a viva card at all
     viva_decided_summary = None
     if getattr(attempt, "viva_result", None) or viva_decided_at:
         viva_decided_summary = {
-            "outcome": (getattr(attempt, "viva_result", None) or
-                        ("pass" if bool(getattr(attempt, "passed", False)) else "fail")),
+            "outcome": (
+                getattr(attempt, "viva_result", None)
+                or ("pass" if bool(getattr(attempt, "passed", False)) else "fail")
+            ),
             "when": viva_decided_at,
             "by": getattr(viva_decided_by, "name", None) or getattr(viva_decided_by, "username", None),
             "notes": viva_notes,
         }
 
-
-    can_authorise_retest = not bool(getattr(attempt, "passed", False))
-
-    ctx = {
+    return {
         "attempt": attempt,
         "exam": attempt.exam,
         "course_type": attempt.exam.course_type,
-
-        "back_id": request.GET.get("back") or request.GET.get("booking") or "",
-
-        # header
+        "back_id": request.GET.get("back") or request.GET.get("booking") or request.POST.get("back") or "",
         "display_name": stats["display_name"],
         "correct_count": stats["correct_count"],
         "total_questions": stats["total_questions"],
         "result_label": stats["result_label"],
         "result_class": stats["result_class"],
-
-        # wrong answers list
         "wrong": wrong,
-
-        # viva block
         "show_viva_form": show_viva_form,
         "viva_eligible": viva_eligible,
         "viva_decided_at": viva_decided_at,
         "viva_selected": viva_selected,
         "viva_notes_prefill": viva_notes,
         "viva_decided_summary": viva_decided_summary,
-
-        # retest button
-        "can_authorise_retest": can_authorise_retest,
+        "can_authorise_retest": not bool(getattr(attempt, "passed", False)),
+        "flash_success": "",
+        "flash_error": "",
     }
-    return render(request, "instructor/exams/attempt_incorrect.html", ctx)
+
+
+def _attempt_incorrect_embed_mode(request) -> bool:
+    return (
+        request.GET.get("embed") == "1"
+        or request.POST.get("embed") == "1"
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+    )
+
+
+def _render_attempt_incorrect(request, attempt, *, embed: bool, extra=None):
+    ctx = _build_attempt_incorrect_context(request, attempt)
+    ctx["embed"] = embed
+    if extra:
+        ctx.update(extra)
+    template = (
+        "instructor/exams/_attempt_incorrect_panel.html"
+        if embed
+        else "instructor/exams/attempt_incorrect.html"
+    )
+    return render(request, template, ctx)
+
+
+@login_required
+def instructor_attempt_incorrect(request, attempt_id: int):
+    """
+    Show incorrect answers, allow viva decision (with edit), and authorise re-test.
+    When authorising a re-test, set a 60-minute expiry window.
+    """
+    attempt = get_object_or_404(
+        ExamAttempt.objects.select_related("exam", "exam__course_type", "instructor"),
+        pk=attempt_id
+    )
+    if not _can_view_attempt(request.user, attempt):
+        return HttpResponseForbidden("Not allowed.")
+
+    embed = _attempt_incorrect_embed_mode(request)
+
+    # --- POST: save viva decision (unconditional save when posted) ---
+    if request.method == "POST" and request.POST.get("save_viva") == "1":
+        outcome = (request.POST.get("viva_outcome") or "").strip().lower()
+        notes   = (request.POST.get("viva_notes") or "").strip()
+
+        if outcome in ("pass", "fail"):
+            attempt.passed = (outcome == "pass")
+            attempt.viva_result = outcome
+            attempt.viva_notes = notes
+            attempt.viva_eligible = False
+            if not getattr(attempt, "finished_at", None):
+                attempt.finished_at = now()
+            attempt.viva_decided_at = now()
+            attempt.viva_decided_by = getattr(request.user, "personnel", None)
+
+            attempt.save()
+            recompute_outcomes_for_exam_attempt(attempt)
+            if embed:
+                attempt.refresh_from_db()
+                return _render_attempt_incorrect(
+                    request, attempt, embed=True,
+                    extra={"flash_success": "Viva decision saved."},
+                )
+            messages.success(request, "Viva decision saved.")
+            return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
+                            f"{'?' + request.GET.urlencode() if request.GET else ''}")
+
+        if embed:
+            return _render_attempt_incorrect(
+                request, attempt, embed=True,
+                extra={"flash_error": "Viva not saved: invalid outcome posted."},
+            )
+        messages.error(request, "Viva not saved: invalid outcome posted.")
+        return redirect(f"{reverse('instructor_attempt_incorrect', args=[attempt.pk])}"
+                        f"{'?' + request.GET.urlencode() if request.GET else ''}")
+
+    # --- POST: authorise a re-test (60-minute window) ---
+    if request.method == "POST" and "authorise" in request.POST:
+        if getattr(attempt, "passed", False):
+            msg = "This attempt is a pass. You can only authorise a re-test for failed attempts."
+            if embed:
+                return _render_attempt_incorrect(request, attempt, embed=True, extra={"flash_error": msg})
+            messages.error(request, msg)
+            return redirect(request.get_full_path())
+
+        attempt.retake_authorised = True
+        attempt.retake_authorised_until = now() + timedelta(minutes=60)
+        attempt.save(update_fields=["retake_authorised", "retake_authorised_until"])
+
+        msg = "Re-test authorised for this delegate for the next 60 minutes."
+        if embed:
+            attempt.refresh_from_db()
+            return _render_attempt_incorrect(request, attempt, embed=True, extra={"flash_success": msg})
+        messages.success(request, msg)
+        return redirect(request.get_full_path())
+
+    return _render_attempt_incorrect(request, attempt, embed=embed)
 
 @login_required
 @require_http_methods(["POST"])

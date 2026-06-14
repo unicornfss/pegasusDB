@@ -67,6 +67,22 @@ def run_purge_dummy_bookings():
     except Exception as e:
         print(f"[Scheduler] dummy booking purge FAILED: {e}")
 
+def run_departure_reminders():
+    print("[Scheduler] Running departure reminders...")
+    try:
+        call_command("send_departure_reminders", verbosity=0)
+        print("[Scheduler] Finished departure reminders.")
+    except Exception as e:
+        print(f"[Scheduler] departure reminders FAILED: {e}")
+
+def run_upcoming_booking_reminders():
+    print("[Scheduler] Running upcoming booking reminders...")
+    try:
+        call_command("send_upcoming_booking_reminders", verbosity=0)
+        print("[Scheduler] Finished upcoming booking reminders.")
+    except Exception as e:
+        print(f"[Scheduler] upcoming booking reminders FAILED: {e}")
+
 def start():
     """
     Start APScheduler once per process.
@@ -116,12 +132,42 @@ def start():
             id="purge_dummy_bookings_interval",
             replace_existing=True,
         )
+        departure_desc = f"departure reminders every {test_every} min (interval)"
+        scheduler.add_job(
+            run_departure_reminders,
+            trigger="interval",
+            minutes=test_every,
+            id="send_departure_reminders_interval",
+            replace_existing=True,
+        )
+        upcoming_desc = f"upcoming reminders every {test_every} min (interval)"
+        scheduler.add_job(
+            run_upcoming_booking_reminders,
+            trigger="interval",
+            minutes=test_every,
+            id="send_upcoming_booking_reminders_interval",
+            replace_existing=True,
+        )
     else:
         dummy_desc = "dummy purge every 15 min @ 00,15,30,45 (cron)"
         scheduler.add_job(
             run_purge_dummy_bookings,
             CronTrigger(minute="0,15,30,45"),
             id="purge_dummy_bookings_cron",
+            replace_existing=True,
+        )
+        departure_desc = "departure reminders every 5 min (cron)"
+        scheduler.add_job(
+            run_departure_reminders,
+            CronTrigger(minute="*/5"),
+            id="send_departure_reminders_cron",
+            replace_existing=True,
+        )
+        upcoming_desc = "upcoming reminders every 5 min (cron)"
+        scheduler.add_job(
+            run_upcoming_booking_reminders,
+            CronTrigger(minute="*/5"),
+            id="send_upcoming_booking_reminders_cron",
             replace_existing=True,
         )
 
@@ -136,6 +182,18 @@ def start():
         run_purge_dummy_bookings,
         next_run_time=datetime.now(dtz.utc),
         id="purge_dummy_bookings_kick",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_departure_reminders,
+        next_run_time=datetime.now(dtz.utc),
+        id="send_departure_reminders_kick",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        run_upcoming_booking_reminders,
+        next_run_time=datetime.now(dtz.utc),
+        id="send_upcoming_booking_reminders_kick",
         replace_existing=True,
     )
 
@@ -164,4 +222,4 @@ def start():
     _scheduler = scheduler
 
     # Helpful log lines
-    print(f"[APScheduler] Started in PID {os.getpid()}: {bookings_desc}; {dummy_desc}; {anon_desc}.")
+    print(f"[APScheduler] Started in PID {os.getpid()}: {bookings_desc}; {dummy_desc}; {departure_desc}; {upcoming_desc}; {anon_desc}.")

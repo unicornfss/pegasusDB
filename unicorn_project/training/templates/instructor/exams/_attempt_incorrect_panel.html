@@ -1,0 +1,155 @@
+<div class="exam-attempt-incorrect-panel" data-attempt-id="{{ attempt.id }}">
+  {% if flash_success %}
+    <div class="alert alert-success py-2 small mb-2">{{ flash_success }}</div>
+  {% endif %}
+  {% if flash_error %}
+    <div class="alert alert-danger py-2 small mb-2">{{ flash_error }}</div>
+  {% endif %}
+
+  <div class="d-flex justify-content-between align-items-start gap-2 mb-3 flex-wrap">
+    <div>
+      <h6 class="mb-1">
+        {{ exam.course_type.name }} — Exam {{ exam.exam_code|slice:"-2:" }} — Incorrect answers
+      </h6>
+      <div class="small text-muted">{{ display_name|default:"—" }} · {{ attempt.exam_date|date:"j M Y"|default:"—" }}</div>
+    </div>
+    {% if embed %}
+      <button type="button" class="btn btn-sm btn-outline-secondary exam-detail-close">Close</button>
+    {% endif %}
+  </div>
+
+  <div class="alert alert-light border d-flex flex-wrap align-items-center gap-3 py-2 small mb-3">
+    <div><strong>DOB:</strong> {{ attempt.date_of_birth|date:"j M Y"|default:"—" }}</div>
+    <div><strong>Score:</strong> {{ correct_count }}/{{ total_questions }}</div>
+    <div><strong>Result:</strong>
+      {% if result_class == "success" %}
+        <span class="badge bg-success">{{ result_label }}</span>
+      {% elif result_class == "warning" %}
+        <span class="badge bg-warning text-dark">{{ result_label }}</span>
+      {% else %}
+        <span class="badge bg-danger">{{ result_label }}</span>
+      {% endif %}
+    </div>
+    {% if viva_decided_at and not show_viva_form %}
+      <div><strong>Viva recorded:</strong> {{ viva_decided_at|date:"j M Y, H:i" }}</div>
+    {% endif %}
+  </div>
+
+  <div class="card mb-3">
+    <div class="card-header py-2"><strong>Only incorrect responses</strong></div>
+    <div class="card-body p-0">
+      {% if wrong %}
+        <ol class="list-group list-group-numbered list-group-flush">
+          {% for aa in wrong %}
+            <li class="list-group-item">
+              <div class="mb-2"><strong>Q{{ forloop.counter }}.</strong> {{ aa.question.text }}</div>
+              <ul class="list-unstyled ms-3 mb-0">
+                {% for opt in aa.question.answers.all %}
+                  <li class="mb-1">
+                    {% if aa.answer and aa.answer.id == opt.id %}
+                      <strong>{{ opt.text }}</strong> <span class="badge bg-primary">Chosen</span>
+                    {% else %}
+                      {{ opt.text }}
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+              {% if not aa.answer %}
+                <div class="text-danger mt-2"><em>No answer selected.</em></div>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% else %}
+        <div class="p-3 text-muted mb-0">Nothing to show — all answers were correct.</div>
+      {% endif %}
+    </div>
+    {% if can_authorise_retest %}
+      <div class="card-footer d-flex justify-content-end py-2">
+        <form method="post" action="{% url 'instructor_attempt_incorrect' attempt.id %}{% if embed %}?embed=1{% if back_id %}&back={{ back_id }}&tab=exams{% endif %}{% endif %}">
+          {% csrf_token %}
+          {% if embed %}<input type="hidden" name="embed" value="1">{% endif %}
+          {% if back_id %}<input type="hidden" name="back" value="{{ back_id }}">{% endif %}
+          <button class="btn btn-primary btn-sm" name="authorise" value="1">Authorise re-test</button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if show_viva_form %}
+    <div class="card mb-0">
+      <div class="card-header py-2"><strong>Viva decision</strong></div>
+      <div class="card-body">
+        <form method="post" action="{% url 'instructor_attempt_incorrect' attempt.id %}{% if embed %}?embed=1{% if back_id %}&back={{ back_id }}&tab=exams{% endif %}{% endif %}" class="row g-3">
+          {% csrf_token %}
+          <input type="hidden" name="save_viva" value="1">
+          {% if embed %}<input type="hidden" name="embed" value="1">{% endif %}
+          {% if back_id %}<input type="hidden" name="back" value="{{ back_id }}">{% endif %}
+
+          <div class="col-12">
+            <label class="form-label"><strong>Viva notes (optional)</strong></label>
+            <textarea name="viva_notes" class="form-control" rows="3">{{ viva_notes_prefill }}</textarea>
+            <div class="form-text">Record the discussion and rationale for the viva outcome.</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label"><strong>Result following viva</strong></label>
+            <div class="d-flex gap-4">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_pass_{{ attempt.id }}" value="pass"
+                       {% if viva_selected == "pass" %}checked{% endif %} required>
+                <label class="form-check-label" for="viva_pass_{{ attempt.id }}">Pass</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="viva_outcome" id="viva_fail_{{ attempt.id }}" value="fail"
+                       {% if viva_selected == "fail" %}checked{% endif %} required>
+                <label class="form-check-label" for="viva_fail_{{ attempt.id }}">Fail</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6 d-flex align-items-end justify-content-end">
+            <button class="btn btn-success btn-sm">Save viva decision</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% elif viva_decided_summary %}
+    <div class="card mb-0">
+      <div class="card-header py-2"><strong>Viva decision recorded</strong></div>
+      <div class="card-body">
+        <div class="mb-2">
+          <strong>Outcome:</strong>
+          {% if viva_decided_summary.outcome == "pass" %}
+            <span class="badge bg-success">Pass</span>
+          {% else %}
+            <span class="badge bg-danger">Fail</span>
+          {% endif %}
+        </div>
+        {% if viva_decided_summary.when %}
+          <div class="mb-2"><strong>Recorded:</strong> {{ viva_decided_summary.when|date:"j M Y, H:i" }}</div>
+        {% endif %}
+        {% if viva_decided_summary.by %}
+          <div class="mb-2"><strong>By:</strong> {{ viva_decided_summary.by }}</div>
+        {% endif %}
+        {% if viva_decided_summary.notes %}
+          <div><strong>Notes:</strong><br>{{ viva_decided_summary.notes|linebreaksbr }}</div>
+        {% endif %}
+      </div>
+      <div class="card-footer d-flex justify-content-end py-2">
+        {% if embed %}
+          <button type="button"
+                  class="btn btn-outline-secondary btn-sm exam-incorrect-edit-viva"
+                  data-panel-url="{% url 'instructor_attempt_incorrect' attempt.id %}?embed=1&amp;back={{ back_id }}&amp;tab=exams&amp;edit_viva=1">
+            Edit viva decision
+          </button>
+        {% else %}
+          <a class="btn btn-outline-secondary btn-sm"
+             href="?{% if back_id %}back={{ back_id }}&{% endif %}tab={{ request.GET.tab|default:'exams' }}&edit_viva=1">
+            Edit viva decision
+          </a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
+</div>

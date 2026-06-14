@@ -18,13 +18,45 @@ That script will:
 
 1. Create `.venv` if it does not exist yet
 2. Activate the virtual environment
-3. Start the Django development server
+3. Start the Django development server on **all network interfaces** (`0.0.0.0:8000`)
 
-Then open:
+When it starts, the terminal prints URLs you can open — including a **http://192.168…** address for your phone.
+
+Then open on this PC:
 
 **http://127.0.0.1:8000/**
 
 To stop the server, press **Ctrl+C** in that terminal window.
+
+---
+
+## View on your phone or tablet (same Wi-Fi)
+
+1. Run `.\runserver.bat` on your PC as usual.
+2. Note the **http://192.168.x.x:8000** URL printed in the terminal (your PC’s LAN address).
+3. On your phone, connect to the **same Wi-Fi** and open that URL in the browser.
+
+**Login and forms** work from the phone — in debug mode the app automatically trusts your LAN address for CSRF.
+
+**If the page never loads:**
+
+- Confirm PC and phone are on the same network (not mobile data).
+- Windows may block inbound connections — when prompted, allow **Python** on private networks, or add a firewall rule for TCP port **8000**.
+- Some guest/hotel Wi-Fi blocks device-to-device traffic; try a home network or phone hotspot from the PC.
+
+**Telegram QR / links on phone:** those use `SITE_URL` from `.env`. For local mobile testing, temporarily set:
+
+```
+SITE_URL=http://192.168.x.x:8000
+```
+
+(use your PC’s LAN IP from the terminal). Change it back to `http://127.0.0.1:8000` when testing only on the PC.
+
+Optional override if auto-detection is wrong:
+
+```
+DEV_SITE_URL=http://192.168.x.x:8000
+```
 
 ---
 
@@ -35,7 +67,7 @@ If you prefer to run the commands yourself:
 ```powershell
 cd "C:\Users\jonsk\OneDrive\Unicorn\Database 2025\UnicornPegasus\pegasusDB"
 .\.venv\Scripts\Activate.ps1
-python manage.py runserver
+python manage.py runserver 0.0.0.0:8000
 ```
 
 If the virtual environment does not exist yet:

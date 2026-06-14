@@ -207,11 +207,36 @@
                             {{ pform.notify_booking_changes_telegram }}
                             <label class="form-check-label" for="{{ pform.notify_booking_changes_telegram.id_for_label }}">Booking updates and cancellations</label>
                         </div>
-                        <div class="form-check form-switch mb-0">
+                        <div class="form-check form-switch mb-2">
                             {{ pform.notify_reminders_telegram }}
-                            <label class="form-check-label" for="{{ pform.notify_reminders_telegram.id_for_label }}">Upcoming booking reminders</label>
+                            <label class="form-check-label" for="{{ pform.notify_reminders_telegram.id_for_label }}">Departure reminders</label>
                         </div>
-                        <div class="form-text mt-2">Bot commands: /bookings · /directions REF · /help</div>
+                        <div class="form-check form-switch mb-2">
+                            {{ pform.notify_upcoming_bookings_telegram }}
+                            <label class="form-check-label" for="{{ pform.notify_upcoming_bookings_telegram.id_for_label }}">Upcoming bookings</label>
+                        </div>
+                        <div id="upcoming-reminder-days" class="ms-1 mb-2 {% if not pform.notify_upcoming_bookings_telegram.value %}d-none{% endif %}">
+                            <p class="small text-muted mb-2">Reminders are sent at the first-day start time, this many days before the course (choose up to 3).</p>
+                            <div class="row g-2">
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1" for="{{ pform.upcoming_reminder_days_1.id_for_label }}">Reminder 1</label>
+                                    {{ pform.upcoming_reminder_days_1 }}
+                                    {% for e in pform.upcoming_reminder_days_1.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1" for="{{ pform.upcoming_reminder_days_2.id_for_label }}">Reminder 2</label>
+                                    {{ pform.upcoming_reminder_days_2 }}
+                                    {% for e in pform.upcoming_reminder_days_2.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label small mb-1" for="{{ pform.upcoming_reminder_days_3.id_for_label }}">Reminder 3</label>
+                                    {{ pform.upcoming_reminder_days_3 }}
+                                    {% for e in pform.upcoming_reminder_days_3.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% for e in pform.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
+                        <div class="form-text mt-2">Bot commands: /today · /bookings · /registration · /feedback · /directions · /settings · /help</div>
                     </div>
                 </div>
                 {% endif %}
@@ -451,6 +476,14 @@ document.addEventListener("DOMContentLoaded", function () {
     const telegramDeepLink = document.getElementById("telegram-deep-link");
     const telegramLinkError = document.getElementById("telegram-link-error");
     const telegramLinkPanel = document.getElementById("telegram-link-panel");
+    const upcomingToggle = document.getElementById("{{ pform.notify_upcoming_bookings_telegram.id_for_label }}");
+    const upcomingDaysPanel = document.getElementById("upcoming-reminder-days");
+    function syncUpcomingReminderPanel() {
+        if (!upcomingToggle || !upcomingDaysPanel) return;
+        upcomingDaysPanel.classList.toggle("d-none", !upcomingToggle.checked);
+    }
+    upcomingToggle?.addEventListener("change", syncUpcomingReminderPanel);
+    syncUpcomingReminderPanel();
     if (telegramLinkPanel && telegramQr) {
         fetch("{% url 'telegram_link_token' %}", { headers: { "Accept": "application/json" } })
             .then(function (response) { return response.json(); })

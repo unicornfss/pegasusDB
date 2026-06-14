@@ -4,9 +4,26 @@ import sys
 from django.conf import settings
 from telegram import Update
 from telegram.error import Conflict
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
-from .telegram_handlers import bookings_command, directions_command, help_command, start_command
+from .telegram_handlers import (
+    booking_detail_callback,
+    booking_feedback_callback,
+    booking_pick_message,
+    booking_register_callback,
+    bookings_command,
+    directions_command,
+    feedback_command,
+    help_command,
+    registration_command,
+    settings_command,
+    settings_toggle_callback,
+    start_command,
+    today_command,
+)
+from .telegram_bookings import BOOKING_DETAIL_CALLBACK_PREFIX
+from .telegram_settings import SETTINGS_CALLBACK_PREFIX
+from .telegram_today import BOOKING_FEEDBACK_CALLBACK_PREFIX, BOOKING_REGISTER_CALLBACK_PREFIX
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +64,17 @@ def build_application(*, for_polling: bool = False) -> Application:
     app = Application.builder().token(token).post_init(on_startup).build()
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("today", today_command))
     app.add_handler(CommandHandler("bookings", bookings_command))
     app.add_handler(CommandHandler("directions", directions_command))
+    app.add_handler(CommandHandler("registration", registration_command))
+    app.add_handler(CommandHandler("feedback", feedback_command))
+    app.add_handler(CommandHandler("settings", settings_command))
+    app.add_handler(CallbackQueryHandler(booking_detail_callback, pattern=f"^{BOOKING_DETAIL_CALLBACK_PREFIX}"))
+    app.add_handler(CallbackQueryHandler(booking_register_callback, pattern=f"^{BOOKING_REGISTER_CALLBACK_PREFIX}"))
+    app.add_handler(CallbackQueryHandler(booking_feedback_callback, pattern=f"^{BOOKING_FEEDBACK_CALLBACK_PREFIX}"))
+    app.add_handler(CallbackQueryHandler(settings_toggle_callback, pattern=f"^{SETTINGS_CALLBACK_PREFIX}"))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, booking_pick_message))
     app.add_error_handler(_on_error)
     return app
 

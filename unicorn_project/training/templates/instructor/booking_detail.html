@@ -3,15 +3,32 @@
 {% block title %}{{ title }}{% endblock %}
 
 {% block content %}
-<h3 class="mb-2 d-flex align-items-center gap-2">
+<h3 class="mb-1 d-flex align-items-center gap-2 flex-wrap">
   {{ booking.course_type.name }}
   {% if booking.course_reference %}
-    <span class="badge bg-light text-dark border">Ref: {{ booking.course_reference }}</span>
+    <span class="badge bg-primary">Ref: {{ booking.course_reference }}</span>
   {% endif %}
   {% if booking.is_dummy_business %}
     <span class="badge bg-warning text-dark">Dummy booking</span>
   {% endif %}
 </h3>
+
+<div class="mb-2">
+  <div class="fw-semibold">{{ booking.business.name }}</div>
+  <div class="text-muted">
+    {% if days and last_day %}
+      {% with first_day=days.first %}
+        {% if first_day.date == last_day.date %}
+          {{ first_day.date|date:"j M Y" }}
+        {% else %}
+          {{ first_day.date|date:"j M Y" }} – {{ last_day.date|date:"j M Y" }}
+        {% endif %}
+      {% endwith %}
+    {% else %}
+      Dates TBC
+    {% endif %}
+  </div>
+</div>
 
 {% with st=booking.status %}
   {% if st == "scheduled" %}
@@ -86,317 +103,439 @@
 
 {% include "partials/booking_panel_styles.html" %}
 
-<div class="booking-summary-wrap">
-  <div class="row g-3 g-lg-4 align-items-stretch booking-summary-row">
+<style>
+  .booking-detail-tabs {
+    --booking-tab-gap: 0.3rem;
+    gap: var(--booking-tab-gap);
+    border-bottom: 1px solid rgba(16, 24, 40, 0.1);
+    flex-wrap: wrap;
+  }
 
-      {# LEFT COLUMN ------------------------------------------------------- #}
-      <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
+  .booking-detail-tabs .nav-item {
+    margin-bottom: -1px;
+  }
 
-        {# Course information #}
-        <div class="card booking-panel-card booking-panel-card--information flex-grow-1 mb-0 d-flex flex-column">
-          <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
-            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
-            <span class="booking-panel-title">Course information</span>
-          </div>
-          <div class="card-body flex-grow-1">
+  .booking-detail-tabs .booking-tab {
+    border: 1px solid rgba(16, 24, 40, 0.08);
+    border-bottom-color: transparent;
+    border-radius: 0.55rem 0.55rem 0 0;
+    color: #344054;
+    font-weight: 500;
+    margin-bottom: 0;
+    padding: 0.55rem 0.9rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
 
-            <div class="mb-3">
-              <div class="text-muted small">Business</div>
-              <div>{{ booking.business.name }}</div>
-            </div>
+  .booking-detail-tabs .booking-tab:hover:not(.active) {
+    filter: brightness(0.97);
+  }
 
-            <div class="mb-3">
-              <div class="text-muted small">Location</div>
+  .booking-detail-tabs .booking-tab--course-info {
+    --tab-accent: #198754;
+    --tab-bg: rgba(25, 135, 84, 0.1);
+    --tab-bg-active: rgba(25, 135, 84, 0.22);
+  }
 
-              <div>
-                {{ booking.training_location.name|default:"(TBC)" }}<br>
+  .booking-detail-tabs .booking-tab--days {
+    --tab-accent: #0d6efd;
+    --tab-bg: rgba(13, 110, 253, 0.1);
+    --tab-bg-active: rgba(13, 110, 253, 0.22);
+  }
 
-                {% if booking.training_location %}
-                  {% if booking.training_location.property_name %}
-                    {{ booking.training_location.property_name }}<br>
-                  {% endif %}
-                  {{ booking.training_location.address_line }}<br>
-                  {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
+  .booking-detail-tabs .booking-tab--assessments {
+    --tab-accent: #fd7e14;
+    --tab-bg: rgba(253, 126, 20, 0.12);
+    --tab-bg-active: rgba(253, 126, 20, 0.24);
+  }
 
-                  {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
-                    <a class="small d-block mb-2"
-                      target="_blank" rel="noopener"
-                      href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
-                      View in Google Maps
-                    </a>
-                  {% endwith %}
+  .booking-detail-tabs .booking-tab--exams {
+    --tab-accent: #6f42c1;
+    --tab-bg: rgba(111, 66, 193, 0.11);
+    --tab-bg-active: rgba(111, 66, 193, 0.23);
+  }
 
-                  {# === Precise location display === #}
-                  {% if booking.has_effective_precise_location %}
-                    <div class="small text-success mt-2">
-                      <a
-                        href="https://www.google.com/maps/dir/?api=1&destination={{ booking.effective_precise_lat }},{{ booking.effective_precise_lng }}"
-                        target="_blank"
-                        rel="noopener"
-                        class="text-success text-decoration-none"
-                      >
-                        <i class="bi bi-crosshair2 me-1"></i>
-                        <strong>Precise location:</strong> {{ booking.effective_precise_lat }}, {{ booking.effective_precise_lng }}
-                      </a>
-                    </div>
-                  {% else %}
-                    <div class="small text-muted mt-2">
-                      No precise map location set.
-                    </div>
-                  {% endif %}
+  .booking-detail-tabs .booking-tab--feedback {
+    --tab-accent: #20c997;
+    --tab-bg: rgba(32, 201, 151, 0.11);
+    --tab-bg-active: rgba(32, 201, 151, 0.23);
+  }
 
-                  {% if booking.effective_plus_code %}
-                    <div class="small mt-2">
-                      <a
-                        href="{{ booking.plus_code_url }}"
-                        target="_blank"
-                        rel="noopener"
-                        class="text-decoration-none"
-                      >
-                        <i class="bi bi-grid-3x3-gap me-1"></i>
-                        <strong>Plus code:</strong> {{ booking.effective_plus_code }}
-                      </a>
-                    </div>
-                  {% endif %}
+  .booking-detail-tabs .booking-tab--closure {
+    --tab-accent: #8b0000;
+    --tab-bg: rgba(139, 0, 0, 0.1);
+    --tab-bg-active: rgba(139, 0, 0, 0.2);
+  }
 
-                  {% if not is_locked %}
-                    <div class="mt-3 d-flex flex-wrap gap-2">
-                      <button type="button"
-                        class="btn btn-outline-success btn-sm"
-                        data-bs-toggle="modal"
-                        data-bs-target="#MapPickerModal">
-                        <i class="bi bi-geo-alt-fill me-1"></i> View / adjust precise location
-                      </button>
+  .booking-detail-tabs .booking-tab--invoicing {
+    --tab-accent: #495057;
+    --tab-bg: rgba(73, 80, 87, 0.1);
+    --tab-bg-active: rgba(73, 80, 87, 0.22);
+  }
 
-                      {% if booking.has_effective_precise_location %}
-                        <form method="post" style="display:inline;">
-                          {% csrf_token %}
-                          <input type="hidden" name="action" value="reset_precise_location">
-                          <button class="btn btn-outline-danger btn-sm">
-                            <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to admin point
-                          </button>
-                        </form>
-                      {% endif %}
-                    </div>
-                  {% endif %}
+  .booking-detail-tabs .booking-tab:not(.active) {
+    background-color: var(--tab-bg);
+    border-top: 2px solid color-mix(in srgb, var(--tab-accent) 35%, transparent);
+    color: color-mix(in srgb, var(--tab-accent) 78%, #1d2939);
+  }
 
-                {% endif %}
-              </div>
-            </div>
+  .booking-detail-tabs .booking-tab.active {
+    background-color: var(--tab-bg-active);
+    border-color: color-mix(in srgb, var(--tab-accent) 45%, transparent);
+    border-bottom-color: transparent;
+    border-top: 3px solid var(--tab-accent);
+    color: #1d2939;
+    font-weight: 600;
+  }
 
-            {# NEW: Location contact moved here #}
-            <hr class="my-3">
+  .booking-detail-tabs-content {
+    background: #fff;
+    transition: background-color 0.2s ease;
+  }
 
-            <div class="mb-0">
-              <div class="text-muted small">Course contact</div>
+  .booking-detail-tabs-content .booking-pane.show.active {
+    background: linear-gradient(180deg, var(--pane-tint, transparent) 0%, transparent 4.5rem);
+  }
 
-              {# Show booking-specific contact details first; fall back to location defaults #}
-              {% firstof booking.contact_name booking.training_location.contact_name "" as cname %}
-              {% firstof booking.telephone booking.training_location.telephone "" as tel %}
-              {% firstof booking.email booking.training_location.email "" as em %}
+  .booking-pane--course-info { --pane-tint: rgba(25, 135, 84, 0.07); }
+  .booking-pane--days { --pane-tint: rgba(13, 110, 253, 0.07); }
+  .booking-pane--assessments { --pane-tint: rgba(253, 126, 20, 0.08); }
+  .booking-pane--exams { --pane-tint: rgba(111, 66, 193, 0.07); }
+  .booking-pane--feedback { --pane-tint: rgba(32, 201, 151, 0.07); }
+  .booking-pane--closure { --pane-tint: rgba(139, 0, 0, 0.06); }
+  .booking-pane--invoicing { --pane-tint: rgba(73, 80, 87, 0.07); }
 
-              {% if cname or tel or em %}
-                <div class="mt-1">
-                  {{ cname|default:"—" }}<br>
+  html[data-color-scheme="night"] .booking-detail-tabs {
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+  }
 
-                  {% if tel %}
-                    <a href="tel:{{ tel }}">{{ tel }}</a><br>
-                  {% endif %}
+  html[data-color-scheme="night"] .booking-detail-tabs .booking-tab {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #e9ecef;
+  }
 
-                  {% if em %}
-                    <a href="mailto:{{ em }}">{{ em }}</a>
-                  {% endif %}
-                </div>
-              {% else %}
-                <div class="mt-1">—</div>
-              {% endif %}
-            </div>
+  html[data-color-scheme="night"] .booking-detail-tabs .booking-tab:not(.active) {
+    color: color-mix(in srgb, var(--tab-accent) 55%, #f8f9fa);
+  }
 
-            <hr class="my-3">
+  html[data-color-scheme="night"] .booking-detail-tabs .booking-tab.active {
+    color: #f8f9fa;
+  }
 
-            <div class="mb-0">
-              <div class="text-muted small mb-2">Course fee</div>
-              <div class="fee-reveal-wrap">
-                <button id="reveal-fee-btn"
-                        type="button"
-                        class="btn btn-outline-dark btn-sm"
-                        data-fee-url="{% url 'booking-fee' booking.pk %}">
-                  Tap to reveal your fee
-                </button>
-                <div id="fee-popover" class="fee-popover mt-2" role="status" aria-live="polite">
-                  <span id="fee-text"></span>
-                </div>
-              </div>
-            </div>
+  html[data-color-scheme="night"] .booking-detail-tabs-content {
+    background: var(--bs-body-bg, #212529);
+  }
+</style>
 
-          </div>
-        </div>
-
-      </div>
-
-      {# MIDDLE COLUMN (CALENDAR + RESEND) -------------------------------- #}
-      <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
-
-        {# Calendar card #}
-        <div class="card booking-panel-card booking-panel-card--calendar mb-0 d-flex flex-column">
-          <div class="card-header booking-panel-header booking-panel-header--calendar d-flex align-items-center">
-            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
-            <span class="booking-panel-title">Calendar</span>
-          </div>
-          <div class="card-body">
-
-            {% if gcal_links %}
-              <div>
-                <div class="text-muted small mb-2">Add to Google Calendar</div>
-
-                <div class="d-flex flex-wrap gap-2">
-                  {% for day in gcal_links %}
-                    <a href="{{ day.url }}" target="_blank"
-                      class="btn btn-google-cal btn-sm d-inline-flex align-items-center">
-                      <i class="bi bi-calendar-event me-1"></i>
-                      Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
-                    </a>
-                  {% endfor %}
-                </div>
-              </div>
-              <hr class="my-3">
-            {% endif %}
-
-            <div>
-              <div class="text-muted small">Download .ics file</div>
-
-              <a href="{% url 'download_booking_ics' booking.pk %}"
-                class="btn btn-outline-success btn-sm mt-2 d-inline-flex align-items-center">
-                <i class="bi bi-calendar-plus me-1"></i>
-                Download .ics
-              </a>
-            </div>
-
-          </div>
-        </div>
-
-        {% include "partials/booking_telegram_resend.html" with send_url_name="instructor_booking_telegram_send" stacked=True %}
-
-      </div>
-
-      {# RIGHT COLUMN (NOTES + LOG) ---------------------------------------- #}
-      <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
-
-        <div class="card booking-panel-card booking-panel-card--notes booking-notes-card flex-grow-1 mb-0 d-flex flex-column">
-          <div class="card-header booking-panel-header booking-panel-header--notes d-flex align-items-center justify-content-between py-2">
-            <div class="d-flex align-items-center">
-              <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-journal-text"></i></span>
-              <span class="booking-panel-title">Course notes</span>
-            </div>
-
-            {% if booking.course_type.onedrive_folder_link %}
-              <a href="{{ booking.course_type.onedrive_folder_link }}"
-                target="_blank"
-                rel="noopener"
-                class="btn btn-outline-primary btn-sm">
-                <i class="bi bi-cloud"></i> Materials
-                <i class="bi bi-box-arrow-up-right ms-1"></i>
-              </a>
-            {% endif %}
-          </div>
-
-          <div class="card-body py-2 flex-grow-1 d-flex flex-column">
-            <form id="booking-notes-form" method="post" class="d-flex flex-column flex-grow-1">
-              {% csrf_token %}
-
-              <input type="hidden" name="action" id="id_precise_action" value="">
-              <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.effective_precise_lat|default_if_none:'' }}">
-              <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.effective_precise_lng|default_if_none:'' }}">
-
-              {% if is_locked %}
-                {{ notes_form.booking_notes }}
-                <script>
-                  document.addEventListener('DOMContentLoaded', function(){
-                    var ta = document.getElementById('id_booking_notes');
-                    if (ta){ ta.setAttribute('readonly','readonly'); ta.classList.add('bg-light'); }
-                  });
-                </script>
-              {% else %}
-                {{ notes_form.booking_notes }}
-              {% endif %}
-
-              {% for err in notes_form.booking_notes.errors %}
-                <div class="text-danger small">{{ err }}</div>
-              {% endfor %}
-
-              {% if not is_locked %}
-                <div class="mt-2">
-                  <button class="btn btn-primary btn-sm"
-                          onclick="document.getElementById('id_precise_action').value='save_notes'">
-                    <i class="bi bi-check2"></i> Save notes
-                  </button>
-                </div>
-              {% endif %}
-            </form>
-          </div>
-        </div>
-
-        {% include "partials/booking_communication_log.html" with stacked=True %}
-
-      </div>
-    </div>
-</div>
-
-<ul class="nav nav-tabs mt-3" id="bookingTabs" role="tablist">
+<ul class="nav nav-tabs booking-detail-tabs mt-3" id="bookingTabs" role="tablist">
   <li class="nav-item" role="presentation">
-    <button class="nav-link active" id="days-tab" data-bs-toggle="tab"
+    <button class="nav-link booking-tab booking-tab--course-info{% if active_tab == 'course-info' %} active{% endif %}" id="course-info-tab" data-bs-toggle="tab"
+            data-bs-target="#course-info-pane" type="button" role="tab"
+            aria-controls="course-info-pane" aria-selected="{% if active_tab == 'course-info' %}true{% else %}false{% endif %}">
+      Course information
+    </button>
+  </li>
+
+  <li class="nav-item" role="presentation">
+    <button class="nav-link booking-tab booking-tab--days{% if active_tab == 'days' %} active{% endif %}" id="days-tab" data-bs-toggle="tab"
             data-bs-target="#days-pane" type="button" role="tab"
-            aria-controls="days-pane" aria-selected="true">
+            aria-controls="days-pane" aria-selected="{% if active_tab == 'days' %}true{% else %}false{% endif %}">
       Course days / registers
     </button>
   </li>
 
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="assessments-tab" data-bs-toggle="tab"
+    <button class="nav-link booking-tab booking-tab--assessments{% if active_tab == 'assessments' %} active{% endif %}" id="assessments-tab" data-bs-toggle="tab"
             data-bs-target="#assessments-pane" type="button" role="tab"
-            aria-controls="assessments-pane" aria-selected="false">
+            aria-controls="assessments-pane" aria-selected="{% if active_tab == 'assessments' %}true{% else %}false{% endif %}">
       Assessments
     </button>
   </li>
 
   {% if has_exam %}
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="exams-tab" data-bs-toggle="tab"
+    <button class="nav-link booking-tab booking-tab--exams{% if active_tab == 'exams' %} active{% endif %}" id="exams-tab" data-bs-toggle="tab"
             data-bs-target="#exams-pane" type="button" role="tab"
-            aria-controls="exams-pane" aria-selected="false">
+            aria-controls="exams-pane" aria-selected="{% if active_tab == 'exams' %}true{% else %}false{% endif %}">
       Exams
     </button>
   </li>
   {% endif %}
 
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="feedback-tab" data-bs-toggle="tab"
+    <button class="nav-link booking-tab booking-tab--feedback{% if active_tab == 'feedback' %} active{% endif %}" id="feedback-tab" data-bs-toggle="tab"
             data-bs-target="#feedback-pane" type="button" role="tab"
-            aria-controls="feedback-pane" aria-selected="false">
+            aria-controls="feedback-pane" aria-selected="{% if active_tab == 'feedback' %}true{% else %}false{% endif %}">
       Feedback
     </button>
   </li>
 
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="closure-tab" data-bs-toggle="tab"
+    <button class="nav-link booking-tab booking-tab--closure{% if active_tab == 'closure' %} active{% endif %}" id="closure-tab" data-bs-toggle="tab"
             data-bs-target="#closure-pane" type="button" role="tab"
-            aria-controls="closure-pane" aria-selected="false">
+            aria-controls="closure-pane" aria-selected="{% if active_tab == 'closure' %}true{% else %}false{% endif %}">
       Course closure
     </button>
   </li>
 
   <li class="nav-item" role="presentation">
-    <button class="nav-link" id="invoicing-tab" data-bs-toggle="tab"
+    <button class="nav-link booking-tab booking-tab--invoicing{% if active_tab == 'invoicing' %} active{% endif %}" id="invoicing-tab" data-bs-toggle="tab"
             data-bs-target="#invoicing-pane" type="button" role="tab"
-            aria-controls="invoicing-pane" aria-selected="false">
+            aria-controls="invoicing-pane" aria-selected="{% if active_tab == 'invoicing' %}true{% else %}false{% endif %}">
       Invoicing
     </button>
   </li>
 </ul>
 
-<div class="tab-content border border-top-0 rounded-bottom p-3" id="bookingTabsContent">
+<div class="tab-content booking-detail-tabs-content border border-top-0 rounded-bottom p-3" id="bookingTabsContent">
+  <!-- Pane: Course information -->
+  <div class="tab-pane fade booking-pane booking-pane--course-info{% if active_tab == 'course-info' %} show active{% endif %}" id="course-info-pane" role="tabpanel" aria-labelledby="course-info-tab" tabindex="0">
+    <div class="booking-summary-wrap mb-0">
+      <div class="row g-3 g-lg-4 align-items-stretch booking-summary-row">
+
+          {# LEFT COLUMN ------------------------------------------------------- #}
+          <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
+
+            <div class="card booking-panel-card booking-panel-card--information flex-grow-1 mb-0 d-flex flex-column">
+              <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
+                <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
+                <span class="booking-panel-title">Location &amp; Fee</span>
+              </div>
+              <div class="card-body flex-grow-1">
+
+                <div class="mb-3">
+                  <div class="text-muted small">Location</div>
+
+                  <div>
+                    {{ booking.training_location.name|default:"(TBC)" }}<br>
+
+                    {% if booking.training_location %}
+                      {% if booking.training_location.property_name %}
+                        {{ booking.training_location.property_name }}<br>
+                      {% endif %}
+                      {{ booking.training_location.address_line }}<br>
+                      {{ booking.training_location.town }} {{ booking.training_location.postcode }}<br>
+
+                      {% with addr=booking.training_location.address_line|add:", "|add:booking.training_location.town|add:" "|add:booking.training_location.postcode %}
+                        <a class="small d-block mb-2"
+                          target="_blank" rel="noopener"
+                          href="https://www.google.com/maps/search/?api=1&query={{ addr|urlencode }}">
+                          View in Google Maps
+                        </a>
+                      {% endwith %}
+
+                      {% if booking.has_effective_precise_location %}
+                        <div class="small text-success mt-2">
+                          <a
+                            href="https://www.google.com/maps/dir/?api=1&destination={{ booking.effective_precise_lat }},{{ booking.effective_precise_lng }}"
+                            target="_blank"
+                            rel="noopener"
+                            class="text-success text-decoration-none"
+                          >
+                            <i class="bi bi-crosshair2 me-1"></i>
+                            <strong>Precise location:</strong> {{ booking.effective_precise_lat }}, {{ booking.effective_precise_lng }}
+                          </a>
+                        </div>
+                      {% else %}
+                        <div class="small text-muted mt-2">
+                          No precise map location set.
+                        </div>
+                      {% endif %}
+
+                      {% if booking.effective_plus_code %}
+                        <div class="small mt-2">
+                          <a
+                            href="{{ booking.plus_code_url }}"
+                            target="_blank"
+                            rel="noopener"
+                            class="text-decoration-none"
+                          >
+                            <i class="bi bi-grid-3x3-gap me-1"></i>
+                            <strong>Plus code:</strong> {{ booking.effective_plus_code }}
+                          </a>
+                        </div>
+                      {% endif %}
+
+                      {% if not is_locked %}
+                        <div class="mt-3 d-flex flex-wrap gap-2">
+                          <button type="button"
+                            class="btn btn-outline-success btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#MapPickerModal">
+                            <i class="bi bi-geo-alt-fill me-1"></i> View / adjust precise location
+                          </button>
+
+                          {% if booking.has_effective_precise_location %}
+                            <form method="post" style="display:inline;">
+                              {% csrf_token %}
+                              <input type="hidden" name="action" value="reset_precise_location">
+                              <button class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset to admin point
+                              </button>
+                            </form>
+                          {% endif %}
+                        </div>
+                      {% endif %}
+
+                    {% endif %}
+                  </div>
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-0">
+                  <div class="text-muted small">Course contact</div>
+
+                  {% firstof booking.contact_name booking.training_location.contact_name "" as cname %}
+                  {% firstof booking.telephone booking.training_location.telephone "" as tel %}
+                  {% firstof booking.email booking.training_location.email "" as em %}
+
+                  {% if cname or tel or em %}
+                    <div class="mt-1">
+                      {{ cname|default:"—" }}<br>
+
+                      {% if tel %}
+                        <a href="tel:{{ tel }}">{{ tel }}</a><br>
+                      {% endif %}
+
+                      {% if em %}
+                        <a href="mailto:{{ em }}">{{ em }}</a>
+                      {% endif %}
+                    </div>
+                  {% else %}
+                    <div class="mt-1">—</div>
+                  {% endif %}
+                </div>
+
+                <hr class="my-3">
+
+                <div class="mb-0">
+                  <div class="text-muted small mb-1">Your fee</div>
+                  <div class="fw-semibold">£{{ booking.instructor_fee|default:0|floatformat:2 }}</div>
+                  {% if booking.allow_mileage_claim and booking.mileage_fee %}
+                    <div class="small text-muted mt-1">Mileage allowance: £{{ booking.mileage_fee|floatformat:2 }}</div>
+                  {% elif booking.allow_mileage_claim %}
+                    <div class="small text-muted mt-1">Mileage: allowed</div>
+                  {% endif %}
+                  {% if booking.allow_accommodation %}
+                    <div class="small text-muted mt-1">Accommodation: allowed</div>
+                  {% endif %}
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+
+          {# MIDDLE COLUMN (CALENDAR + RESEND) -------------------------------- #}
+          <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
+
+            <div class="card booking-panel-card booking-panel-card--calendar mb-0 d-flex flex-column">
+              <div class="card-header booking-panel-header booking-panel-header--calendar d-flex align-items-center">
+                <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+                <span class="booking-panel-title">Calendar</span>
+              </div>
+              <div class="card-body">
+
+                {% if gcal_links %}
+                  <div>
+                    <div class="text-muted small mb-2">Add to Google Calendar</div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                      {% for day in gcal_links %}
+                        <a href="{{ day.url }}" target="_blank"
+                          class="btn btn-google-cal btn-sm d-inline-flex align-items-center">
+                          <i class="bi bi-calendar-event me-1"></i>
+                          Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
+                        </a>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <hr class="my-3">
+                {% endif %}
+
+                <div>
+                  <div class="text-muted small">Download .ics file</div>
+
+                  <a href="{% url 'download_booking_ics' booking.pk %}"
+                    class="btn btn-outline-success btn-sm mt-2 d-inline-flex align-items-center">
+                    <i class="bi bi-calendar-plus me-1"></i>
+                    Download .ics
+                  </a>
+                </div>
+
+              </div>
+            </div>
+
+            {% include "partials/booking_telegram_resend.html" with send_url_name="instructor_booking_telegram_send" stacked=True %}
+
+          </div>
+
+          {# RIGHT COLUMN (NOTES + LOG) ---------------------------------------- #}
+          <div class="col-lg-4 d-flex flex-column gap-3 booking-summary-col">
+
+            <div class="card booking-panel-card booking-panel-card--notes booking-notes-card flex-grow-1 mb-0 d-flex flex-column">
+              <div class="card-header booking-panel-header booking-panel-header--notes d-flex align-items-center justify-content-between py-2">
+                <div class="d-flex align-items-center">
+                  <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-journal-text"></i></span>
+                  <span class="booking-panel-title">Course notes</span>
+                </div>
+
+                {% if booking.course_type.onedrive_folder_link %}
+                  <a href="{{ booking.course_type.onedrive_folder_link }}"
+                    target="_blank"
+                    rel="noopener"
+                    class="btn btn-outline-primary btn-sm">
+                    <i class="bi bi-cloud"></i> Materials
+                    <i class="bi bi-box-arrow-up-right ms-1"></i>
+                  </a>
+                {% endif %}
+              </div>
+
+              <div class="card-body py-2 flex-grow-1 d-flex flex-column">
+                <form id="booking-notes-form" method="post" class="d-flex flex-column flex-grow-1">
+                  {% csrf_token %}
+
+                  <input type="hidden" name="action" id="id_precise_action" value="">
+                  <input type="hidden" name="precise_lat" id="id_precise_lat" value="{{ booking.effective_precise_lat|default_if_none:'' }}">
+                  <input type="hidden" name="precise_lng" id="id_precise_lng" value="{{ booking.effective_precise_lng|default_if_none:'' }}">
+
+                  {% if is_locked %}
+                    {{ notes_form.booking_notes }}
+                    <script>
+                      document.addEventListener('DOMContentLoaded', function(){
+                        var ta = document.getElementById('id_booking_notes');
+                        if (ta){ ta.setAttribute('readonly','readonly'); ta.classList.add('bg-light'); }
+                      });
+                    </script>
+                  {% else %}
+                    {{ notes_form.booking_notes }}
+                  {% endif %}
+
+                  {% for err in notes_form.booking_notes.errors %}
+                    <div class="text-danger small">{{ err }}</div>
+                  {% endfor %}
+
+                  {% if not is_locked %}
+                    <div class="mt-2">
+                      <button class="btn btn-primary btn-sm"
+                              onclick="document.getElementById('id_precise_action').value='save_notes'">
+                        <i class="bi bi-check2"></i> Save notes
+                      </button>
+                    </div>
+                  {% endif %}
+                </form>
+              </div>
+            </div>
+
+            {% include "partials/booking_communication_log.html" with stacked=True %}
+
+          </div>
+        </div>
+    </div>
+  </div>
+
   <!-- Pane: Course days / registers -->
-  <div class="tab-pane fade show active" id="days-pane" role="tabpanel" aria-labelledby="days-tab" tabindex="0">
+  <div class="tab-pane fade booking-pane booking-pane--days{% if active_tab == 'days' %} show active{% endif %}" id="days-pane" role="tabpanel" aria-labelledby="days-tab" tabindex="0">
     <div id="days-refresh-indicator" class="text-end small text-muted" style="opacity:0; transition:opacity .25s;">Updating…</div>
     <div class="table-responsive">
       <table class="table table-sm align-middle">
@@ -584,13 +723,13 @@
   </script>
 
   <!-- Pane: Assessments -->
-  <div class="tab-pane fade" id="assessments-pane" role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
+  <div class="tab-pane fade booking-pane booking-pane--assessments{% if active_tab == 'assessments' %} show active{% endif %}" id="assessments-pane" role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
     {% include "instructor/_assessment_matrix_inner.html" %}
   </div>
 
   {% if has_exam %}
   <!-- Pane: Exams (only when course type has exams) -->
-  <div class="tab-pane fade" id="exams-pane" role="tabpanel" aria-labelledby="exams-tab" tabindex="0">
+  <div class="tab-pane fade booking-pane booking-pane--exams{% if active_tab == 'exams' %} show active{% endif %}" id="exams-pane" role="tabpanel" aria-labelledby="exams-tab" tabindex="0">
      <div id="exams-refresh-indicator" class="text-end small text-muted" style="opacity:0; transition:opacity .25s;">Updating…</div>
 
     {% if course_exams %}
@@ -635,7 +774,7 @@
                         <th style="width: 110px;" class="text-center">Score</th>
                         <th style="width: 90px;"  class="text-center">%</th>
                         <th style="width: 120px;">Result</th>
-                        <th class="text-end" style="width: 260px;">Actions</th>
+                        <th class="text-end" style="min-width: 320px;">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -710,16 +849,23 @@
                                   Review exam
                                 </a>
 
-                                <a class="btn btn-sm btn-outline-secondary"
-                                  href="{% url 'instructor_attempt_incorrect' att.id %}?back={{ booking.id }}&tab=exams">
-                                  See incorrect & authorise re-test
-                                </a>
+                                <button type="button"
+                                  class="btn btn-sm btn-outline-secondary exam-incorrect-panel-btn"
+                                  data-attempt-id="{{ att.id }}"
+                                  data-panel-url="{% url 'instructor_attempt_incorrect' att.id %}?embed=1&amp;back={{ booking.id }}&amp;tab=exams">
+                                  See incorrect, conduct viva &amp; authorise retest
+                                </button>
 
                                 <a class="btn btn-sm btn-outline-dark"
                                    href="{% url 'instructor_attempt_response_pdf' att.id %}"
                                    target="_blank" rel="noopener">
                                   Export responses PDF
                                 </a>
+                              </td>
+                            </tr>
+                            <tr class="exam-detail-row d-none" data-attempt-id="{{ att.id }}">
+                              <td colspan="8" class="p-0 border-0">
+                                <div class="exam-attempt-detail-host bg-light border-top p-3"></div>
                               </td>
                             </tr>
                           {% endfor %}
@@ -877,7 +1023,7 @@
 
 
     <!-- Pane: Feedback -->
-    <div class="tab-pane fade" id="feedback-pane" role="tabpanel"
+    <div class="tab-pane fade booking-pane booking-pane--feedback{% if active_tab == 'feedback' %} show active{% endif %}" id="feedback-pane" role="tabpanel"
         aria-labelledby="feedback-tab" tabindex="0">
 
       <div class="d-flex justify-content-between align-items-center mb-2">
@@ -903,7 +1049,7 @@
 
 
   <!-- Pane: Course closure -->
-<div class="tab-pane fade" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0">
+<div class="tab-pane fade booking-pane booking-pane--closure{% if active_tab == 'closure' %} show active{% endif %}" id="closure-pane" role="tabpanel" aria-labelledby="closure-tab" tabindex="0">
 
   {% if not is_locked %}
   <form method="post" class="mt-3" id="closure-form">
@@ -1037,8 +1183,35 @@
 
   {% else %}
     <div class="alert alert-success mt-3">
-      ✅ Course has already been closed.
+      Course has already been closed.
     </div>
+
+    {% if cert_delegates %}
+      <div class="card mb-3">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <strong>Certificates</strong>
+          <a href="{% url 'instructor_booking_certificates' booking.pk %}"
+             target="_blank" rel="noopener"
+             class="btn btn-primary btn-sm">
+            <i class="bi bi-file-earmark-pdf me-1"></i> View certificates (PDF)
+          </a>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small mb-2">
+            {{ cert_delegates|length }} certificate{{ cert_delegates|length|pluralize }} available for delegates who passed.
+          </p>
+          <ul class="mb-0">
+            {% for reg in cert_delegates %}
+              <li>{{ reg.certificate_display_name }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    {% else %}
+      <div class="alert alert-secondary">
+        No certificates are available for this course — no delegates passed.
+      </div>
+    {% endif %}
 
     {% if booking.is_dummy_business %}
       <div class="alert alert-warning">
@@ -1058,7 +1231,7 @@
 
 
    <!-- Pane: Invoicing -->
-  <div class="tab-pane fade" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
+  <div class="tab-pane fade booking-pane booking-pane--invoicing{% if active_tab == 'invoicing' %} show active{% endif %}" id="invoicing-pane" role="tabpanel" aria-labelledby="invoicing-tab" tabindex="0">
     {% include "instructor/_invoicing_tab.html" %}
   </div>
 </div>
@@ -1316,7 +1489,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  const hash = window.location.hash;
+  let hash = window.location.hash;
+  if (hash === "#registers-tab") {
+    hash = "#days-pane";
+  }
   if (!hash) return;
   const tabTrigger =
     document.querySelector('button[data-bs-target="' + hash + '"]') ||
@@ -1400,6 +1576,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function isUserInteracting() {
+    if (examsPane.querySelector('.exam-detail-row:not(.d-none)')) return true;
     if (examsPane.matches(':hover')) return true;
     var ae = document.activeElement;
     return !!(ae && examsPane.contains(ae));
@@ -1411,10 +1588,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
   async function refreshExams() {
     if (!isPaneActive()) return;
-    if (isUserInteracting()) return;
+    if (isUserInteracting() && !window.__examDetailForceRefresh) return;
 
     console.log('[ExamsRefresh] refreshing…');
     showIndicator(true);
+    window.__examDetailForceRefresh = false;
 
     try {
       var url = window.location.href.split('#')[0];
@@ -1493,92 +1671,124 @@ document.addEventListener('DOMContentLoaded', function () {
     examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
   }
 
+  window.refreshExamsPane = refreshExams;
+
+  async function loadExamIncorrectPanel(panelUrl, host) {
+    host.innerHTML = '<div class="p-2 text-muted small">Loading…</div>';
+    var res = await fetch(panelUrl, {
+      cache: 'no-store',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    if (!res.ok) throw new Error('Load failed');
+    host.innerHTML = await res.text();
+  }
+
+  async function refreshAssessmentsAfterExamChange() {
+    var assessmentsPane = document.getElementById('assessments-pane');
+    if (!assessmentsPane) return;
+    try {
+      var url = window.location.href.split('#')[0];
+      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'fetch' }
+      });
+      if (!res.ok) return;
+      var html = await res.text();
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      var freshPane = tmp.querySelector('#assessments-pane');
+      if (freshPane) assessmentsPane.innerHTML = freshPane.innerHTML;
+    } catch (e) { /* ignore */ }
+  }
+
+  examsPane.addEventListener('click', async function (e) {
+    var openBtn = e.target.closest('.exam-incorrect-panel-btn');
+    if (openBtn) {
+      e.preventDefault();
+      var attemptId = openBtn.getAttribute('data-attempt-id');
+      var panelUrl = openBtn.getAttribute('data-panel-url');
+      var detailRow = examsPane.querySelector('.exam-detail-row[data-attempt-id="' + attemptId + '"]');
+      if (!detailRow || !panelUrl) return;
+
+      examsPane.querySelectorAll('.exam-detail-row').forEach(function (row) {
+        if (row !== detailRow) row.classList.add('d-none');
+      });
+
+      var host = detailRow.querySelector('.exam-attempt-detail-host');
+      if (!host) return;
+
+      detailRow.classList.remove('d-none');
+      try {
+        await loadExamIncorrectPanel(panelUrl, host);
+        detailRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } catch (err) {
+        host.innerHTML = '<div class="alert alert-danger mb-0">Could not load exam review.</div>';
+      }
+      return;
+    }
+
+    if (e.target.closest('.exam-detail-close')) {
+      var closeRow = e.target.closest('.exam-detail-row');
+      if (closeRow) closeRow.classList.add('d-none');
+      return;
+    }
+
+    var editBtn = e.target.closest('.exam-incorrect-edit-viva');
+    if (editBtn) {
+      e.preventDefault();
+      var editHost = editBtn.closest('.exam-attempt-detail-host');
+      var editUrl = editBtn.getAttribute('data-panel-url');
+      if (!editHost || !editUrl) return;
+      try {
+        await loadExamIncorrectPanel(editUrl, editHost);
+      } catch (err) {
+        editHost.innerHTML = '<div class="alert alert-danger mb-0">Could not load viva form.</div>';
+      }
+    }
+  });
+
+  examsPane.addEventListener('submit', async function (e) {
+    var form = e.target.closest('.exam-attempt-incorrect-panel form');
+    if (!form) return;
+    e.preventDefault();
+
+    var host = form.closest('.exam-attempt-detail-host');
+    var action = form.getAttribute('action') || window.location.href;
+
+    try {
+      var res = await fetch(action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      });
+      if (!res.ok) throw new Error('Save failed');
+      var savedHtml = await res.text();
+      var detailRow = form.closest('.exam-detail-row');
+      var attemptId = detailRow ? detailRow.getAttribute('data-attempt-id') : null;
+
+      window.__examDetailForceRefresh = true;
+      await refreshExams();
+
+      if (attemptId) {
+        var newRow = examsPane.querySelector('.exam-detail-row[data-attempt-id="' + attemptId + '"]');
+        var newHost = newRow ? newRow.querySelector('.exam-attempt-detail-host') : null;
+        if (newRow && newHost) {
+          newRow.classList.remove('d-none');
+          newHost.innerHTML = savedHtml;
+        }
+      } else if (host) {
+        host.innerHTML = savedHtml;
+      }
+
+      await refreshAssessmentsAfterExamChange();
+    } catch (err) {
+      alert('Saving failed. Please try again.');
+    }
+  });
+
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) stop();
     else start();
-  });
-});
-</script>
-
-<style>
-.fee-reveal-wrap { position: relative; display: inline-block; }
-
-.fee-popover {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  min-width: 200px;
-  background: #212529;
-  color: #fff;
-  border-radius: .5rem;
-  padding: .5rem .75rem;
-  opacity: 0;
-  transform: translateY(-5px);
-  pointer-events: none;
-  transition: opacity .2s ease, transform .2s ease;
-  z-index: 999;
-}
-
-.fee-popover.show {
-  opacity: 1;
-  transform: translateY(0);
-  pointer-events: auto;
-}
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-  const btn = document.getElementById('reveal-fee-btn');
-  const pop = document.getElementById('fee-popover');
-  const txt = document.getElementById('fee-text');
-  if (!btn || !pop || !txt) return;
-
-  let hideTimer = null;
-
-  function showPopover(message) {
-    txt.innerHTML = message;
-    pop.classList.add('show');
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(hidePopover, 4000);
-  }
-
-  function hidePopover() {
-    pop.classList.remove('show');
-  }
-
-  document.addEventListener('click', e => {
-    if (!pop.contains(e.target) && !btn.contains(e.target)) hidePopover();
-  });
-
-  btn.addEventListener('click', async () => {
-    const url = btn.dataset.feeUrl;
-    try {
-      const res = await fetch(url, { credentials: 'same-origin' });
-      if (!res.ok) {
-        showPopover(res.status === 403 ? 'Access denied.' : 'Error loading fee');
-        return;
-      }
-      const data = await res.json();
-      let message = 'Your fee: ' + data.amount;
-
-      // Mileage — keep on one line
-      if (data.mileage) {
-          message += '<br><span style="white-space: nowrap;">Mileage allowance: ' + data.mileage + '</span>';
-      }
-
-      // Accommodation ✓ — only if allowed
-      if (data.accommodation) {
-          message += '<br><span style="white-space: nowrap;">Accommodation: ✓</span>';
-      }
-
-      // Render as HTML
-      txt.innerHTML = message;
-      showPopover(message);
-
-    } catch (err) {
-      console.error(err);
-      showPopover('Error loading fee');
-    }
   });
 });
 </script>

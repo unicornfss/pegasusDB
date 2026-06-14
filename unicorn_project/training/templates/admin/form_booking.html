@@ -1778,6 +1778,7 @@ document.addEventListener("gmaps:ready", () => {
     const locationSelect        = document.getElementById("id_training_location");
 
     const mileageBox            = document.getElementById("instructor-mileage");
+    const travelTimeBox         = document.getElementById("instructor-travel-time");
     const feeBox                = document.getElementById("mileage-fee");
 
     const mileageFeeField       = document.getElementById("id_mileage_fee");
@@ -1802,11 +1803,15 @@ document.addEventListener("gmaps:ready", () => {
 
     function updateMileage() {
         mileageBox.textContent = "Calculating mileage…";
+        if (travelTimeBox) travelTimeBox.textContent = "Calculating travel time…";
         feeBox.textContent = "";
         mileageFeeField.value = "";
 
         const instId = instructorSelect.value;
-        if (!instId) return;
+        if (!instId) {
+            if (travelTimeBox) travelTimeBox.textContent = "";
+            return;
+        }
 
         fetch(`/api/instructor/${instId}/postcode/`)
             .then(r => r.json())
@@ -1816,6 +1821,7 @@ document.addEventListener("gmaps:ready", () => {
 
                 if (!instructorPC || !locationPC) {
                     mileageBox.textContent = "Postcode missing";
+                    if (travelTimeBox) travelTimeBox.textContent = "";
                     return;
                 }
 
@@ -1829,13 +1835,20 @@ document.addEventListener("gmaps:ready", () => {
                     (response, status) => {
                         if (status !== "OK") {
                             mileageBox.textContent = "Distance unavailable";
+                            if (travelTimeBox) travelTimeBox.textContent = "Travel time unavailable";
                             return;
                         }
 
                         const elem = response.rows[0].elements[0];
                         if (elem.status !== "OK") {
                             mileageBox.textContent = "Distance unavailable";
+                            if (travelTimeBox) travelTimeBox.textContent = "Travel time unavailable";
                             return;
+                        }
+
+                        if (travelTimeBox && elem.duration) {
+                            travelTimeBox.textContent =
+                                `Estimated travel time (one way): ${elem.duration.text}`;
                         }
 
                         const meters = elem.distance.value;
@@ -1844,20 +1857,22 @@ document.addEventListener("gmaps:ready", () => {
                         const days = getCourseDays();
 
                         let totalMiles;
-                        
-                        // -----------------------------------------------------
-                        // NEW RULES:
-                        //   • If accommodation = ON → only *one* return journey
-                        //   • If accommodation = OFF → multiply by number of days
-                        // -----------------------------------------------------
+                        let mileageDetail;
+
                         if (accommodationToggle && accommodationToggle.checked) {
-                            totalMiles = milesReturn;               // one return trip
+                            totalMiles = milesReturn;
+                            mileageDetail = "(single return trip with accommodation)";
+                        } else if (days > 1) {
+                            totalMiles = milesReturn * days;
+                            mileageDetail =
+                                `(${milesReturn.toFixed(1)} mi return × ${days} days)`;
                         } else {
-                            totalMiles = milesReturn * days;        // per-day return
+                            totalMiles = milesReturn;
+                            mileageDetail = "(return trip)";
                         }
 
                         mileageBox.textContent =
-                            `Estimated mileage: ${totalMiles.toFixed(1)} miles`;
+                            `Estimated mileage for whole course: ${totalMiles.toFixed(1)} miles ${mileageDetail}`;
 
                         // If mileage claim disabled
                         if (mileageClaimToggle && !mileageClaimToggle.checked) {
@@ -1869,7 +1884,7 @@ document.addEventListener("gmaps:ready", () => {
                         const fee = totalMiles * mileageRate;
 
                         feeBox.textContent =
-                            `Mileage fee (@ £${mileageRate.toFixed(2)}/mile): £${fee.toFixed(2)}`;
+                            `Mileage fee for whole course (@ £${mileageRate.toFixed(2)}/mile): £${fee.toFixed(2)}`;
 
                         mileageFeeField.value = fee.toFixed(2);
                     }
