@@ -7,6 +7,7 @@ SETTINGS_CALLBACK_PREFIX = "st:"
 TELEGRAM_SETTING_KEYS = {
     "n": ("notify_new_bookings_telegram", "New bookings"),
     "c": ("notify_booking_changes_telegram", "Booking updates"),
+    "v": ("notify_cover_requests_telegram", "Cover requests"),
     "u": ("notify_upcoming_bookings_telegram", "Upcoming bookings"),
     "r": ("notify_reminders_telegram", "Departure reminders"),
 }

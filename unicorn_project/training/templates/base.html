@@ -163,6 +163,18 @@
                 <i class="bi bi-calendar-event"></i> My bookings
             </a>
 
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_course_swaps' or request.resolver_match.url_name == 'instructor_course_swap_request' or request.resolver_match.url_name == 'instructor_course_swap_accept' or request.resolver_match.url_name == 'instructor_course_swap_decline' or request.resolver_match.url_name == 'instructor_course_swap_cancel' %}active{% endif %}"
+               href="{% url 'instructor_course_swaps' %}">
+                <i class="bi bi-arrow-left-right"></i>
+                <span class="sidebar-leaf-label">Course swaps</span>
+                {% if course_swap_menu_badge_count %}
+                  <span class="sidebar-menu-badge"
+                        title="{% if course_swap_incoming_count and course_swap_outcome_count %}Incoming requests and status updates{% elif course_swap_incoming_count %}Incoming cover request{{ course_swap_incoming_count|pluralize }}{% else %}Cover request status update{{ course_swap_outcome_count|pluralize }}{% endif %}">
+                    {{ course_swap_menu_badge_count }}
+                  </span>
+                {% endif %}
+            </a>
+
             <a class="leaf {% if request.resolver_match.url_name == 'instructor_calendar' %}active{% endif %}"
                href="{% url 'instructor_calendar' %}">
               <i class="bi bi-calendar3"></i> My calendar

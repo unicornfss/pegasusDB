@@ -13,6 +13,7 @@ from .booking_change_detection import (
     CHANGE_REINSTATEMENT,
     format_changed_areas_label,
 )
+from .site_url import public_site_url
 
 NOTIFICATION_HEADINGS = {
     "new_booking": "New booking assigned",
@@ -190,6 +191,30 @@ def _format_course_day_lines(booking):
     return []
 
 
+def format_booking_course_day_lines(booking):
+    """Human-readable date/time lines for each course day."""
+    return _format_course_day_lines(booking)
+
+
+def format_booking_dates_compact(booking):
+    """Short date text for lists: one day, or a first–last range when multi-day."""
+    day_lines = _format_course_day_lines(booking)
+    if not day_lines:
+        return "—"
+    if len(day_lines) == 1:
+        line = day_lines[0]
+        if line.startswith("Day 1: "):
+            return line[7:]
+        return line
+
+    days = list(booking.days.all().order_by("date"))
+    if len(days) >= 2:
+        first = days[0].date.strftime("%a %d %b %Y")
+        last = days[-1].date.strftime("%a %d %b %Y")
+        return f"{first} – {last}"
+    return day_lines[0]
+
+
 def _format_booking_details_block(booking, *, highlight=None):
     highlight = highlight or frozenset()
     lines = []
@@ -242,7 +267,7 @@ def _format_booking_details_block(booking, *, highlight=None):
     if plus_code:
         lines.append(f'📍 <a href="{booking.plus_code_url()}">Plus code: {escape(plus_code)}</a>')
 
-    site = (getattr(settings, "SITE_URL", "") or "").rstrip("/")
+    site = public_site_url()
     if site and booking.pk:
         path = reverse("instructor_booking_detail", args=[booking.pk])
         lines.append(f'🔗 <a href="{site}{path}">Open booking in Pegasus</a>')
@@ -383,7 +408,7 @@ def format_booking_telegram_message(booking, *, notification_type, intro=None, c
     if plus_code:
         lines.append(f'📍 <a href="{booking.plus_code_url()}">Plus code: {escape(plus_code)}</a>')
 
-    site = (getattr(settings, "SITE_URL", "") or "").rstrip("/")
+    site = public_site_url()
     if site and booking.pk:
         path = reverse("instructor_booking_detail", args=[booking.pk])
         lines.append(f'\n🔗 <a href="{site}{path}">Open booking in Pegasus</a>')

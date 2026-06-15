@@ -73,6 +73,13 @@ def _dev_lan_origin(port: int = 8000) -> str | None:
     return None
 
 
+def _is_local_site_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    return host in ("127.0.0.1", "localhost", "::1")
+
+
 if DEBUG:
     _dev_port = int(os.getenv("DEV_SERVER_PORT", "8000"))
     for _origin in (
@@ -115,6 +122,17 @@ if not SITE_URL and RENDER_EXTERNAL_HOSTNAME:
     SITE_URL = f"https://{RENDER_EXTERNAL_HOSTNAME}"
 if not SITE_URL:
     SITE_URL = "http://127.0.0.1:8000"
+
+# Links sent off-device (Telegram, QR codes, etc.) must be reachable from phones on the LAN.
+PUBLIC_SITE_URL = SITE_URL
+if DEBUG:
+    _dev_site = os.getenv("DEV_SITE_URL", "").strip().rstrip("/")
+    if _dev_site:
+        PUBLIC_SITE_URL = _dev_site
+    elif _is_local_site_url(SITE_URL):
+        _auto_lan = _dev_lan_origin(int(os.getenv("DEV_SERVER_PORT", "8000")))
+        if _auto_lan:
+            PUBLIC_SITE_URL = _auto_lan
 
 # Shared cache for Telegram link tokens (web + telegram_poll must see the same store).
 REDIS_URL = os.getenv("REDIS_URL", "").strip()
@@ -185,6 +203,7 @@ TEMPLATES = [
                 "unicorn_project.training.context_processors.logo_context",
                 'unicorn_project.training.context_processors.user_display_name',
                 'unicorn_project.training.context_processors.two_factor_prompt',
+                'unicorn_project.training.context_processors.course_swap_badges',
             ],
         },
     },

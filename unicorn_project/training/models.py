@@ -281,6 +281,10 @@ class Personnel(models.Model):
         default=False,
         help_text="Telegram reminders before upcoming bookings (days chosen on profile).",
     )
+    notify_cover_requests_telegram = models.BooleanField(
+        default=True,
+        help_text="Telegram alerts for course cover requests and responses.",
+    )
     upcoming_reminder_days_1 = models.PositiveSmallIntegerField(null=True, blank=True)
     upcoming_reminder_days_2 = models.PositiveSmallIntegerField(null=True, blank=True)
     upcoming_reminder_days_3 = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -733,6 +737,64 @@ class BookingDay(models.Model):
             # assumes Booking has course_reference
             self.day_code = f"{self.date.strftime('%Y%m%d')}-{self.booking.course_reference}"
         super().save(*args, **kwargs)
+
+
+class CourseSwapStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    ACCEPTED = "accepted", "Accepted"
+    DECLINED = "declined", "Declined"
+    CANCELLED = "cancelled", "Cancelled"
+
+
+class CourseSwap(models.Model):
+    """
+    Instructor-initiated offer to transfer a booking to another instructor.
+    The booking only moves when the recipient accepts.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking = models.ForeignKey(
+        "Booking",
+        on_delete=models.CASCADE,
+        related_name="swap_requests",
+    )
+    from_instructor = models.ForeignKey(
+        "Personnel",
+        on_delete=models.CASCADE,
+        related_name="course_swaps_offered",
+    )
+    to_instructor = models.ForeignKey(
+        "Personnel",
+        on_delete=models.CASCADE,
+        related_name="course_swaps_received",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=CourseSwapStatus.choices,
+        default=CourseSwapStatus.PENDING,
+        db_index=True,
+    )
+    message = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    from_instructor_seen_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the offering instructor viewed the accept/decline outcome.",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["booking"],
+                condition=Q(status="pending"),
+                name="uniq_pending_course_swap_per_booking",
+            ),
+        ]
+
+    def __str__(self):
+        ref = getattr(self.booking, "course_reference", "") or str(self.booking_id)
+        return f"{ref}: {self.from_instructor} → {self.to_instructor} ({self.status})"
 
 
 

@@ -76,3 +76,23 @@ def two_factor_prompt(request):
         "show_two_factor_prompt": show_prompt,
         "show_2fa_prompt": show_prompt,
     }
+
+
+def course_swap_badges(request):
+    """Sidebar badge counts for course swap notifications."""
+    defaults = {
+        "course_swap_menu_badge_count": 0,
+        "course_swap_incoming_count": 0,
+        "course_swap_outcome_count": 0,
+    }
+    user = getattr(request, "user", None)
+    if not user or not user.is_authenticated:
+        return defaults
+
+    personnel = getattr(user, "personnel", None)
+    if not personnel:
+        return defaults
+
+    from .services.course_swaps import menu_badge_counts
+
+    return menu_badge_counts(personnel)

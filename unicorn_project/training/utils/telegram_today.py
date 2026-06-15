@@ -11,15 +11,12 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile
 from ..models import Booking
 from .booking_details import _location_lines, google_maps_url_for_booking, prepend_notification_disclaimer
 from .register_links import qr_png_bytes
+from .site_url import public_site_url
 
 BOOKING_REGISTER_CALLBACK_PREFIX = "br:"
 BOOKING_FEEDBACK_CALLBACK_PREFIX = "bf:"
 
 _ACTIVE_STATUSES = Q(status="scheduled") | Q(status="in_progress") | Q(status="awaiting_closure")
-
-
-def pegasus_site_url() -> str:
-    return (getattr(settings, "SITE_URL", "") or "").rstrip("/")
 
 
 def bookings_on_date_for_personnel(personnel, on_date=None):
@@ -162,7 +159,7 @@ def format_upcoming_booking_reminder_message(booking, *, offset_days, first_date
 
 def booking_register_form_url(booking, on_date=None):
     on_date = on_date or timezone.localdate()
-    site = pegasus_site_url()
+    site = public_site_url()
     code = getattr(booking.course_type, "code", "") or ""
     if not site or not code:
         return ""
@@ -180,7 +177,7 @@ def booking_register_form_url(booking, on_date=None):
 
 def booking_feedback_form_url(booking, on_date=None):
     on_date = on_date or timezone.localdate()
-    site = pegasus_site_url()
+    site = public_site_url()
     code = getattr(booking.course_type, "code", "") or ""
     if not site or not code:
         return ""

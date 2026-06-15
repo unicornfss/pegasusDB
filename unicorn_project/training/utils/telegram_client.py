@@ -17,7 +17,7 @@ def _run_async(coro):
     return asyncio.run(coro)
 
 
-def send_telegram_message(chat_id, text, *, parse_mode="HTML"):
+def send_telegram_message(chat_id, text, *, parse_mode="HTML", reply_markup=None, disable_web_page_preview=True):
     token = (settings.TELEGRAM_BOT_TOKEN or "").strip()
     chat_id = (chat_id or "").strip()
     if not token or not chat_id:
@@ -25,7 +25,13 @@ def send_telegram_message(chat_id, text, *, parse_mode="HTML"):
 
     async def _send():
         bot = Bot(token=token)
-        return await bot.send_message(chat_id=chat_id, text=text, parse_mode=parse_mode)
+        return await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode=parse_mode,
+            reply_markup=reply_markup,
+            disable_web_page_preview=disable_web_page_preview,
+        )
 
     try:
         message = _run_async(_send())

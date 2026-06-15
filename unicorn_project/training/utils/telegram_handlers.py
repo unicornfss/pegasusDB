@@ -18,6 +18,30 @@ from .telegram_bookings import (
     personnel_for_chat_id,
     upcoming_bookings_for_personnel,
 )
+from .telegram_course_swaps import (
+    COVER_ACCEPT_CALLBACK_PREFIX,
+    COVER_DECLINE_CALLBACK_PREFIX,
+    COVER_REQUEST_BOOKING_CALLBACK_PREFIX,
+    COVER_REQUEST_INSTRUCTOR_CALLBACK_PREFIX,
+    COVER_REQUEST_MESSAGE_ADD_CALLBACK,
+    COVER_REQUEST_MESSAGE_SKIP_CALLBACK,
+    cover_request_keyboard,
+    cover_request_message_keyboard,
+    cover_swap_for_personnel_by_id,
+    format_cover_outcome_message,
+    format_cover_request_message,
+    format_cover_request_message_prompt,
+    format_cover_request_sent_confirmation,
+    format_cover_requests_list,
+    format_instructors_for_cover_request,
+    format_swappable_bookings_for_request,
+    incoming_cover_requests_for_personnel,
+    instructors_for_cover_request_keyboard,
+    pending_cover_requests_sent_by_personnel,
+    swappable_bookings_request_keyboard,
+)
+from .telegram_link import consume_link_token
+from .telegram_menu import main_menu_reply_keyboard, register_bot_commands
 from .telegram_settings import (
     SETTINGS_CALLBACK_PREFIX,
     TELEGRAM_SETTING_KEYS,
@@ -62,6 +86,7 @@ def _link_personnel(token, chat_id):
     personnel.notify_new_bookings_telegram = True
     personnel.notify_booking_changes_telegram = True
     personnel.notify_reminders_telegram = True
+    personnel.notify_cover_requests_telegram = True
     personnel.save(
         update_fields=[
             "telegram_chat_id",
@@ -69,10 +94,36 @@ def _link_personnel(token, chat_id):
             "notify_new_bookings_telegram",
             "notify_booking_changes_telegram",
             "notify_reminders_telegram",
+            "notify_cover_requests_telegram",
         ]
     )
     name = personnel.name or personnel.email
-    return personnel, f"Linked to Pegasus as {name}. Use /bookings to see upcoming courses."
+    return personnel, f"Linked to Pegasus as {name}. Use the buttons below or /help for commands."
+
+
+async def _reply_with_menu(update, text, *, parse_mode=None, disable_web_page_preview=False, reply_markup=None):
+    kwargs = {"reply_markup": reply_markup or main_menu_reply_keyboard()}
+    if parse_mode:
+        kwargs["parse_mode"] = parse_mode
+    if disable_web_page_preview:
+        kwargs["disable_web_page_preview"] = True
+    await update.effective_message.reply_text(text, **kwargs)
+
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id:
+        return
+
+    linked = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not linked:
+        await update.message.reply_text("Account not linked. Use the QR code on your Pegasus profile.")
+        return
+
+    await update.message.reply_text(
+        "Tap a button below for quick access to commands.",
+        reply_markup=main_menu_reply_keyboard(),
+    )
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -83,14 +134,25 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args or []
     if args:
         personnel, message = await _link_personnel(args[0], chat_id)
-        await update.message.reply_text(message)
+        if personnel:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                reply_markup=main_menu_reply_keyboard(),
+            )
+        else:
+            await update.message.reply_text(message)
         return
 
     linked = await sync_to_async(personnel_for_chat_id)(str(chat_id))
     if linked:
-        await update.message.reply_text(
-            f"Already linked as {linked.name or linked.email}.\n"
-            "Commands: /today · /bookings · /directions · /settings · /help"
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(
+                f"Already linked as {linked.name or linked.email}.\n"
+                "Use the buttons below or /help for all commands."
+            ),
+            reply_markup=main_menu_reply_keyboard(),
         )
         return
 
@@ -103,21 +165,28 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+    await _reply_with_menu(
+        update,
         "Commands:\n"
         "/start — link your Pegasus account (via profile QR)\n"
+        "/menu — show command buttons\n"
         "/today — today's course summary\n"
+        "/nextcourse — full details for your next upcoming course\n"
         "/bookings — list upcoming bookings (tap one or reply with its number)\n"
+        "/covers — incoming course cover requests (accept or decline)\n"
+        "/requestcover — ask another instructor to cover one of your courses\n"
+        "  (during request: tap buttons or /cancel to stop)\n"
         "/directions — address and map link for your next booking\n"
         "/registration — registration QR and link for today's course\n"
         "/feedback — feedback QR and link for today's course\n"
         "/settings — turn booking alerts on or off\n"
-        "/help — this message"
+        "/help — this message",
     )
 
 
 def _store_bookings_pick_list(context, bookings):
     context.user_data["booking_ids"] = [b.pk for b in bookings]
+    context.user_data["telegram_pick_list"] = "bookings"
 
 
 async def _reply_booking_details(context, chat_id, booking):
@@ -196,13 +265,572 @@ async def booking_detail_callback(update: Update, context: ContextTypes.DEFAULT_
         )
 
 
-async def booking_pick_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    booking_ids = context.user_data.get("booking_ids")
-    if not booking_ids:
+def _store_cover_pick_list(context, swaps):
+    context.user_data["cover_swap_ids"] = [s.pk for s in swaps]
+    context.user_data["telegram_pick_list"] = "covers"
+
+
+@sync_to_async
+def _covers_data_for_personnel(personnel):
+    incoming = incoming_cover_requests_for_personnel(personnel)
+    outgoing = pending_cover_requests_sent_by_personnel(personnel)
+    return incoming, outgoing
+
+
+async def covers_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    personnel, chat_id = await _linked_personnel_or_reply(update)
+    if not personnel:
+        return
+
+    incoming, outgoing = await _covers_data_for_personnel(personnel)
+    _store_cover_pick_list(context, incoming)
+
+    summary = await sync_to_async(format_cover_requests_list)(incoming, outgoing)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=summary,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+    )
+
+    for swap in incoming:
+        text = await sync_to_async(format_cover_request_message)(
+            swap,
+            intro=None,
+        )
+        keyboard = cover_request_keyboard(swap)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=keyboard,
+        )
+
+
+@sync_to_async
+def _telegram_respond_to_cover(swap_id, personnel, *, accept):
+    from ..services.course_swaps import CourseSwapError, accept_swap, decline_swap
+
+    try:
+        if accept:
+            swap = accept_swap(swap_id=swap_id, recipient=personnel)
+        else:
+            swap = decline_swap(swap_id=swap_id, recipient=personnel)
+        return swap, None
+    except CourseSwapError as exc:
+        return None, str(exc)
+
+
+async def _cover_action_callback(update, context, *, accept):
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    prefix = COVER_ACCEPT_CALLBACK_PREFIX if accept else COVER_DECLINE_CALLBACK_PREFIX
+    data = query.data
+    if not data.startswith(prefix):
+        await query.answer()
+        return
+
+    swap_id = data[len(prefix):]
+    if not swap_id:
+        await query.answer("Could not read that request.", show_alert=True)
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id:
+        return
+
+    personnel = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not personnel:
+        await query.answer("Account not linked.", show_alert=True)
+        return
+
+    swap, error = await _telegram_respond_to_cover(swap_id, personnel, accept=accept)
+    if error:
+        await query.answer(error, show_alert=True)
+        return
+
+    await query.answer("Accepted." if accept else "Declined.")
+
+    try:
+        text = await sync_to_async(format_cover_outcome_message)(swap, accepted=accept)
+        await query.edit_message_text(text, parse_mode="HTML")
+    except Exception:
+        await context.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML")
+
+
+async def cover_accept_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _cover_action_callback(update, context, accept=True)
+
+
+async def cover_decline_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _cover_action_callback(update, context, accept=False)
+
+
+async def cover_pick_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    swap_ids = context.user_data.get("cover_swap_ids")
+    if not swap_ids:
         return
 
     text = (update.message.text or "").strip()
     if not text.isdigit():
+        return
+
+    pick = int(text)
+    if pick < 1 or pick > len(swap_ids):
+        await update.message.reply_text(
+            f"Please enter a number between 1 and {len(swap_ids)}, or run /covers again."
+        )
+        return
+
+    chat_id = str(update.effective_chat.id) if update.effective_chat else ""
+    personnel = await sync_to_async(personnel_for_chat_id)(chat_id)
+    if not personnel:
+        await update.message.reply_text("Account not linked. Use the QR code on your Pegasus profile.")
+        return
+
+    swap = await sync_to_async(cover_swap_for_personnel_by_id)(personnel, swap_ids[pick - 1])
+    if not swap:
+        await update.message.reply_text("That cover request was not found or is no longer pending.")
+        return
+
+    body = await sync_to_async(format_cover_request_message)(swap)
+    keyboard = cover_request_keyboard(swap)
+    await update.message.reply_text(
+        body,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=keyboard,
+    )
+
+
+def _clear_cover_request_flow(context):
+    for key in (
+        "cover_request_booking_ids",
+        "cover_request_booking_id",
+        "cover_request_instructor_ids",
+        "cover_request_instructor_id",
+    ):
+        context.user_data.pop(key, None)
+    if str(context.user_data.get("telegram_pick_list", "")).startswith("cover_request"):
+        context.user_data.pop("telegram_pick_list", None)
+
+
+@sync_to_async
+def _cover_request_start_data(personnel):
+    from ..services.course_swaps import eligible_target_instructors, swappable_bookings_for_instructor
+
+    bookings = list(swappable_bookings_for_instructor(personnel))
+    instructors = list(eligible_target_instructors(exclude_personnel=personnel))
+    return bookings, instructors
+
+
+@sync_to_async
+def _cover_request_booking_for_personnel(personnel, booking_id):
+    from ..models import Booking
+    from ..services.course_swaps import SWAPPABLE_BOOKING_STATUSES
+
+    return (
+        Booking.objects.filter(
+            pk=booking_id,
+            instructor=personnel,
+            status__in=SWAPPABLE_BOOKING_STATUSES,
+        )
+        .exclude(business__is_dummy=True)
+        .select_related("course_type", "business", "training_location")
+        .prefetch_related("days")
+        .first()
+    )
+
+
+@sync_to_async
+def _cover_request_instructor_for_personnel(personnel, instructor_id):
+    from ..services.course_swaps import eligible_target_instructors
+
+    return eligible_target_instructors(exclude_personnel=personnel).filter(pk=instructor_id).first()
+
+
+def _create_cover_request_sync(personnel, booking_id, instructor_id, message=""):
+    from ..models import Booking
+    from ..services.course_swaps import (
+        CourseSwapError,
+        SWAPPABLE_BOOKING_STATUSES,
+        create_swap_request,
+        eligible_target_instructors,
+    )
+
+    booking = (
+        Booking.objects.filter(
+            pk=booking_id,
+            instructor=personnel,
+            status__in=SWAPPABLE_BOOKING_STATUSES,
+        )
+        .exclude(business__is_dummy=True)
+        .select_related("course_type", "business", "training_location")
+        .prefetch_related("days")
+        .first()
+    )
+    to_instructor = eligible_target_instructors(exclude_personnel=personnel).filter(pk=instructor_id).first()
+    if not booking or not to_instructor:
+        return None, "That course or instructor is no longer available."
+
+    try:
+        swap = create_swap_request(
+            booking=booking,
+            from_instructor=personnel,
+            to_instructor=to_instructor,
+            message=message or "",
+        )
+        return swap, None
+    except CourseSwapError as exc:
+        return None, str(exc)
+
+
+@sync_to_async
+def _telegram_create_cover_request(personnel, booking_id, instructor_id, message=""):
+    return _create_cover_request_sync(personnel, booking_id, instructor_id, message=message)
+
+
+def _eligible_instructors_for_cover(personnel):
+    from ..services.course_swaps import eligible_target_instructors
+
+    return list(eligible_target_instructors(exclude_personnel=personnel))
+
+
+async def _begin_cover_request_booking_step(update, context, personnel, chat_id, bookings):
+    _clear_cover_request_flow(context)
+    context.user_data["cover_request_booking_ids"] = [str(b.pk) for b in bookings]
+    context.user_data["telegram_pick_list"] = "cover_request_booking"
+
+    text = await sync_to_async(format_swappable_bookings_for_request)(bookings)
+    keyboard = await sync_to_async(swappable_bookings_request_keyboard)(bookings)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=keyboard,
+    )
+
+
+async def requestcover_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    personnel, chat_id = await _linked_personnel_or_reply(update)
+    if not personnel:
+        return
+
+    bookings, instructors = await _cover_request_start_data(personnel)
+    if not bookings:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="You have no scheduled or in-progress courses available for a cover request "
+            "(or each already has a pending request).",
+        )
+        return
+    if not instructors:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="No other instructors are available to request cover from.",
+        )
+        return
+
+    await _begin_cover_request_booking_step(update, context, personnel, chat_id, bookings)
+
+
+async def _cover_request_select_booking(update, context, personnel, chat_id, booking_id):
+    booking = await _cover_request_booking_for_personnel(personnel, booking_id)
+    if not booking:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="That course is not available for a cover request.",
+        )
+        return
+
+    instructors = await sync_to_async(_eligible_instructors_for_cover)(personnel)
+    if not instructors:
+        _clear_cover_request_flow(context)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="No other instructors are available to request cover from.",
+        )
+        return
+
+    context.user_data["cover_request_booking_id"] = str(booking.pk)
+    context.user_data["cover_request_instructor_ids"] = [str(p.pk) for p in instructors]
+    context.user_data["telegram_pick_list"] = "cover_request_instructor"
+
+    text = await sync_to_async(format_instructors_for_cover_request)(booking, instructors)
+    keyboard = await sync_to_async(instructors_for_cover_request_keyboard)(instructors)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=keyboard,
+    )
+
+
+async def _cover_request_goto_message_step(context, personnel, chat_id, booking_id, instructor_id):
+    booking = await _cover_request_booking_for_personnel(personnel, booking_id)
+    instructor = await _cover_request_instructor_for_personnel(personnel, instructor_id)
+    if not booking or not instructor:
+        _clear_cover_request_flow(context)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="That course or instructor is no longer available.",
+        )
+        return
+
+    context.user_data["cover_request_instructor_id"] = str(instructor_id)
+    context.user_data["telegram_pick_list"] = "cover_request_message"
+
+    prompt = await sync_to_async(format_cover_request_message_prompt)(booking, instructor)
+    keyboard = await sync_to_async(cover_request_message_keyboard)()
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=prompt,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=keyboard,
+    )
+
+
+async def cover_request_booking_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    booking_ids = context.user_data.get("cover_request_booking_ids") or []
+    text = (update.message.text or "").strip()
+    if not text.isdigit():
+        return
+
+    pick = int(text)
+    if pick < 1 or pick > len(booking_ids):
+        await update.message.reply_text(
+            f"Please enter a number between 1 and {len(booking_ids)}, or send /cancel."
+        )
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    personnel = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not personnel:
+        await update.message.reply_text("Account not linked. Use the QR code on your Pegasus profile.")
+        return
+
+    await _cover_request_select_booking(update, context, personnel, chat_id, booking_ids[pick - 1])
+
+
+async def cover_request_booking_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    if not query.data.startswith(COVER_REQUEST_BOOKING_CALLBACK_PREFIX):
+        await query.answer()
+        return
+
+    booking_id = query.data[len(COVER_REQUEST_BOOKING_CALLBACK_PREFIX):]
+    if not booking_id:
+        await query.answer("Could not read that course.", show_alert=True)
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id:
+        return
+
+    await query.answer()
+
+    personnel = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not personnel:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Account not linked. Use the QR code on your Pegasus profile.",
+        )
+        return
+
+    await _cover_request_select_booking(update, context, personnel, chat_id, booking_id)
+
+
+async def cover_request_instructor_pick(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    instructor_ids = context.user_data.get("cover_request_instructor_ids") or []
+    booking_id = context.user_data.get("cover_request_booking_id")
+    text = (update.message.text or "").strip()
+    if not booking_id or not text.isdigit():
+        return
+
+    pick = int(text)
+    if pick < 1 or pick > len(instructor_ids):
+        await update.message.reply_text(
+            f"Please enter a number between 1 and {len(instructor_ids)}, or send /cancel."
+        )
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    personnel = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not personnel:
+        await update.message.reply_text("Account not linked. Use the QR code on your Pegasus profile.")
+        return
+
+    instructor_id = instructor_ids[pick - 1]
+    await _cover_request_goto_message_step(context, personnel, chat_id, booking_id, instructor_id)
+
+
+async def cover_request_instructor_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    if not query.data.startswith(COVER_REQUEST_INSTRUCTOR_CALLBACK_PREFIX):
+        await query.answer()
+        return
+
+    instructor_id = query.data[len(COVER_REQUEST_INSTRUCTOR_CALLBACK_PREFIX):]
+    booking_id = context.user_data.get("cover_request_booking_id")
+    if not instructor_id or not booking_id:
+        await query.answer("This request has expired. Send /requestcover to start again.", show_alert=True)
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id:
+        return
+
+    await query.answer()
+
+    personnel = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not personnel:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Account not linked. Use the QR code on your Pegasus profile.",
+        )
+        return
+
+    await _cover_request_goto_message_step(context, personnel, chat_id, booking_id, instructor_id)
+
+
+async def cover_request_message_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query or not query.data:
+        return
+
+    data = query.data
+    if data not in (COVER_REQUEST_MESSAGE_SKIP_CALLBACK, COVER_REQUEST_MESSAGE_ADD_CALLBACK):
+        await query.answer()
+        return
+
+    if context.user_data.get("telegram_pick_list") != "cover_request_message":
+        await query.answer("This request has expired. Send /requestcover to start again.", show_alert=True)
+        return
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if not chat_id:
+        return
+
+    if data == COVER_REQUEST_MESSAGE_SKIP_CALLBACK:
+        await query.answer()
+        submitted = await _submit_cover_request(update, context, message="")
+        if submitted:
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception:
+                pass
+        return
+
+    await query.answer()
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="Type your message below (max 500 characters), or send /cancel to stop.",
+    )
+
+
+async def _submit_cover_request(update, context, *, message):
+    booking_id = context.user_data.get("cover_request_booking_id")
+    instructor_id = context.user_data.get("cover_request_instructor_id")
+    if not booking_id or not instructor_id:
+        return False
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    personnel = await sync_to_async(personnel_for_chat_id)(str(chat_id))
+    if not personnel:
+        await update.effective_message.reply_text(
+            "Account not linked. Use the QR code on your Pegasus profile."
+        )
+        return True
+
+    swap, error = await _telegram_create_cover_request(
+        personnel,
+        booking_id,
+        instructor_id,
+        message=(message or "").strip()[:500],
+    )
+    _clear_cover_request_flow(context)
+
+    if error:
+        await update.effective_message.reply_text(error)
+        return True
+
+    confirmation = await sync_to_async(format_cover_request_sent_confirmation)(swap)
+    await update.effective_message.reply_text(
+        confirmation,
+        parse_mode="HTML",
+        reply_markup=main_menu_reply_keyboard(),
+    )
+    return True
+
+
+async def cover_request_message_step(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("telegram_pick_list") != "cover_request_message":
+        return
+
+    text = (update.message.text or "").strip()
+    if not text:
+        await update.message.reply_text("Please send a message, tap a button above, or send /cancel.")
+        return
+
+    await _submit_cover_request(update, context, message=text)
+
+
+async def skip_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if context.user_data.get("telegram_pick_list") != "cover_request_message":
+        await update.message.reply_text("Nothing to skip right now.")
+        return
+    await _submit_cover_request(update, context, message="")
+
+
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not str(context.user_data.get("telegram_pick_list", "")).startswith("cover_request"):
+        await update.message.reply_text("Nothing to cancel right now.")
+        return
+    _clear_cover_request_flow(context)
+    await update.message.reply_text("Cover request cancelled.")
+
+
+async def booking_pick_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    pick_list = context.user_data.get("telegram_pick_list")
+
+    if pick_list == "cover_request_message":
+        await cover_request_message_step(update, context)
+        return
+
+    text = (update.message.text or "").strip()
+    if not text.isdigit():
+        return
+
+    if pick_list == "cover_request_booking":
+        await cover_request_booking_pick(update, context)
+        return
+
+    if pick_list == "cover_request_instructor":
+        await cover_request_instructor_pick(update, context)
+        return
+
+    if pick_list == "covers" and context.user_data.get("cover_swap_ids"):
+        await cover_pick_message(update, context)
+        return
+
+    booking_ids = context.user_data.get("booking_ids")
+    if not booking_ids:
         return
 
     pick = int(text)
@@ -235,7 +863,31 @@ async def directions_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     booking = await sync_to_async(next_upcoming_booking_for_personnel)(personnel)
     text = await sync_to_async(format_directions_message)(booking)
-    await update.message.reply_text(text, parse_mode="HTML", disable_web_page_preview=True)
+    await _reply_with_menu(update, text, parse_mode="HTML", disable_web_page_preview=True)
+
+
+async def nextcourse_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    personnel, chat_id = await _linked_personnel_or_reply(update)
+    if not personnel:
+        return
+
+    booking = await sync_to_async(next_upcoming_booking_for_personnel)(personnel)
+    if not booking:
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="You have no upcoming bookings.",
+            reply_markup=main_menu_reply_keyboard(),
+        )
+        return
+
+    text = await sync_to_async(format_booking_details_message)(booking)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=text,
+        parse_mode="HTML",
+        disable_web_page_preview=True,
+        reply_markup=main_menu_reply_keyboard(),
+    )
 
 
 async def _linked_personnel_or_reply(update):

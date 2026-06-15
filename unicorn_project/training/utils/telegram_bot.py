@@ -12,16 +12,35 @@ from .telegram_handlers import (
     booking_pick_message,
     booking_register_callback,
     bookings_command,
+    cancel_command,
+    cover_accept_callback,
+    cover_decline_callback,
+    cover_request_booking_callback,
+    cover_request_instructor_callback,
+    cover_request_message_callback,
+    covers_command,
     directions_command,
     feedback_command,
     help_command,
+    menu_command,
+    nextcourse_command,
     registration_command,
+    requestcover_command,
     settings_command,
     settings_toggle_callback,
+    skip_command,
     start_command,
     today_command,
 )
 from .telegram_bookings import BOOKING_DETAIL_CALLBACK_PREFIX
+from .telegram_course_swaps import (
+    COVER_ACCEPT_CALLBACK_PREFIX,
+    COVER_DECLINE_CALLBACK_PREFIX,
+    COVER_REQUEST_BOOKING_CALLBACK_PREFIX,
+    COVER_REQUEST_INSTRUCTOR_CALLBACK_PREFIX,
+    COVER_REQUEST_MESSAGE_CALLBACK_PREFIX,
+)
+from .telegram_menu import register_bot_commands
 from .telegram_settings import SETTINGS_CALLBACK_PREFIX
 from .telegram_today import BOOKING_FEEDBACK_CALLBACK_PREFIX, BOOKING_REGISTER_CALLBACK_PREFIX
 
@@ -34,6 +53,7 @@ async def _on_startup(application: Application, *, for_polling: bool = False) ->
         logger.info("Cleared webhook before polling (local dev).")
     me = await application.bot.get_me()
     configured = (settings.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@")
+    await register_bot_commands(application.bot)
     logger.info("Telegram bot ready: @%s (id %s)", me.username, me.id)
     if configured and configured.lower() != (me.username or "").lower():
         logger.error(
@@ -65,12 +85,38 @@ def build_application(*, for_polling: bool = False) -> Application:
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("today", today_command))
+    app.add_handler(CommandHandler("nextcourse", nextcourse_command))
     app.add_handler(CommandHandler("bookings", bookings_command))
+    app.add_handler(CommandHandler("covers", covers_command))
+    app.add_handler(CommandHandler("requestcover", requestcover_command))
+    app.add_handler(CommandHandler("menu", menu_command))
+    app.add_handler(CommandHandler("skip", skip_command))
+    app.add_handler(CommandHandler("cancel", cancel_command))
     app.add_handler(CommandHandler("directions", directions_command))
     app.add_handler(CommandHandler("registration", registration_command))
     app.add_handler(CommandHandler("feedback", feedback_command))
     app.add_handler(CommandHandler("settings", settings_command))
     app.add_handler(CallbackQueryHandler(booking_detail_callback, pattern=f"^{BOOKING_DETAIL_CALLBACK_PREFIX}"))
+    app.add_handler(CallbackQueryHandler(cover_accept_callback, pattern=f"^{COVER_ACCEPT_CALLBACK_PREFIX}"))
+    app.add_handler(CallbackQueryHandler(cover_decline_callback, pattern=f"^{COVER_DECLINE_CALLBACK_PREFIX}"))
+    app.add_handler(
+        CallbackQueryHandler(
+            cover_request_booking_callback,
+            pattern=f"^{COVER_REQUEST_BOOKING_CALLBACK_PREFIX}",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            cover_request_instructor_callback,
+            pattern=f"^{COVER_REQUEST_INSTRUCTOR_CALLBACK_PREFIX}",
+        )
+    )
+    app.add_handler(
+        CallbackQueryHandler(
+            cover_request_message_callback,
+            pattern=f"^{COVER_REQUEST_MESSAGE_CALLBACK_PREFIX}",
+        )
+    )
     app.add_handler(CallbackQueryHandler(booking_register_callback, pattern=f"^{BOOKING_REGISTER_CALLBACK_PREFIX}"))
     app.add_handler(CallbackQueryHandler(booking_feedback_callback, pattern=f"^{BOOKING_FEEDBACK_CALLBACK_PREFIX}"))
     app.add_handler(CallbackQueryHandler(settings_toggle_callback, pattern=f"^{SETTINGS_CALLBACK_PREFIX}"))

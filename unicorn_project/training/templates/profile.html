@@ -208,6 +208,10 @@
                             <label class="form-check-label" for="{{ pform.notify_booking_changes_telegram.id_for_label }}">Booking updates and cancellations</label>
                         </div>
                         <div class="form-check form-switch mb-2">
+                            {{ pform.notify_cover_requests_telegram }}
+                            <label class="form-check-label" for="{{ pform.notify_cover_requests_telegram.id_for_label }}">Course cover requests and responses</label>
+                        </div>
+                        <div class="form-check form-switch mb-2">
                             {{ pform.notify_reminders_telegram }}
                             <label class="form-check-label" for="{{ pform.notify_reminders_telegram.id_for_label }}">Departure reminders</label>
                         </div>
@@ -236,7 +240,7 @@
                             </div>
                         </div>
                         {% for e in pform.non_field_errors %}<div class="text-danger small mb-2">{{ e }}</div>{% endfor %}
-                        <div class="form-text mt-2">Bot commands: /today · /bookings · /registration · /feedback · /directions · /settings · /help</div>
+                        <div class="form-text mt-2">Bot commands: /today · /bookings · /covers · /requestcover · /registration · /feedback · /directions · /settings · /help</div>
                     </div>
                 </div>
                 {% endif %}

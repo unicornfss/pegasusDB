@@ -9,6 +9,7 @@ from . import views_engineer as engv
 from . import views_inspector as inspv
 from . import views_instructor as instv
 from . import views_instructor
+from . import views_course_swaps as swapv
 from . import views_public
 from . import views_telegram
 
@@ -41,6 +42,11 @@ urlpatterns = [
     # Landing page -> My bookings
     path("app/instructor/", instv.instructor_dashboard, name="instructor_dashboard"),
     path("app/instructor/bookings/", instv.instructor_bookings, name="instructor_bookings"),
+    path("app/instructor/course-swaps/", swapv.instructor_course_swaps, name="instructor_course_swaps"),
+    path("app/instructor/course-swaps/request/", swapv.instructor_course_swap_request, name="instructor_course_swap_request"),
+    path("app/instructor/course-swaps/<uuid:pk>/accept/", swapv.instructor_course_swap_accept, name="instructor_course_swap_accept"),
+    path("app/instructor/course-swaps/<uuid:pk>/decline/", swapv.instructor_course_swap_decline, name="instructor_course_swap_decline"),
+    path("app/instructor/course-swaps/<uuid:pk>/cancel/", swapv.instructor_course_swap_cancel, name="instructor_course_swap_cancel"),
     path("app/instructor/practice-bookings/new/<uuid:business_id>/", instv.instructor_dummy_booking_new, name="instructor_dummy_booking_new"),
     path("app/instructor/booking/<uuid:pk>/", instv.instructor_booking_detail, name="instructor_booking_detail"),
     path("app/instructor/booking/<uuid:pk>/delete-dummy/", instv.instructor_delete_dummy_booking, name="instructor_delete_dummy_booking"),
