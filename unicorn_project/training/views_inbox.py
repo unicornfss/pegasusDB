@@ -207,13 +207,23 @@ def inbox_swap_decline(request, pk):
 @require_GET
 def api_inbox_unread(request):
     personnel = _get_personnel(request)
-    staff_count = unread_inbox_count(personnel, scope="staff")
-    admin_count = unread_inbox_count(personnel, scope="admin")
+    if not personnel:
+        return JsonResponse(
+            {
+                "unread_count": 0,
+                "staff_unread_count": 0,
+                "admin_unread_count": 0,
+            }
+        )
+
+    from .services.staff_inbox import unread_inbox_counts
+
+    counts = unread_inbox_counts(personnel)
     return JsonResponse(
         {
-            "unread_count": staff_count + admin_count,
-            "staff_unread_count": staff_count,
-            "admin_unread_count": admin_count,
+            "unread_count": counts["total"],
+            "staff_unread_count": counts["staff"],
+            "admin_unread_count": counts["admin"],
         }
     )
 

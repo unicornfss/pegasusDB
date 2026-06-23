@@ -3,15 +3,16 @@
     return;
   }
 
-  const streamUrl = document.body.dataset.inboxStreamUrl;
-  if (!streamUrl) {
+  const pollUrl = document.body.dataset.inboxPollUrl;
+  if (!pollUrl) {
     return;
   }
+
+  const pollIntervalMs = parseInt(document.body.dataset.inboxPollInterval || "60000", 10) || 60000;
 
   let lastCount = 0;
   let firstEvent = true;
   let audioCtx = null;
-  let reconnectDelayMs = 2000;
 
   function readBadgeCount(scope) {
     const badge = document.querySelector('[data-inbox-badge="' + scope + '"]');
@@ -108,24 +109,23 @@
     firstEvent = false;
   }
 
-  function connectStream() {
-    const source = new EventSource(streamUrl);
-
-    source.onmessage = function (event) {
-      try {
-        handlePayload(JSON.parse(event.data));
-      } catch (err) {
-        console.warn("Inbox push payload invalid", err);
-      }
-      reconnectDelayMs = 2000;
-    };
-
-    source.onerror = function () {
-      source.close();
-      setTimeout(connectStream, reconnectDelayMs);
-      reconnectDelayMs = Math.min(reconnectDelayMs * 2, 30000);
-    };
+  function pollInbox() {
+    fetch(pollUrl, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("inbox poll failed");
+        }
+        return response.json();
+      })
+      .then(handlePayload)
+      .catch(function (err) {
+        console.warn("Inbox poll failed", err);
+      });
   }
 
-  connectStream();
+  pollInbox();
+  window.setInterval(pollInbox, pollIntervalMs);
 })();

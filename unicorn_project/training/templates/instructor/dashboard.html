@@ -26,7 +26,7 @@
 
                     <!-- INCOMPLETE REGISTERS -->
                     <li class="mb-2">
-                        <strong>{{ incomplete_registers.count }}</strong>
+                        <strong>{{ incomplete_registers|length }}</strong>
                         course(s) with incomplete registers
 
                         {% if incomplete_registers %}
@@ -36,7 +36,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#days-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.first_day_date|date:"j M Y" }}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -57,7 +57,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#assessments-tab"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.first_day_date|date:"j M Y" }}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -68,7 +68,7 @@
 
                     <!-- MISSING FEEDBACK -->
                     <li class="mb-2">
-                        <strong>{{ missing_feedback.count }}</strong>
+                        <strong>{{ missing_feedback|length }}</strong>
                         course(s) missing feedback forms
 
                         {% if missing_feedback %}
@@ -78,7 +78,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#feedback-tab"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.first_day_date|date:"j M Y" }}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -89,7 +89,7 @@
 
                     <!-- AWAITING CLOSURE -->
                     <li class="mb-2">
-                        <strong>{{ awaiting_closure.count }}</strong>
+                        <strong>{{ awaiting_closure|length }}</strong>
                         course(s) awaiting instructor closure
 
                         {% if awaiting_closure %}
@@ -99,7 +99,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#closure-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.first_day_date|date:"j M Y" }}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -110,7 +110,7 @@
 
                     <!-- INVOICES -->
                     <li class="mb-2">
-                        <strong>{{ invoice_attention.count }}</strong>
+                        <strong>{{ invoice_attention|length }}</strong>
                         completed course(s) awaiting invoice completion
 
                         {% if invoice_attention %}
@@ -120,7 +120,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}?tab=invoicing#invoicing-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.days.first.date|date:"j M Y" }}
+                                            · {{ booking.first_day_date|date:"j M Y" }}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>

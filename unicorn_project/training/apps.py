@@ -38,6 +38,10 @@ class TrainingConfig(AppConfig):
         if not getattr(settings, "BOOKING_SCHEDULER_ENABLED", False):
             return
 
+        # Django runserver autoreloader starts two processes; only run in the worker.
+        if "runserver" in " ".join(sys.argv) and os.environ.get("RUN_MAIN") != "true":
+            return
+
         try:
             from . import tasks
 

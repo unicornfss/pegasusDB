@@ -61,6 +61,7 @@ from .services.assessment_exams import (
 from .utils.instructor_access import (
     booking_has_invoice_for,
     instructor_bookings_queryset,
+    instructor_visible_booking_ids,
     lead_invoice_status_map,
 )
 
@@ -471,6 +472,85 @@ def _closed_guard(request, booking):
         )
     return None
 
+_DASHBOARD_BOOKING_RELATED = ("course_type", "business", "training_location")
+
+
+def _attach_first_day_date(bookings):
+    """Set booking.first_day_date so templates avoid booking.days.first queries."""
+    booking_list = list(bookings)
+    if not booking_list:
+        return booking_list
+
+    booking_ids = [b.pk for b in booking_list]
+    first_day_by_booking = {}
+    for day in (
+        BookingDay.objects.filter(booking_id__in=booking_ids)
+        .order_by("booking_id", "date", "id")
+        .only("booking_id", "date")
+    ):
+        if day.booking_id not in first_day_by_booking:
+            first_day_by_booking[day.booking_id] = day.date
+
+    for booking in booking_list:
+        booking.first_day_date = first_day_by_booking.get(booking.pk) or booking.course_date
+    return booking_list
+
+
+def _dashboard_action_bookings(personnel, **filters):
+    qs = (
+        Booking.objects.filter(instructor=personnel, **filters)
+        .select_related(*_DASHBOARD_BOOKING_RELATED)
+        .order_by("course_date", "id")
+    )
+    return _attach_first_day_date(qs)
+
+
+def _delegate_outcome_pending(outcome) -> bool:
+    if outcome is None:
+        return True
+    text = str(outcome).strip()
+    return text == "" or text.lower() == "pending"
+
+
+def _bookings_with_pending_assessments(personnel):
+    booking_ids = list(
+        Booking.objects.filter(
+            instructor=personnel,
+            status__in=["in_progress", "awaiting_closure", "completed"],
+        ).values_list("pk", flat=True)
+    )
+    if not booking_ids:
+        return []
+
+    seen_by_booking = defaultdict(set)
+    pending_ids = set()
+    regs = (
+        DelegateRegister.objects.filter(booking_day__booking_id__in=booking_ids)
+        .order_by("booking_day__booking_id", "name", "date_of_birth", "id")
+        .values("id", "name", "date_of_birth", "outcome", "booking_day__booking_id")
+    )
+    for reg in regs:
+        booking_id = reg["booking_day__booking_id"]
+        name = (reg["name"] or "").strip().lower()
+        dob = reg["date_of_birth"]
+        key = (name, dob) if dob else ("__nodedob__", reg["id"])
+        seen = seen_by_booking[booking_id]
+        if key in seen:
+            continue
+        seen.add(key)
+        if _delegate_outcome_pending(reg["outcome"]):
+            pending_ids.add(booking_id)
+
+    if not pending_ids:
+        return []
+
+    return _attach_first_day_date(
+        Booking.objects.filter(pk__in=pending_ids)
+        .select_related(*_DASHBOARD_BOOKING_RELATED)
+        .order_by("course_date", "id")
+    )
+
+
 @login_required
 def instructor_dashboard(request):
     user = request.user
@@ -484,7 +564,7 @@ def instructor_dashboard(request):
     # ------------------------------------------------------
     # TODAY'S COURSES (BookingDay)
     # ------------------------------------------------------
-    todays_days = (
+    todays_days = list(
         BookingDay.objects
         .filter(instructor=personnel, date=today)
         .select_related(
@@ -499,73 +579,53 @@ def instructor_dashboard(request):
     # ------------------------------------------------------
     # UPCOMING COURSES (next 14 days)
     # ------------------------------------------------------
-    upcoming = (
+    upcoming = list(
         BookingDay.objects
         .filter(
             instructor=personnel,
             date__gt=today,
             date__lte=today + timedelta(days=14)
         )
-        .select_related("booking")
+        .select_related(
+            "booking__course_type",
+            "booking__business",
+            "booking__training_location",
+        )
         .order_by("date", "start_time")
     )
 
     # ------------------------------------------------------
     # RECENT COURSES (past 30 days)
     # ------------------------------------------------------
-    recent = (
+    recent = list(
         BookingDay.objects
         .filter(
             instructor=personnel,
             date__lt=today,
             date__gte=today - timedelta(days=30)
         )
-        .select_related("booking")
+        .select_related("booking__course_type", "booking__business")
         .order_by("-date")
     )
 
     # ------------------------------------------------------
-    # ACTIONS REQUIRED (safe + real model structure)
+    # ACTIONS REQUIRED
     # ------------------------------------------------------
+    awaiting_closure = _dashboard_action_bookings(personnel, status="awaiting_closure")
 
-    # 1) Courses awaiting closure
-    awaiting_closure = Booking.objects.filter(
-        instructor=personnel,
-        status="awaiting_closure"
-    )
-
-    # 1b) Completed courses with invoice still Draft / Awaiting review
-    invoice_attention = (
-        Booking.objects.filter(status="completed")
+    invoice_attention = _attach_first_day_date(
+        Booking.objects.filter(
+            pk__in=instructor_visible_booking_ids(personnel),
+            status="completed",
+        )
         .filter(booking_has_invoice_for(personnel, statuses=["draft", "awaiting_review"]))
-        .distinct()
+        .select_related(*_DASHBOARD_BOOKING_RELATED)
+        .order_by("-course_date", "id")
     )
 
-    # 2) Incomplete registers (DOB always required, so leave empty for now)
-    incomplete_registers = Booking.objects.none()
-
-    # 3) Missing assessments:
-    # A "missing" assessment means: at least one unique delegate with Pending / blank / null outcome.
-    # Use the same deduping logic as the closure view (by name + DOB) to avoid false positives
-    # from multi-day courses with mixed outcomes per day.
-    all_candidate_bookings = Booking.objects.filter(
-        instructor=personnel,
-        status__in=["in_progress", "awaiting_closure", "completed"],  # prevents future bookings flagging
-    )
-    missing_assessments = []
-    for booking in all_candidate_bookings:
-        unique_regs = _unique_delegates_for_booking(booking)
-        pending_regs = [
-            r for r in unique_regs
-            if (r.outcome is None) or (str(r.outcome).strip() == "") or (str(r.outcome).strip().lower() == "pending")
-        ]
-        if pending_regs:
-            missing_assessments.append(booking)
-
-    # 4) Missing feedback:
-    # Your FeedbackResponse model has no direct FK to Booking,
-    # so we skip this until we design proper linkage.
-    missing_feedback = Booking.objects.none()
+    incomplete_registers = []
+    missing_assessments = _bookings_with_pending_assessments(personnel)
+    missing_feedback = []
 
     return render(request, "instructor/dashboard.html", {
         "personnel": personnel,

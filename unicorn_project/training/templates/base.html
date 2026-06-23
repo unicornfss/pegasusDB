@@ -31,7 +31,8 @@
 <body class="min-vh-100 d-flex flex-column"
     {% if request.user.is_authenticated and request.user.personnel %}
       data-inbox-notify-enabled="1"
-      data-inbox-stream-url="{% url 'api_inbox_stream' %}"
+      data-inbox-poll-url="{% url 'api_inbox_unread' %}"
+      data-inbox-poll-interval="{{ INBOX_NOTIFY_POLL_MS }}"
     {% endif %}>
 
   {# Mobile top bar (only < lg) #}

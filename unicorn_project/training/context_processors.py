@@ -47,12 +47,14 @@ def globals(request):
     """
     Expose selected settings to all templates.
     """
+    poll_seconds = getattr(settings, "INBOX_NOTIFY_POLL_SECONDS", 60)
     return {
         "GOOGLE_MAPS_API_KEY": getattr(settings, "GOOGLE_MAPS_API_KEY", ""),
         "ADMIN_INBOX_EMAIL": getattr(settings, "ADMIN_INBOX_EMAIL", ""),
         "OFFICE_PHONE": getattr(settings, "OFFICE_PHONE", ""),
         "APP_VERSION": getattr(settings, "APP_VERSION", ""),
         "REGISTER_SHOW_DATE": getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG),
+        "INBOX_NOTIFY_POLL_MS": max(15, int(poll_seconds)) * 1000,
     }
 
 def logo_context(request):
