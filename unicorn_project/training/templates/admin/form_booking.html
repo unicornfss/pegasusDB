@@ -67,38 +67,101 @@
     </div>
   {% endif %}
 
-  <div class="booking-summary-wrap">
-    <div class="row g-3 g-lg-4 align-items-stretch booking-summary-row">
+  {% if booking %}
+  {# Edit existing booking — tabbed layout matching the instructor course view #}
+  {% include "partials/booking_detail_tab_styles.html" %}
 
-      {# Course information + secondary panels (new and edit) #}
-      <div class="col-12">
-        <div class="card booking-panel-card booking-panel-card--information mb-0">
-          <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
-            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
-            <span class="booking-panel-title">Course information</span>
+  <ul class="nav nav-tabs booking-detail-tabs mt-3" id="bookingTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--course-info{% if active_tab == 'course-info' %} active{% endif %}"
+              id="course-info-tab" data-bs-toggle="tab" data-bs-target="#course-info-pane"
+              type="button" role="tab" aria-controls="course-info-pane"
+              aria-selected="{% if active_tab == 'course-info' %}true{% else %}false{% endif %}">
+        Course information
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--days{% if active_tab == 'days' %} active{% endif %}"
+              id="days-tab" data-bs-toggle="tab" data-bs-target="#days-pane"
+              type="button" role="tab" aria-controls="days-pane"
+              aria-selected="{% if active_tab == 'days' %}true{% else %}false{% endif %}">
+        Course days / registers
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--assessments{% if active_tab == 'assessments' %} active{% endif %}"
+              id="assessments-tab" data-bs-toggle="tab" data-bs-target="#assessments-pane"
+              type="button" role="tab" aria-controls="assessments-pane"
+              aria-selected="{% if active_tab == 'assessments' %}true{% else %}false{% endif %}">
+        Assessments
+      </button>
+    </li>
+    {% if has_exam %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--exams{% if active_tab == 'exams' %} active{% endif %}"
+              id="exams-tab" data-bs-toggle="tab" data-bs-target="#exams-pane"
+              type="button" role="tab" aria-controls="exams-pane"
+              aria-selected="{% if active_tab == 'exams' %}true{% else %}false{% endif %}">
+        Exams
+      </button>
+    </li>
+    {% endif %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--feedback{% if active_tab == 'feedback' %} active{% endif %}"
+              id="feedback-tab" data-bs-toggle="tab" data-bs-target="#feedback-pane"
+              type="button" role="tab" aria-controls="feedback-pane"
+              aria-selected="{% if active_tab == 'feedback' %}true{% else %}false{% endif %}">
+        Feedback
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--certificates{% if active_tab == 'certificates' %} active{% endif %}"
+              id="certificates-tab" data-bs-toggle="tab" data-bs-target="#certificates-pane"
+              type="button" role="tab" aria-controls="certificates-pane"
+              aria-selected="{% if active_tab == 'certificates' %}true{% else %}false{% endif %}">
+        Certificates
+      </button>
+    </li>
+    {% if show_invoice_tab %}
+    <li class="nav-item" role="presentation">
+      <button class="nav-link booking-tab booking-tab--invoicing{% if active_tab == 'invoice' %} active{% endif %}"
+              id="invoice-tab" data-bs-toggle="tab" data-bs-target="#invoice-pane"
+              type="button" role="tab" aria-controls="invoice-pane"
+              aria-selected="{% if active_tab == 'invoice' %}true{% else %}false{% endif %}">
+        Invoice
+      </button>
+    </li>
+    {% endif %}
+  </ul>
+
+  <div class="tab-content booking-detail-tabs-content border border-top-0 rounded-bottom p-3" id="bookingTabsContent">
+
+    <div class="tab-pane fade booking-pane booking-pane--course-info{% if active_tab == 'course-info' %} show active{% endif %}"
+         id="course-info-pane" role="tabpanel" aria-labelledby="course-info-tab" tabindex="0">
+      <div class="booking-summary-wrap">
+        <div class="row g-3 g-lg-4 align-items-stretch booking-summary-row">
+          <div class="col-12">
+            <div class="card booking-panel-card booking-panel-card--information mb-0">
+              <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
+                <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
+                <span class="booking-panel-title">Course information</span>
+              </div>
+              <div class="card-body booking-new-form-body booking-new-form booking-course-info--compact">
+                {% include "partials/admin_booking_course_information_fields.html" with compact=True %}
+              </div>
+            </div>
           </div>
-          <div class="card-body booking-new-form-body booking-new-form booking-course-info--compact">
-            {% if booking %}
-              {% include "partials/admin_booking_course_information_fields.html" with compact=True %}
-            {% else %}
-              {% include "partials/admin_booking_course_information_fields.html" with compact=True editable_business=True %}
-            {% endif %}
+          <div class="col-12">
+            {% include "partials/admin_booking_secondary_panels.html" %}
           </div>
         </div>
       </div>
-
-      <div class="col-12">
-        {% include "partials/admin_booking_secondary_panels.html" %}
-      </div>
-
     </div>
-  </div>
 
-  <div class="row g-3 mt-3">
+    <div class="tab-pane fade booking-pane booking-pane--days{% if active_tab == 'days' %} show active{% endif %}"
+         id="days-pane" role="tabpanel" aria-labelledby="days-tab" tabindex="0">
 
-    <!-- Course days -->
-    <div class="col-12">
-      <div class="card h-100">
+      <div class="card mb-4">
         <div class="card-header">Course days</div>
         <div class="card-body">
           <div class="table-responsive">
@@ -116,90 +179,12 @@
               <tbody id="booking-days"></tbody>
             </table>
           </div>
-
-          <!-- Hidden JSON payload for inline days -->
           <input type="hidden" name="booking_days" id="booking-days-json">
-          <input type="hidden" name="days_json"     id="booking-days-json-mirror">
+          <input type="hidden" name="days_json" id="booking-days-json-mirror">
         </div>
       </div>
-    </div>
-  </div>
 
-  {% if booking %}
-    <hr class="my-4">
-
-    <!-- Tabbed views -->
-    <ul class="nav nav-tabs" id="bookingTabs" role="tablist">
-  <li class="nav-item" role="presentation">
-    <button class="nav-link {% if active_tab == 'registers' %}active{% endif %}"
-            id="tab-registers"
-            data-bs-toggle="tab" data-bs-target="#tab-pane-registers"
-            type="button" role="tab" aria-controls="tab-pane-registers"
-            aria-selected="{% if active_tab == 'registers' %}true{% else %}false{% endif %}">
-      Registers
-    </button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link {% if active_tab == 'assessments' %}active{% endif %}"
-            id="tab-assessments"
-            data-bs-toggle="tab" data-bs-target="#tab-pane-assessments"
-            type="button" role="tab" aria-controls="tab-pane-assessments"
-            aria-selected="{% if active_tab == 'assessments' %}true{% else %}false{% endif %}">
-      Assessments
-    </button>
-  </li>
-    {% if has_exam %}
-    <li class="nav-item" role="presentation">
-      <button class="nav-link {% if active_tab == 'exams' %}active{% endif %}"
-              id="tab-exams" data-bs-toggle="tab"
-              data-bs-target="#tab-pane-exams" type="button" role="tab"
-              aria-controls="tab-pane-exams"
-              aria-selected="{% if active_tab == 'exams' %}true{% else %}false{% endif %}">
-        Exams
-      </button>
-    </li>
-    {% endif %}
-
-  <li class="nav-item" role="presentation">
-    <button class="nav-link {% if active_tab == 'feedback' %}active{% endif %}"
-            id="tab-feedback"
-            data-bs-toggle="tab" data-bs-target="#tab-pane-feedback"
-            type="button" role="tab" aria-controls="tab-pane-feedback"
-            aria-selected="{% if active_tab == 'feedback' %}true{% else %}false{% endif %}">
-      Feedback
-    </button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link {% if active_tab == 'certificates' %}active{% endif %}"
-            id="tab-certificates"
-            data-bs-toggle="tab" data-bs-target="#tab-pane-certificates"
-            type="button" role="tab" aria-controls="tab-pane-certificates"
-            aria-selected="{% if active_tab == 'certificates' %}true{% else %}false{% endif %}">
-      Certificates
-    </button>
-  </li>
-  {% if show_invoice_tab %}
-  <li class="nav-item" role="presentation">
-    <button class="nav-link {% if active_tab == 'invoice' %}active{% endif %}"
-            id="tab-invoice"
-            data-bs-toggle="tab" data-bs-target="#tab-pane-invoice"
-            type="button" role="tab" aria-controls="tab-pane-invoice"
-            aria-selected="{% if active_tab == 'invoice' %}true{% else %}false{% endif %}">
-      Invoice
-    </button>
-  </li>
-  {% endif %}
-</ul>
-
-
-    <div class="tab-content border border-top-0 p-3 rounded-bottom" id="bookingTabsContent">
-      <!-- REGISTERS TAB -->
-      <div class="tab-pane fade {% if active_tab == 'registers' %}show active{% endif %}"
-          id="tab-pane-registers"
-          role="tabpanel" aria-labelledby="tab-registers">
-
-
-    <div class="row g-3">
+      <div class="row g-3">
       <!-- LEFT: list of days -->
       <div class="col-md-4">
         <h5 class="mb-3">Registers for each day</h5>
@@ -265,13 +250,11 @@
         </div>
       </div>
     </div>
-  </div>
+    </div>
 
-
-  <!-- ASSESSMENTS TAB (read only) -->
-  <div class="tab-pane fade {% if active_tab == 'assessments' %}show active{% endif %}"
-      id="tab-pane-assessments"
-      role="tabpanel" aria-labelledby="tab-assessments">
+  <div class="tab-pane fade booking-pane booking-pane--assessments{% if active_tab == 'assessments' %} show active{% endif %}"
+      id="assessments-pane"
+      role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h5 class="mb-0">Assessment matrix</h5>
@@ -290,10 +273,9 @@
   </div>
 
   {% if has_exam %}
-  <!-- EXAMS TAB (read only) -->
-  <div class="tab-pane fade {% if active_tab == 'exams' %}show active{% endif %}"
-      id="tab-pane-exams"
-      role="tabpanel" aria-labelledby="tab-exams">
+  <div class="tab-pane fade booking-pane booking-pane--exams{% if active_tab == 'exams' %} show active{% endif %}"
+      id="exams-pane"
+      role="tabpanel" aria-labelledby="exams-tab" tabindex="0">
 
     {% if course_exams %}
       <div class="alert alert-info py-2 small" style="font-size:0.85rem;">
@@ -412,10 +394,9 @@
   {% endif %}
 
 
-  <!-- FEEDBACK TAB (read only, same as instructor) -->
-  <div class="tab-pane fade {% if active_tab == 'feedback' %}show active{% endif %}"
-      id="tab-pane-feedback"
-      role="tabpanel" aria-labelledby="tab-feedback">
+  <div class="tab-pane fade booking-pane booking-pane--feedback{% if active_tab == 'feedback' %} show active{% endif %}"
+      id="feedback-pane"
+      role="tabpanel" aria-labelledby="feedback-tab" tabindex="0">
 
     <div class="d-flex justify-content-between align-items-center mb-2">
       <h5 class="mb-0">Feedback</h5>
@@ -427,10 +408,9 @@
 </div>
 
 
-    <!-- CERTIFICATES TAB -->
-    <div class="tab-pane fade {% if active_tab == 'certificates' %}show active{% endif %}"
-       id="tab-pane-certificates"
-       role="tabpanel" aria-labelledby="tab-certificates">
+    <div class="tab-pane fade booking-pane booking-pane--certificates{% if active_tab == 'certificates' %} show active{% endif %}"
+       id="certificates-pane"
+       role="tabpanel" aria-labelledby="certificates-tab" tabindex="0">
 
     {% if booking %}
       {% if cert_delegates %}
@@ -507,11 +487,10 @@
     {% endif %}
   </div>
 
-      <!-- INVOICE TAB (admin read-only view + status control) -->
     {% if show_invoice_tab %}
-    <div class="tab-pane fade {% if active_tab == 'invoice' %}show active{% endif %}"
-         id="tab-pane-invoice"
-         role="tabpanel" aria-labelledby="tab-invoice">
+    <div class="tab-pane fade booking-pane booking-pane--invoicing{% if active_tab == 'invoice' %} show active{% endif %}"
+         id="invoice-pane"
+         role="tabpanel" aria-labelledby="invoice-tab" tabindex="0">
 
       {% if not booking %}
         <p class="text-muted mb-0">Save the booking before viewing the invoice.</p>
@@ -745,6 +724,53 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+  {% else %}
+  {# New booking — single-page form without tabs #}
+  <div class="booking-summary-wrap">
+    <div class="row g-3 g-lg-4 align-items-stretch booking-summary-row">
+      <div class="col-12">
+        <div class="card booking-panel-card booking-panel-card--information mb-0">
+          <div class="card-header booking-panel-header booking-panel-header--information d-flex align-items-center">
+            <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-info-circle"></i></span>
+            <span class="booking-panel-title">Course information</span>
+          </div>
+          <div class="card-body booking-new-form-body booking-new-form booking-course-info--compact">
+            {% include "partials/admin_booking_course_information_fields.html" with compact=True editable_business=True %}
+          </div>
+        </div>
+      </div>
+      <div class="col-12">
+        {% include "partials/admin_booking_secondary_panels.html" %}
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3 mt-3">
+    <div class="col-12">
+      <div class="card h-100">
+        <div class="card-header">Course days</div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th style="width:110px">Day #</th>
+                  <th style="width:220px">Date</th>
+                  <th style="width:160px">Start</th>
+                  <th style="width:160px">End</th>
+                  <th style="width:200px">Instructor</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="booking-days"></tbody>
+            </table>
+          </div>
+          <input type="hidden" name="booking_days" id="booking-days-json">
+          <input type="hidden" name="days_json" id="booking-days-json-mirror">
+        </div>
+      </div>
+    </div>
+  </div>
   {% endif %}
 
 
@@ -1701,7 +1727,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const baseUrl = "{% url 'admin_booking_certificates_selected' booking.id %}";
     const params = [];
 
-    document.querySelectorAll('#tab-pane-certificates input.cert-checkbox:checked')
+    document.querySelectorAll('#certificates-pane input.cert-checkbox:checked')
       .forEach(function (cb) {
         params.push('delegate_id=' + encodeURIComponent(cb.value));
       });

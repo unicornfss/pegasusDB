@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0"><i class="bi bi-sliders text-primary me-2"></i>{{ title }}</h2>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h5 class="mb-0"><i class="bi bi-tags me-2"></i>Meta settings</h5>
+        </div>
+        <div class="card-body">
+          <p class="text-muted small">
+            Application-wide key/value settings used by Pegasus (e.g. feature flags, contact details).
+          </p>
+          <div class="mb-3">
+            <a href="{% url 'admin_meta_settings_edit' 0 %}" class="btn btn-success btn-sm">
+              <i class="bi bi-plus-lg me-1"></i>Add setting
+            </a>
+          </div>
+          {% if settings %}
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Key</th>
+                  <th>Value</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in settings %}
+                <tr>
+                  <td><code>{{ s.key }}</code></td>
+                  <td class="text-break">{{ s.value|truncatechars:120 }}</td>
+                  <td class="text-end">
+                    <a href="{% url 'admin_meta_settings_edit' s.pk %}" class="btn btn-sm btn-outline-primary">
+                      <i class="bi bi-pencil-square"></i> Edit
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="alert alert-light border mb-0">No meta settings yet.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-header bg-info text-white">
+          <h5 class="mb-0"><i class="bi bi-image me-2"></i>Logo settings</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3 align-items-center mb-4">
+            <div class="col-md-4">
+              <h6 class="fw-bold mb-1">Live logo</h6>
+              <p class="small text-muted mb-2">What visitors see in the sidebar and header today.</p>
+              <div class="border rounded p-3 bg-light text-center">
+                <img src="{% static 'training/img/' %}{{ current_logo }}"
+                     alt="Current logo"
+                     class="img-fluid"
+                     style="max-height: 100px;">
+                <div class="small text-muted mt-2"><code>{{ current_logo }}</code></div>
+              </div>
+            </div>
+            <div class="col-md-8">
+              <h6 class="fw-bold mb-1">How logos are chosen</h6>
+              <ol class="small text-muted mb-0 ps-3">
+                <li><strong>Manual overrides</strong> (below) take priority when active.</li>
+                <li>Otherwise, the <strong>date schedule</strong> picks a themed logo when a rule matches today.</li>
+                <li>If nothing matches, the <strong>default logo</strong> is used — marked on the gallery below.</li>
+              </ol>
+            </div>
+          </div>
+
+          <h6 class="fw-bold mb-2">Available logos &amp; schedule rules</h6>
+          <p class="small text-muted mb-3">
+            All image files in <code>static/training/img/</code>, with the dates each one is used.
+          </p>
+
+          <div class="row row-cols-1 row-cols-sm-2 row-cols-lg-3 row-cols-xl-4 g-3 mb-4">
+            {% for entry in logo_catalog %}
+            <div class="col">
+              <div class="card h-100 shadow-sm{% if entry.is_current %} border-primary{% elif entry.is_default %} border-secondary{% endif %}">
+                <div class="card-body p-3 d-flex flex-column">
+                  <div class="text-center mb-2 p-2 bg-light rounded">
+                    <img src="{% static 'training/img/' %}{{ entry.file }}"
+                         alt="{{ entry.file }}"
+                         class="img-fluid"
+                         style="max-height: 72px;">
+                  </div>
+                  <div class="mb-2">
+                    <code class="small">{{ entry.file }}</code>
+                  </div>
+                  <div class="d-flex flex-wrap gap-1 mb-2">
+                    {% if entry.is_default %}
+                      <span class="badge bg-secondary">Default logo</span>
+                    {% endif %}
+                    {% if entry.is_current %}
+                      <span class="badge bg-primary">Live now</span>
+                    {% endif %}
+                    {% if not entry.on_disk %}
+                      <span class="badge bg-warning text-dark">File missing</span>
+                    {% endif %}
+                  </div>
+                  {% if entry.is_default and not entry.rules %}
+                    <p class="small text-muted mb-0 flex-grow-1">
+                      Shown on all dates when no themed rule applies and no manual override is active.
+                    </p>
+                  {% elif entry.rules %}
+                    <ul class="small mb-0 ps-3 flex-grow-1">
+                      {% for rule in entry.rules %}
+                      <li class="mb-2">
+                        <strong>{{ rule.name }}</strong><br>
+                        <span class="text-muted">{{ rule.summary }}</span>
+                      </li>
+                      {% endfor %}
+                    </ul>
+                  {% else %}
+                    <p class="small text-muted mb-0 flex-grow-1">Not used by the date schedule.</p>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+            {% empty %}
+            <div class="col-12">
+              <div class="alert alert-warning mb-0">
+                Logo gallery could not be loaded. Try a hard refresh; if this persists, restart the dev server so Site settings picks up the latest code.
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+
+          <details class="mb-4">
+            <summary class="fw-semibold mb-2" style="cursor: pointer;">
+              Advanced: edit schedule JSON
+            </summary>
+            <p class="small text-muted">
+              Automatic logo changes by date. Overrides below still take priority when active.
+            </p>
+            <form method="post" class="vstack gap-3">
+              {% csrf_token %}
+              <input type="hidden" name="action" value="save_logo_schedule">
+              <div>
+                <label class="form-label fw-semibold">Default logo file</label>
+                <select name="default_logo" class="form-select form-select-sm" style="max-width: 320px;">
+                  {% for file in logo_files %}
+                  <option value="{{ file }}" {% if file == schedule_default %}selected{% endif %}>{{ file }}</option>
+                  {% endfor %}
+                </select>
+                <div class="form-text">Used when no schedule rule matches today.</div>
+              </div>
+              <div>
+                <label class="form-label fw-semibold">Schedule rules (JSON)</label>
+                <textarea name="schedule_json" class="form-control font-monospace small" rows="14">{{ schedule_json }}</textarea>
+                <div class="form-text">
+                  Rule types: <code>single</code>, <code>range</code>, <code>range_yearwrap</code>,
+                  <code>weekday_in_month</code>, <code>range_absolute</code>, <code>easter_range</code>.
+                </div>
+              </div>
+              <div>
+                <button type="submit" class="btn btn-primary btn-sm">
+                  <i class="bi bi-check2 me-1"></i>Save logo schedule
+                </button>
+              </div>
+            </form>
+          </details>
+
+          <hr class="my-4">
+
+          <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <div>
+              <h6 class="fw-bold mb-1">Manual logo overrides</h6>
+              <p class="small text-muted mb-0">
+                Temporary logos that override the schedule (e.g. a one-off event).
+              </p>
+            </div>
+            <a href="{% url 'admin_logo_override_edit' 0 %}" class="btn btn-success btn-sm">
+              <i class="bi bi-plus-lg me-1"></i>Add override
+            </a>
+          </div>
+
+          {% if logo_overrides %}
+          <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Active</th>
+                  <th>Priority</th>
+                  <th>Window</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for o in logo_overrides %}
+                <tr>
+                  <td><code>{{ o.file_name }}</code></td>
+                  <td>{% if o.active %}<span class="badge bg-success">Yes</span>{% else %}<span class="badge bg-secondary">No</span>{% endif %}</td>
+                  <td>{{ o.priority }}</td>
+                  <td class="small">
+                    {% if o.starts_at %}{{ o.starts_at|date:"j M Y H:i" }}{% else %}—{% endif %}
+                    →
+                    {% if o.ends_at %}{{ o.ends_at|date:"j M Y H:i" }}{% else %}—{% endif %}
+                  </td>
+                  <td>{{ o.reason|default:"—" }}</td>
+                  <td>
+                    {% if o.is_active_now %}
+                      <span class="badge bg-primary">Live now</span>
+                    {% else %}
+                      <span class="text-muted small">Inactive</span>
+                    {% endif %}
+                  </td>
+                  <td class="text-end text-nowrap">
+                    <a href="{% url 'admin_logo_override_edit' o.pk %}" class="btn btn-sm btn-outline-primary">
+                      <i class="bi bi-pencil-square"></i>
+                    </a>
+                    <form method="post" action="{% url 'admin_logo_override_delete' o.pk %}" class="d-inline"
+                          onsubmit="return confirm('Delete this logo override?');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="alert alert-light border mb-0">No manual overrides configured.</div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

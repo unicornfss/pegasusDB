@@ -1,5 +1,5 @@
 <div class="row g-3 booking-edit-panels-row">
-  <div class="col-lg-3 col-md-6">
+  <div class="col-lg-{% if booking %}3{% else %}6{% endif %} col-md-6">
     <div class="card booking-panel-card booking-panel-card--instructor mb-0 h-100">
       <div class="card-header booking-panel-header booking-panel-header--instructor d-flex align-items-center">
         <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-person-badge"></i></span>
@@ -11,23 +11,13 @@
     </div>
   </div>
 
+  {% if booking %}
   <div class="col-lg-3 col-md-6">
-    {% if booking %}
-      {% include "partials/booking_telegram_resend.html" with send_url_name="admin_booking_telegram_send" inside_booking_form=True panel=True %}
-    {% else %}
-    <div class="card booking-panel-card booking-panel-card--telegram booking-telegram-card mb-0 h-100">
-      <div class="card-header booking-panel-header booking-panel-header--telegram d-flex align-items-center">
-        <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-arrow-repeat"></i></span>
-        <span class="booking-panel-title">Resend notifications</span>
-      </div>
-      <div class="card-body d-flex align-items-center">
-        <p class="small text-muted mb-0">Save the booking first to send Telegram notifications.</p>
-      </div>
-    </div>
-    {% endif %}
+    {% include "partials/booking_telegram_resend.html" with send_url_name="admin_booking_telegram_send" inside_booking_form=True panel=True %}
   </div>
+  {% endif %}
 
-  <div class="col-lg-3 col-md-6">
+  <div class="col-lg-{% if booking %}3{% else %}6{% endif %} col-md-6">
     <div class="card booking-panel-card booking-panel-card--notes booking-notes-card booking-notes-card--compact mb-0 h-100">
       <div class="card-header booking-panel-header booking-panel-header--notes d-flex align-items-center">
         <span class="booking-panel-icon" aria-hidden="true"><i class="bi bi-journal-text"></i></span>
@@ -42,7 +32,9 @@
     </div>
   </div>
 
+  {% if booking %}
   <div class="col-lg-3 col-md-6">
     {% include "partials/booking_communication_log.html" with panel=True %}
   </div>
+  {% endif %}
 </div>

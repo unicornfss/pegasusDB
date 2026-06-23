@@ -1,0 +1,129 @@
+<style>
+  .booking-detail-tabs {
+    --booking-tab-gap: 0.3rem;
+    gap: var(--booking-tab-gap);
+    border-bottom: 1px solid rgba(16, 24, 40, 0.1);
+    flex-wrap: wrap;
+  }
+
+  .booking-detail-tabs .nav-item {
+    margin-bottom: -1px;
+  }
+
+  .booking-detail-tabs .booking-tab {
+    border: 1px solid rgba(16, 24, 40, 0.08);
+    border-bottom-color: transparent;
+    border-radius: 0.55rem 0.55rem 0 0;
+    color: #344054;
+    font-weight: 500;
+    margin-bottom: 0;
+    padding: 0.55rem 0.9rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .booking-detail-tabs .booking-tab:hover:not(.active) {
+    filter: brightness(0.97);
+  }
+
+  .booking-detail-tabs .booking-tab--course-info {
+    --tab-accent: #198754;
+    --tab-bg: rgba(25, 135, 84, 0.1);
+    --tab-bg-active: rgba(25, 135, 84, 0.22);
+  }
+
+  .booking-detail-tabs .booking-tab--days {
+    --tab-accent: #0d6efd;
+    --tab-bg: rgba(13, 110, 253, 0.1);
+    --tab-bg-active: rgba(13, 110, 253, 0.22);
+  }
+
+  .booking-detail-tabs .booking-tab--assessments {
+    --tab-accent: #fd7e14;
+    --tab-bg: rgba(253, 126, 20, 0.12);
+    --tab-bg-active: rgba(253, 126, 20, 0.24);
+  }
+
+  .booking-detail-tabs .booking-tab--exams {
+    --tab-accent: #6f42c1;
+    --tab-bg: rgba(111, 66, 193, 0.11);
+    --tab-bg-active: rgba(111, 66, 193, 0.23);
+  }
+
+  .booking-detail-tabs .booking-tab--feedback {
+    --tab-accent: #20c997;
+    --tab-bg: rgba(32, 201, 151, 0.11);
+    --tab-bg-active: rgba(32, 201, 151, 0.23);
+  }
+
+  .booking-detail-tabs .booking-tab--closure {
+    --tab-accent: #8b0000;
+    --tab-bg: rgba(139, 0, 0, 0.1);
+    --tab-bg-active: rgba(139, 0, 0, 0.2);
+  }
+
+  .booking-detail-tabs .booking-tab--certificates {
+    --tab-accent: #0dcaf0;
+    --tab-bg: rgba(13, 202, 240, 0.11);
+    --tab-bg-active: rgba(13, 202, 240, 0.23);
+  }
+
+  .booking-detail-tabs .booking-tab--invoicing {
+    --tab-accent: #495057;
+    --tab-bg: rgba(73, 80, 87, 0.1);
+    --tab-bg-active: rgba(73, 80, 87, 0.22);
+  }
+
+  .booking-detail-tabs .booking-tab:not(.active) {
+    background-color: var(--tab-bg);
+    border-top: 2px solid color-mix(in srgb, var(--tab-accent) 35%, transparent);
+    color: color-mix(in srgb, var(--tab-accent) 78%, #1d2939);
+  }
+
+  .booking-detail-tabs .booking-tab.active {
+    background-color: var(--tab-bg-active);
+    border-color: color-mix(in srgb, var(--tab-accent) 45%, transparent);
+    border-bottom-color: transparent;
+    border-top: 3px solid var(--tab-accent);
+    color: #1d2939;
+    font-weight: 600;
+  }
+
+  .booking-detail-tabs-content {
+    background: #fff;
+    transition: background-color 0.2s ease;
+  }
+
+  .booking-detail-tabs-content .booking-pane.show.active {
+    background: linear-gradient(180deg, var(--pane-tint, transparent) 0%, transparent 4.5rem);
+  }
+
+  .booking-pane--course-info { --pane-tint: rgba(25, 135, 84, 0.07); }
+  .booking-pane--days { --pane-tint: rgba(13, 110, 253, 0.07); }
+  .booking-pane--assessments { --pane-tint: rgba(253, 126, 20, 0.08); }
+  .booking-pane--exams { --pane-tint: rgba(111, 66, 193, 0.07); }
+  .booking-pane--feedback { --pane-tint: rgba(32, 201, 151, 0.07); }
+  .booking-pane--closure { --pane-tint: rgba(139, 0, 0, 0.06); }
+  .booking-pane--certificates { --pane-tint: rgba(13, 202, 240, 0.07); }
+  .booking-pane--invoicing { --pane-tint: rgba(73, 80, 87, 0.07); }
+
+  html[data-color-scheme="night"] .booking-detail-tabs {
+    border-bottom-color: rgba(255, 255, 255, 0.12);
+  }
+
+  html[data-color-scheme="night"] .booking-detail-tabs .booking-tab {
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #e9ecef;
+  }
+
+  html[data-color-scheme="night"] .booking-detail-tabs .booking-tab:not(.active) {
+    color: color-mix(in srgb, var(--tab-accent) 55%, #f8f9fa);
+  }
+
+  html[data-color-scheme="night"] .booking-detail-tabs .booking-tab.active {
+    color: #f8f9fa;
+  }
+
+  html[data-color-scheme="night"] .booking-detail-tabs-content {
+    background: var(--bs-body-bg, #212529);
+  }
+</style>

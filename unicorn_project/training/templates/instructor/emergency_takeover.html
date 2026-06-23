@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block title %}Emergency course takeover{% endblock %}
+
+{% block content %}
+<h1>Emergency course takeover</h1>
+<p class="text-muted mb-4">
+  Take over another instructor's course for <strong>{{ target_date|date:"l j F Y" }}</strong>
+  at short notice (for example sickness). Single-day courses transfer in full; multi-day courses
+  assign fees pro-rata for the day(s) you cover.
+</p>
+
+<style>
+  .takeover-card {
+    border: 1px solid #e5e7eb;
+    border-radius: .75rem;
+    box-shadow: 0 1px 1px rgba(16, 24, 40, .04);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  .takeover-card-header {
+    padding: .75rem 1rem;
+    font-weight: 600;
+    background: #fef2f2;
+    border-bottom: 1px solid #fecaca;
+    border-radius: .75rem .75rem 0 0;
+  }
+  .takeover-card-body {
+    padding: 1rem;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .takeover-card-body form {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .takeover-card-actions {
+    margin-top: auto;
+    padding-top: .75rem;
+  }
+  .takeover-meta { font-size: .9rem; color: #6b7280; }
+  .day-check { margin-right: .5rem; }
+  .fee-preview {
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: .5rem;
+    padding: .5rem .75rem;
+    font-size: .875rem;
+    margin-top: .75rem;
+  }
+</style>
+
+{% if rows %}
+  <div class="row g-3 mb-2">
+  {% for row in rows %}
+  <div class="col-12 col-lg-6">
+  <div class="takeover-card">
+    <div class="takeover-card-header">
+      <i class="bi bi-exclamation-triangle text-danger me-1"></i>
+      {{ row.booking.course_reference|default:"—" }} · {{ row.booking.course_type.name }}
+    </div>
+    <div class="takeover-card-body">
+      <div class="takeover-meta mb-2">
+        <strong>{{ row.booking.business.name }}</strong>
+        {% if row.booking.training_location %}
+          · {{ row.booking.training_location.name }}
+        {% endif %}
+        <br>
+        Lead instructor:
+        {% if row.lead_instructor %}
+          {{ row.lead_instructor.name }}
+        {% else %}
+          <span class="text-muted">Unassigned</span>
+        {% endif %}
+        · {{ row.total_days }} day{{ row.total_days|pluralize }}
+        · Total instructor fee £{{ row.total_fee }}
+      </div>
+
+      <form method="post" action="{% url 'instructor_emergency_takeover_confirm' row.booking.pk %}">
+        {% csrf_token %}
+
+        {% if row.is_single_day_course %}
+          <p class="mb-2">
+            <strong>Single-day course</strong> — taking over will assign the entire course,
+            fee, and mileage to you. The original instructor will be removed.
+          </p>
+          <input type="hidden" name="day_ids" value="{{ row.selectable_days.0.day.pk }}">
+        {% else %}
+          <p class="mb-2"><strong>Days you can take over</strong> (today is pre-selected):</p>
+          <div class="mb-2">
+            {% for item in row.selectable_days %}
+            <label class="d-block mb-1">
+              <input
+                class="day-check"
+                type="checkbox"
+                name="day_ids"
+                value="{{ item.day.pk }}"
+                {% if item.is_today or item.day.pk in row.default_day_ids %}checked{% endif %}
+              >
+              {{ item.date|date:"D j M Y" }}
+              {% if item.is_today %}<span class="badge bg-danger-subtle text-danger border">Today</span>{% endif %}
+            </label>
+            {% endfor %}
+          </div>
+          <p class="small text-muted mb-2">
+            Select additional future days if you will also cover them. Otherwise you can take over
+            the next day separately tomorrow.
+          </p>
+        {% endif %}
+
+        <div class="mb-3">
+          <label class="form-label small text-muted" for="note-{{ row.booking.pk }}">Note (optional)</label>
+          <input
+            type="text"
+            class="form-control form-control-sm"
+            id="note-{{ row.booking.pk }}"
+            name="note"
+            maxlength="500"
+            placeholder="e.g. Covering for illness"
+          >
+        </div>
+
+        <div class="takeover-card-actions">
+          <div class="fee-preview mb-3">
+            {% if row.is_single_day_course %}
+              Your fee if you take over: <strong>£{{ row.total_fee }}</strong> (full course)
+            {% else %}
+              Pro-rata fee per day: approx <strong>£{{ row.per_day_fee }}</strong>
+              (based on £{{ row.total_fee }} ÷ {{ row.total_days }} days)
+            {% endif %}
+          </div>
+
+          <button type="submit" class="btn btn-danger btn-sm"
+                  onclick="return confirm('Confirm emergency takeover for this course?');">
+            <i class="bi bi-lightning-charge"></i> Take over{% if row.is_single_day_course %} course{% endif %}
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+  </div>
+  {% endfor %}
+  </div>
+{% else %}
+  <div class="alert alert-success">
+    <i class="bi bi-check-circle me-1"></i>
+    No courses need emergency cover for {{ target_date|date:"l j F Y" }}.
+  </div>
+{% endif %}
+
+<p class="small text-muted mt-4">
+  Only courses you are approved to deliver are shown. Bookings with a pending course swap cannot be taken over here.
+</p>
+{% endblock %}

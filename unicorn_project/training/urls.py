@@ -10,6 +10,8 @@ from . import views_inspector as inspv
 from . import views_instructor as instv
 from . import views_instructor
 from . import views_course_swaps as swapv
+from . import views_emergency_takeover as takeoverv
+from . import views_inbox as inboxv
 from . import views_public
 from . import views_telegram
 
@@ -23,7 +25,12 @@ from .views_public import (
 
 from . import views_certificates
 
-from .views_admin import meta_settings_list, meta_settings_edit
+from .views_admin import (
+    site_settings,
+    meta_settings_edit,
+    logo_override_edit,
+    logo_override_delete,
+)
 
 
 urlpatterns = [
@@ -47,6 +54,8 @@ urlpatterns = [
     path("app/instructor/course-swaps/<uuid:pk>/accept/", swapv.instructor_course_swap_accept, name="instructor_course_swap_accept"),
     path("app/instructor/course-swaps/<uuid:pk>/decline/", swapv.instructor_course_swap_decline, name="instructor_course_swap_decline"),
     path("app/instructor/course-swaps/<uuid:pk>/cancel/", swapv.instructor_course_swap_cancel, name="instructor_course_swap_cancel"),
+    path("app/instructor/emergency-takeover/", takeoverv.instructor_emergency_takeover, name="instructor_emergency_takeover"),
+    path("app/instructor/emergency-takeover/<uuid:pk>/confirm/", takeoverv.instructor_emergency_takeover_confirm, name="instructor_emergency_takeover_confirm"),
     path("app/instructor/practice-bookings/new/<uuid:business_id>/", instv.instructor_dummy_booking_new, name="instructor_dummy_booking_new"),
     path("app/instructor/booking/<uuid:pk>/", instv.instructor_booking_detail, name="instructor_booking_detail"),
     path("app/instructor/booking/<uuid:pk>/delete-dummy/", instv.instructor_delete_dummy_booking, name="instructor_delete_dummy_booking"),
@@ -55,6 +64,7 @@ urlpatterns = [
     path("app/instructor/register/<int:pk>/edit/", instv.instructor_delegate_edit, name="instructor_delegate_edit"),
     path("app/instructor/day/<int:day_pk>/registers/new/", instv.instructor_delegate_new, name="instructor_delegate_new"),
     path("app/profile/", views.user_profile, name="user_profile"),
+    path("app/profile/request-course/", views.instructor_request_course_delivery, name="instructor_request_course_delivery"),
     path("app/telegram/link-token/", views_telegram.telegram_link_token, name="telegram_link_token"),
     path("app/telegram/unlink/", views_telegram.telegram_unlink, name="telegram_unlink"),
     path("app/preferences/night-mode/", views.toggle_night_mode, name="toggle_night_mode"),
@@ -98,6 +108,16 @@ urlpatterns = [
     path("app-admin/api/courses-awaiting-closure/", views_admin.api_courses_awaiting_closure, name="api_courses_awaiting_closure"),
     path("app-admin/api/courses-in-7-days/", views_admin.api_courses_in_7_days, name="api_courses_in_7_days"),
     path("api/outstanding-invoices/", views_admin.api_outstanding_invoices, name="api_outstanding_invoices"),
+    path("app-admin/api/inbox-open/", inboxv.api_inbox_open, name="api_admin_inbox_open"),
+    path("app/api/inbox-unread/", inboxv.api_inbox_unread, name="api_inbox_unread"),
+    path("app/api/inbox-stream/", inboxv.inbox_stream, name="api_inbox_stream"),
+
+    path("app/inbox/", inboxv.inbox_list, name="inbox_list"),
+    path("app/inbox/<uuid:pk>/course-request/", inboxv.inbox_course_request_action, name="inbox_course_request_action"),
+    path("app/inbox/<uuid:pk>/swap-accept/", inboxv.inbox_swap_accept, name="inbox_swap_accept"),
+    path("app/inbox/<uuid:pk>/swap-decline/", inboxv.inbox_swap_decline, name="inbox_swap_decline"),
+    path("app/admin/inbox/", inboxv.inbox_list, name="admin_inbox_list"),
+    path("app/admin/inbox/<uuid:pk>/course-request/", inboxv.inbox_course_request_action, name="admin_inbox_course_request_action"),
 
     # Businesses
     path("app/admin/businesses/", app_admin.business_list, name="admin_business_list"),
@@ -298,7 +318,11 @@ urlpatterns = [
         name="api_instructor_postcode",
     ),
 
-    path("app/admin/meta-settings/", meta_settings_list, name="admin_meta_settings"),
+    path("app/admin/site-settings/", site_settings, name="admin_site_settings"),
+    path("app/admin/site-settings/meta/<int:pk>/", meta_settings_edit, name="admin_meta_settings_edit"),
+    path("app/admin/site-settings/logo-overrides/<int:pk>/", logo_override_edit, name="admin_logo_override_edit"),
+    path("app/admin/site-settings/logo-overrides/<int:pk>/delete/", logo_override_delete, name="admin_logo_override_delete"),
+    path("app/admin/meta-settings/", site_settings, name="admin_meta_settings"),
     path("app/admin/meta-settings/<int:pk>/", meta_settings_edit, name="admin_meta_settings_edit"),
 
 ]

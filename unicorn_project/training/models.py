@@ -285,6 +285,12 @@ class Personnel(models.Model):
         default=True,
         help_text="Telegram alerts for course cover requests and responses.",
     )
+    deliverable_course_types = models.ManyToManyField(
+        "CourseType",
+        blank=True,
+        related_name="qualified_instructors",
+        help_text="Course types this instructor is allowed to deliver.",
+    )
     upcoming_reminder_days_1 = models.PositiveSmallIntegerField(null=True, blank=True)
     upcoming_reminder_days_2 = models.PositiveSmallIntegerField(null=True, blank=True)
     upcoming_reminder_days_3 = models.PositiveSmallIntegerField(null=True, blank=True)
@@ -693,6 +699,21 @@ class Booking(models.Model):
             self.save(update_fields=list(updates.keys()))
         return True
 
+    @property
+    def invoice(self):
+        """Primary invoice for the lead instructor (backwards compatible)."""
+        if self.instructor_id:
+            inv = self.invoices.filter(instructor_id=self.instructor_id).first()
+            if inv:
+                return inv
+        return self.invoices.first()
+
+    def invoice_for(self, personnel):
+        """Invoice belonging to a specific instructor on this booking."""
+        if not personnel:
+            return self.invoice
+        return self.invoices.filter(instructor_id=personnel.pk).first()
+
     def __str__(self):
         return self.course_reference or "(pending)"
 
@@ -796,6 +817,43 @@ class CourseSwap(models.Model):
         ref = getattr(self.booking, "course_reference", "") or str(self.booking_id)
         return f"{ref}: {self.from_instructor} → {self.to_instructor} ({self.status})"
 
+
+class EmergencyTakeover(models.Model):
+    """
+    Audit record when an instructor takes over another instructor's course day(s)
+    at short notice (sickness etc.).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    booking = models.ForeignKey(
+        "Booking",
+        on_delete=models.CASCADE,
+        related_name="emergency_takeovers",
+    )
+    taken_by = models.ForeignKey(
+        "Personnel",
+        on_delete=models.CASCADE,
+        related_name="emergency_takeovers_performed",
+    )
+    replaced_instructor = models.ForeignKey(
+        "Personnel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="emergency_takeovers_replaced",
+    )
+    days = models.ManyToManyField("BookingDay", related_name="emergency_takeovers")
+    fee_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    mileage_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_full_takeover = models.BooleanField(default=False)
+    note = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        ref = getattr(self.booking, "course_reference", "") or str(self.booking_id)
+        return f"{ref}: emergency cover by {self.taken_by}"
 
 
 class Attendance(models.Model):
@@ -1095,9 +1153,16 @@ class Invoice(models.Model):
         ("awaiting_review", "Awaiting instructor review"),
         ("rejected", "Rejected"),
     ]
-    booking = models.OneToOneField("Booking", on_delete=models.CASCADE, related_name="invoice")
+    booking = models.ForeignKey("Booking", on_delete=models.CASCADE, related_name="invoices")
     instructor = models.ForeignKey("Personnel", on_delete=models.CASCADE)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    base_fee_override = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="When set, used instead of booking.instructor_fee for this instructor's invoice.",
+    )
 
     invoice_date = models.DateField(null=True, blank=True)
     instructor_ref = models.CharField(max_length=100, blank=True)
@@ -1122,7 +1187,11 @@ class Invoice(models.Model):
 
     @property
     def base_amount(self):
-        return self.booking.instructor_fee or 0
+        if self.base_fee_override is not None:
+            return self.base_fee_override
+        if self.instructor_id and self.instructor_id == self.booking.instructor_id:
+            return self.booking.instructor_fee or 0
+        return 0
 
     @property
     def total(self):
@@ -1514,3 +1583,125 @@ class TelegramNotification(models.Model):
 
     def __str__(self):
         return f"{self.notification_type} for booking {self.booking_id}"
+
+
+class InstructorCourseRequestStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
+    DECLINED = "declined", "Declined"
+
+
+class InstructorCourseRequest(models.Model):
+    """Instructor request to be allowed to deliver a course type."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    instructor = models.ForeignKey(
+        Personnel,
+        on_delete=models.CASCADE,
+        related_name="course_delivery_requests",
+    )
+    course_type = models.ForeignKey(
+        CourseType,
+        on_delete=models.CASCADE,
+        related_name="delivery_requests",
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=InstructorCourseRequestStatus.choices,
+        default=InstructorCourseRequestStatus.PENDING,
+        db_index=True,
+    )
+    message = models.TextField(blank=True, default="")
+    admin_note = models.TextField(blank=True, default="")
+    requested_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_course_delivery_requests",
+    )
+
+    class Meta:
+        ordering = ["-requested_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["instructor", "course_type"],
+                condition=models.Q(status=InstructorCourseRequestStatus.PENDING),
+                name="uniq_pending_instructor_course_request",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.instructor} → {self.course_type} ({self.status})"
+
+
+class StaffInboxItemKind(models.TextChoices):
+    COURSE_DELIVERY_REQUEST = "course_delivery_request", "Course delivery request"
+    COURSE_DELIVERY_OUTCOME = "course_delivery_outcome", "Course delivery update"
+    COURSE_SWAP_INCOMING = "course_swap_incoming", "Course cover request"
+    COURSE_SWAP_OUTCOME = "course_swap_outcome", "Course cover update"
+
+
+class StaffInboxItemStatus(models.TextChoices):
+    OPEN = "open", "Open"
+    RESOLVED = "resolved", "Resolved"
+
+
+class StaffInboxItem(models.Model):
+    """Per-personnel inbox for admin and instructor notifications."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    recipient = models.ForeignKey(
+        Personnel,
+        on_delete=models.CASCADE,
+        related_name="inbox_items",
+        null=True,
+        blank=True,
+    )
+    kind = models.CharField(max_length=40, choices=StaffInboxItemKind.choices, db_index=True)
+    status = models.CharField(
+        max_length=16,
+        choices=StaffInboxItemStatus.choices,
+        default=StaffInboxItemStatus.OPEN,
+        db_index=True,
+    )
+    summary = models.CharField(max_length=500)
+    course_delivery_request = models.ForeignKey(
+        InstructorCourseRequest,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="inbox_items",
+    )
+    course_swap = models.ForeignKey(
+        CourseSwap,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="inbox_items",
+    )
+    read_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="resolved_inbox_items",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["recipient", "status", "read_at"]),
+        ]
+
+    def __str__(self):
+        return self.summary
+
+    @property
+    def is_unread(self):
+        return self.read_at is None

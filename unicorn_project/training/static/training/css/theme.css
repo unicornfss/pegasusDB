@@ -394,7 +394,8 @@ html[data-sidebar-theme="charcoal"] {
   font-size: 1.15rem;
 }
 
-.sidebar .sidebar-footer button.leaf {
+.sidebar .sidebar-footer button.leaf,
+.sidebar .sidebar-footer a.leaf {
     display: flex;
     align-items: center;
     gap: .5rem;
@@ -407,7 +408,8 @@ html[data-sidebar-theme="charcoal"] {
     text-decoration: none;
 }
 
-.sidebar .sidebar-footer button.leaf:hover {
+.sidebar .sidebar-footer button.leaf:hover,
+.sidebar .sidebar-footer a.leaf:hover {
     background: var(--sidebar-hover-bg) !important;
 }
 

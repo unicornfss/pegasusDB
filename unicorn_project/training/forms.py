@@ -23,7 +23,8 @@ from .models import (
     Exam,
     ExamQuestion,
     ExamAnswer,
-    MetaSetting
+    MetaSetting,
+    LogoOverride,
 )
 
 import string, secrets
@@ -1131,6 +1132,13 @@ class PersonnelForm(forms.ModelForm):
             attrs={"class": "form-check-input"}
         ),
     )
+    deliverable_course_types = forms.ModelMultipleChoiceField(
+        queryset=CourseType.objects.filter(is_suspended=False).order_by("name"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check-input"}),
+        label="Courses allowed to deliver",
+        help_text="Instructors only receive updates for courses selected here.",
+    )
 
     class Meta:
         model = Personnel
@@ -1146,6 +1154,7 @@ class PersonnelForm(forms.ModelForm):
             "name_on_account",
             "can_login",
             "is_active",
+            "deliverable_course_types",
         ]
         widgets = {
             "name": forms.TextInput(attrs={"class": "form-control"}),
@@ -1164,12 +1173,24 @@ class PersonnelForm(forms.ModelForm):
     # --------------------------
     # PRE-POPULATE GROUPS
     # --------------------------
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, lock_groups=False, **kwargs):
+        self.lock_groups = lock_groups
         super().__init__(*args, **kwargs)
 
         if self.instance and self.instance.user:
             # Load user's groups into the form
             self.fields["groups"].initial = self.instance.user.groups.all()
+
+        if self.lock_groups:
+            self.fields["groups"].disabled = True
+            self.fields["groups"].help_text = (
+                "Roles cannot be changed for superuser accounts."
+            )
+
+        if self.instance and self.instance.pk:
+            self.fields["deliverable_course_types"].initial = (
+                self.instance.deliverable_course_types.all()
+            )
 
         # Disable the "can_login" checkbox if inactive
         if self.instance and not self.instance.is_active:
@@ -1187,6 +1208,7 @@ class PersonnelForm(forms.ModelForm):
 
         if commit:
             inst.save()
+            self.save_m2m()
 
         # APPLY GROUPS + LOGIN SETTINGS TO USER
         if inst.user:
@@ -1202,8 +1224,9 @@ class PersonnelForm(forms.ModelForm):
             inst.name = f"{user.first_name} {user.last_name}".strip()
 
             # --- 3. Apply groups ---
-            groups = self.cleaned_data.get("groups", [])
-            user.groups.set(groups)
+            if not getattr(self, "lock_groups", False):
+                groups = self.cleaned_data.get("groups", [])
+                user.groups.set(groups)
 
             # --- 4. Activate/deactivate login ---
             user.is_active = inst.can_login and inst.is_active
@@ -1215,3 +1238,53 @@ class MetaSettingForm(forms.ModelForm):
     class Meta:
         model = MetaSetting
         fields = ["key", "value"]
+        widgets = {
+            "key": forms.TextInput(attrs={"class": "form-control"}),
+            "value": forms.Textarea(attrs={"class": "form-control", "rows": 3}),
+        }
+
+
+class LogoOverrideForm(forms.ModelForm):
+    class Meta:
+        model = LogoOverride
+        fields = [
+            "file_name",
+            "active",
+            "reason",
+            "starts_at",
+            "ends_at",
+            "priority",
+        ]
+        widgets = {
+            "file_name": forms.Select(attrs={"class": "form-select"}),
+            "active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "reason": forms.TextInput(attrs={"class": "form-control"}),
+            "starts_at": forms.DateTimeInput(
+                attrs={"class": "form-control", "type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "ends_at": forms.DateTimeInput(
+                attrs={"class": "form-control", "type": "datetime-local"},
+                format="%Y-%m-%dT%H:%M",
+            ),
+            "priority": forms.NumberInput(attrs={"class": "form-control", "min": 0}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        from .services.logos import available_logo_filenames
+
+        super().__init__(*args, **kwargs)
+        choices = [(name, name) for name in available_logo_filenames()]
+        self.fields["file_name"].widget = forms.Select(
+            choices=choices,
+            attrs={"class": "form-select"},
+        )
+        self.fields["starts_at"].required = False
+        self.fields["ends_at"].required = False
+        self.fields["priority"].help_text = "Lower numbers take priority over higher ones."
+        if self.instance and self.instance.pk:
+            for field_name in ("starts_at", "ends_at"):
+                dt = getattr(self.instance, field_name, None)
+                if dt:
+                    local_dt = timezone.localtime(dt)
+                    self.initial[field_name] = local_dt.strftime("%Y-%m-%dT%H:%M")

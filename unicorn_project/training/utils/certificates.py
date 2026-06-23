@@ -128,6 +128,168 @@ def _format_date(d: Optional[date]) -> str:
     return d.strftime("%d %B %Y")
 
 
+def _wrap_text_to_width(
+    c: canvas.Canvas,
+    text: str,
+    font_name: str,
+    font_size: float,
+    max_width: float,
+) -> List[str]:
+    """Wrap text by words; break long tokens so each line fits max_width."""
+    text = (text or "").strip()
+    if not text:
+        return [""]
+
+    words = text.split()
+    lines: List[str] = []
+    current = ""
+
+    for word in words:
+        candidate = word if not current else f"{current} {word}"
+        if c.stringWidth(candidate, font_name, font_size) <= max_width:
+            current = candidate
+            continue
+
+        if current:
+            lines.append(current)
+            current = word
+        else:
+            chunk = ""
+            for ch in word:
+                trial = chunk + ch
+                if c.stringWidth(trial, font_name, font_size) <= max_width:
+                    chunk = trial
+                else:
+                    if chunk:
+                        lines.append(chunk)
+                    chunk = ch
+            current = chunk
+
+    if current:
+        lines.append(current)
+
+    return lines or [""]
+
+
+def _fit_text_layout(
+    c: canvas.Canvas,
+    text: str,
+    font_name: str,
+    max_width: float,
+    *,
+    max_font_size: float = 47,
+    min_font_size: float = 16,
+    max_lines: int = 2,
+) -> Tuple[float, List[str]]:
+    """Pick font size and lines: prefer one line (shrinking) before wrapping."""
+    text = (text or "").strip()
+    if not text:
+        return max_font_size, [""]
+
+    size = max_font_size
+    while size >= min_font_size:
+        if c.stringWidth(text, font_name, size) <= max_width:
+            return size, [text]
+        size -= 1
+
+    if max_lines < 2:
+        return min_font_size, [text]
+
+    size = min(max_font_size, 32)
+    while size >= min_font_size:
+        lines = _wrap_text_to_width(c, text, font_name, size, max_width)
+        if len(lines) <= max_lines and all(
+            c.stringWidth(line, font_name, size) <= max_width for line in lines
+        ):
+            return size, lines
+        size -= 1
+
+    lines = _wrap_text_to_width(c, text, font_name, min_font_size, max_width)
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        overflow = lines[-1]
+        while overflow and c.stringWidth(f"{overflow}…", font_name, min_font_size) > max_width:
+            overflow = overflow[:-1]
+        lines[-1] = f"{overflow}…" if overflow else "…"
+
+    return min_font_size, lines
+
+
+def _draw_certificate_delegate_name(
+    c: canvas.Canvas,
+    text: str,
+    page_width: float,
+    page_height: float,
+    font_name: str,
+    *,
+    max_font_size: float = 47,
+    min_font_size: float = 16,
+) -> None:
+    """Draw the delegate name in the reserved band on the certificate artwork."""
+    x = page_width * 0.66
+    max_width = page_width * 0.46
+    # Vertical band between static lines on the PNG background.
+    zone_bottom = page_height * 0.558
+    zone_top = page_height * 0.628
+    single_line_y = page_height * 0.62
+
+    font_size, lines = _fit_text_layout(
+        c,
+        text,
+        font_name,
+        max_width,
+        max_font_size=max_font_size,
+        min_font_size=min_font_size,
+        max_lines=2,
+    )
+    c.setFont(font_name, font_size)
+    leading = font_size * 1.02
+
+    if len(lines) == 1:
+        c.drawCentredString(x, single_line_y, lines[0])
+        return
+
+    # Two lines only when one line cannot fit even at min_font_size.
+    # Grow upward from zone_bottom so we do not cover text below the name.
+    bottom_baseline = zone_bottom
+    top_baseline = bottom_baseline + leading
+    if top_baseline > zone_top:
+        leading = max(zone_top - bottom_baseline, font_size * 0.85)
+        top_baseline = bottom_baseline + leading
+
+    c.drawCentredString(x, top_baseline, lines[0])
+    c.drawCentredString(x, bottom_baseline, lines[1])
+
+
+def _draw_fitted_centred_text(
+    c: canvas.Canvas,
+    text: str,
+    x: float,
+    y: float,
+    font_name: str,
+    max_width: float,
+    *,
+    max_font_size: float = 47,
+    min_font_size: float = 22,
+    max_lines: int = 2,
+    leading_ratio: float = 1.08,
+) -> None:
+    """Generic centred text helper (prefer single line before wrapping)."""
+    font_size, lines = _fit_text_layout(
+        c,
+        text,
+        font_name,
+        max_width,
+        max_font_size=max_font_size,
+        min_font_size=min_font_size,
+        max_lines=max_lines,
+    )
+    c.setFont(font_name, font_size)
+    leading = font_size * leading_ratio
+    for index, line in enumerate(lines):
+        c.drawCentredString(x, y - (index * leading), line)
+
+
 # -------------------------------------------------------------------
 # PDF builder (ReportLab + PNG background)
 # -------------------------------------------------------------------
@@ -231,8 +393,13 @@ def build_certificates_pdf_for_booking(
 
         # Delegate name – directly under "This is to certify that"
         c.setFillColorRGB(*PURPLE)
-        c.setFont(name_font, 47)
-        c.drawCentredString(page_width * 0.66, page_height * 0.62, delegate_name)
+        _draw_certificate_delegate_name(
+            c,
+            delegate_name,
+            page_width,
+            page_height,
+            name_font,
+        )
 
         # Course name – under "Has attended and passed a" (slightly lower)
         c.setFont(georgia_font, 21)

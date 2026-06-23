@@ -58,6 +58,12 @@ from .services.assessment_exams import (
     recompute_delegate_outcome,
     recompute_outcomes_for_exam_attempt,
 )
+from .utils.instructor_access import (
+    booking_has_invoice_for,
+    instructor_can_access_booking,
+    instructor_can_access_day,
+    instructor_bookings_queryset,
+)
 
 SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9 _\-\(\)\.&]")
 
@@ -530,10 +536,10 @@ def instructor_dashboard(request):
     )
 
     # 1b) Completed courses with invoice still Draft / Awaiting review
-    invoice_attention = Booking.objects.filter(
-        instructor=personnel,
-        status="completed",
-        invoice__status__in=["draft", "awaiting_review"],
+    invoice_attention = (
+        Booking.objects.filter(status="completed")
+        .filter(booking_has_invoice_for(personnel, statuses=["draft", "awaiting_review"]))
+        .distinct()
     )
 
     # 2) Incomplete registers (DOB always required, so leave empty for now)
@@ -597,8 +603,9 @@ def booking_fee(request, pk):
 
     # Permission check
     is_instructor_for_booking = (
-        hasattr(booking, "instructor") and booking.instructor and
-        hasattr(booking.instructor, "user") and booking.instructor.user_id == request.user.id
+        hasattr(request.user, "personnel")
+        and request.user.personnel
+        and instructor_can_access_booking(request.user.personnel, booking)
     )
     is_admin_or_staff = request.user.is_staff or request.user.is_superuser
 
@@ -621,15 +628,16 @@ def booking_fee(request, pk):
         "accommodation": booking.allow_accommodation,
     })
 
-def _invoicing_tab_context(booking):
+def _invoicing_tab_context(booking, personnel=None):
     """Build context keys that _invoicing_tab.html expects."""
-    inv = _get_or_create_invoice(booking)
-    instr = booking.instructor
+    personnel = personnel or booking.instructor
+    inv = _get_or_create_invoice(booking, personnel=personnel)
+    instr = personnel or booking.instructor
 
     inv_date = inv.invoice_date or now().date()
 
     try:
-        base_fee = booking.instructor_fee
+        base_fee = inv.base_amount if inv else 0
         if base_fee in (None, ""):
             base_fee = getattr(booking.course_type, "default_instructor_fee", 0)
     except Exception:
@@ -669,9 +677,8 @@ def instructor_bookings(request):
     today = timezone.localdate()
 
     base_qs = (
-        Booking.objects
+        instructor_bookings_queryset(inst)
         .select_related("course_type", "business", "training_location")
-        .filter(instructor=inst)
         .exclude(status="cancelled")
         .exclude(business__is_dummy=True)
     )
@@ -712,15 +719,22 @@ def instructor_bookings(request):
     # Copy the page’s rows so we can annotate them
     closed_rows = list(closed_page.object_list)
 
-    # Map of booking_id -> invoice status
+    # Map of booking_id -> invoice status (this instructor's invoice)
     inv_map = {
         inv.booking_id: (inv.status or "").lower()
-        for inv in Invoice.objects.filter(booking_id__in=[b.id for b in closed_rows])
+        for inv in Invoice.objects.filter(
+            booking_id__in=[b.id for b in closed_rows],
+            instructor_id=inst.pk,
+        )
     }
 
     # Attach invoice_status directly to each booking row
     for b in closed_rows:
-        b.invoice_status = inv_map.get(b.id, "")
+        if b.id not in inv_map and b.instructor_id == inst.pk:
+            lead_inv = b.invoice
+            b.invoice_status = (lead_inv.status or "").lower() if lead_inv else ""
+        else:
+            b.invoice_status = inv_map.get(b.id, "")
 
     # Simple list fallback (first page items) for older templates
     closed = list(closed_qs[:10])
@@ -1235,7 +1249,7 @@ def instructor_delete_dummy_booking(request, pk):
     instr = getattr(request.user, "personnel", None)
     is_admin = request.user.is_superuser or request.user.groups.filter(name__iexact="admin").exists()
 
-    if not is_admin and (not instr or booking.instructor_id != instr.id):
+    if not is_admin and (not instr or not instructor_can_access_booking(instr, booking)):
         messages.error(request, "You do not have permission to delete this dummy booking.")
         return redirect("instructor_bookings")
 
@@ -1255,7 +1269,7 @@ def instructor_send_telegram_booking(request, pk):
         pk=pk,
     )
     instr = getattr(request.user, "personnel", None)
-    if not instr or booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_booking(instr, booking):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
@@ -1398,7 +1412,7 @@ def _assessment_context(booking, user):
     # permissions: staff or assigned instructor (match the guard used in the view)
     instr = getattr(user, "personnel", None)  # <-- changed from "instructor"
 
-    if not (user.is_staff or (instr and booking.instructor_id == instr.id)):
+    if not (user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
         raise PermissionError("Not your booking.")
 
     # --- Delegates: unique by (name + DOB) for the whole booking ---
@@ -1462,17 +1476,20 @@ def _assessment_context(booking, user):
     }
 
 
-def _get_or_create_invoice(booking):
-    inv = getattr(booking, "invoice", None)
+def _get_or_create_invoice(booking, personnel=None):
+    personnel = personnel or booking.instructor
+    if not personnel:
+        return None
+    inv = booking.invoice_for(personnel)
     if inv:
         return inv
     return Invoice.objects.create(
         booking=booking,
-        instructor=booking.instructor,
+        instructor=personnel,
         invoice_date=now().date(),
-        account_name=getattr(booking.instructor, "name_on_account", "") or "",
-        sort_code=getattr(booking.instructor, "bank_sort_code", "") or "",
-        account_number=getattr(booking.instructor, "bank_account_number", "") or "",
+        account_name=getattr(personnel, "name_on_account", "") or "",
+        sort_code=getattr(personnel, "bank_sort_code", "") or "",
+        account_number=getattr(personnel, "bank_account_number", "") or "",
     )
 
 def _attempt_back_url(attempt):
@@ -1512,7 +1529,7 @@ def instructor_booking_detail(request, pk):
         pk=pk,
     )
 
-    if not instr or booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_booking(instr, booking):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
@@ -1523,14 +1540,7 @@ def instructor_booking_detail(request, pk):
     # ------------------------------------------------------------------
     # Ensure invoice exists
     # ------------------------------------------------------------------
-    inv = getattr(booking, "invoice", None)
-    if inv is None:
-        inv = Invoice.objects.create(
-            booking=booking,
-            instructor=booking.instructor,
-            invoice_date=now().date(),
-            status="draft",
-        )
+    inv = _get_or_create_invoice(booking, personnel=instr)
 
     # Prefill missing bank details
     prefilled = False
@@ -2330,7 +2340,7 @@ def instructor_booking_detail(request, pk):
     ctx["fb_avg"] = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
 
     try:
-        ctx.update(_invoicing_tab_context(booking))
+        ctx.update(_invoicing_tab_context(booking, personnel=instr))
     except:
         pass
 
@@ -2683,7 +2693,7 @@ def instructor_assessment_optional_modules_save(request, pk):
         pk=pk,
     )
 
-    if not instr or booking.instructor_id != getattr(instr, "id", None):
+    if not instr or not instructor_can_access_booking(instr, booking):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
 
     if getattr(booking, "status", "") == "completed":
@@ -2756,7 +2766,7 @@ def instructor_day_registers_poll(request, pk: int):
         ),
         pk=pk,
     )
-    if not instr or day.booking.instructor_id != getattr(instr, "id", None):
+    if not instr or not instructor_can_access_day(instr, day):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
 
     qs = (
@@ -2797,7 +2807,7 @@ def instructor_assessment_outcome_autosave(request, pk):
         Booking.objects.select_related("course_type", "instructor"),
         pk=pk
     )
-    if not instr or booking.instructor_id != getattr(instr, "id", None):
+    if not instr or not instructor_can_access_booking(instr, booking):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
     
         # Block outcome changes if the course is closed
@@ -2842,7 +2852,7 @@ def instructor_day_registers(request, pk: int):
         ),
         pk=pk,
     )
-    if not instr or day.booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_day(instr, day):
         messages.error(request, "You do not have access to this register.")
         return redirect("instructor_bookings")
 
@@ -2888,7 +2898,7 @@ def instructor_delegate_edit(request, pk: int):
         DelegateRegister.objects.select_related("booking_day__booking__instructor"),
         pk=pk
     )
-    if not instr or reg.booking_day.booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_day(instr, reg.booking_day):
         messages.error(request, "You do not have access to edit this delegate.")
         return redirect("instructor_bookings")
     
@@ -3006,7 +3016,7 @@ def instructor_delegate_new(request, day_pk: int):
         BookingDay.objects.select_related("booking__instructor", "booking__course_type"),
         pk=day_pk
     )
-    if not instr or day.booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_day(instr, day):
         messages.error(request, "You do not have access to this register.")
         return redirect("instructor_bookings")
     
@@ -3044,7 +3054,7 @@ def instructor_register_edit(request, pk: int):
         DelegateRegister.objects.select_related("booking_day__booking__course_type"),
         pk=pk
     )
-    if not instr or reg.instructor_id != instr.id:
+    if not instr or not instructor_can_access_day(instr, reg.booking_day):
         messages.error(request, "You do not have access to edit this delegate.")
         return redirect("instructor_bookings")
     
@@ -3085,7 +3095,7 @@ def instructor_delegate_delete(request, pk: int):
         DelegateRegister.objects.select_related("booking_day__booking"),
         pk=pk
     )
-    if not instr or reg.booking_day.booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_day(instr, reg.booking_day):
         messages.error(request, "You do not have permission to delete this delegate.")
         return redirect("instructor_bookings")
     
@@ -3448,7 +3458,7 @@ def instructor_day_registers_pdf(request, pk: int):
 def instructor_assessment_save(request, pk):
     booking = get_object_or_404(Booking, pk=pk)
     instr = getattr(request.user, "personnel", None)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+    if not (request.user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
         return HttpResponseForbidden("You are not assigned to this booking.")
 
     if request.method != "POST":
@@ -3557,7 +3567,7 @@ def instructor_assessment_pdf(request, pk):
         pk=pk
     )
 
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+    if not (request.user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
@@ -3790,7 +3800,7 @@ def instructor_feedback_poll(request, booking_id):
 
     # Ensure instructor can only see their own booking feedback
     instr = getattr(request.user, "personnel", None)
-    if not instr or booking.instructor_id != getattr(instr, "id", None):
+    if not instr or not instructor_can_access_booking(instr, booking):
         return JsonResponse({"ok": False, "error": "Forbidden"}, status=403)
 
     # Full date range for this booking (min..max across all days)
@@ -3947,7 +3957,7 @@ def instructor_course_summary_by_ref_pdf(request, ref):
     )
 
     instr = getattr(request.user, "personnel", None)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+    if not (request.user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
         return HttpResponseForbidden("You do not have access to this booking.")
 
     # IMPORTANT: do not render here. Call the UUID view so the DEBUG→HTML logic is used.
@@ -4086,7 +4096,7 @@ def invoice_preview(request, pk):
         )
 
         if not user_is_admin:
-            if not instr or instr.id != booking.instructor_id:
+            if not instr or not instructor_can_access_booking(instr, booking):
                 raise PermissionDenied("Not allowed.")
 
 
@@ -4194,7 +4204,7 @@ def instructor_feedback_pdf_all(request, booking_id):
         pk=booking_id,
     )
     # Allow: assigned instructor OR any staff user (admin)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+    if not (request.user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
         return HttpResponseForbidden("You do not have access to this booking.")
 
 
@@ -4410,7 +4420,7 @@ def instructor_feedback_pdf_summary(request, booking_id):
         pk=booking_id,
     )
     # Allow: assigned instructor OR any staff user (admin)
-    if not (request.user.is_staff or (instr and booking.instructor_id == instr.id)):
+    if not (request.user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
         return HttpResponseForbidden("You do not have access to this booking.")
 
 
@@ -4632,7 +4642,7 @@ def send_course_docs(request, pk):
         pk=pk,
     )
     instr = getattr(request.user, "personnel", None)
-    if not instr or instr.id != booking.instructor_id:
+    if not instr or not instructor_can_access_booking(instr, booking):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
@@ -5214,7 +5224,7 @@ def instructor_exams_summary_pdf(request, booking_id):
         Booking.objects.select_related("course_type", "instructor"),
         pk=booking_id,
     )
-    if not instr or booking.instructor_id != instr.id:
+    if not instr or not instructor_can_access_booking(instr, booking):
         return HttpResponseForbidden("Not allowed.")
 
     booking_dates = list(BookingDay.objects.filter(booking=booking).values_list("date", flat=True))
@@ -5307,7 +5317,7 @@ def instructor_upload_receipt(request, pk):
         # 1) Guard: instructor must own this booking
         booking = get_object_or_404(Booking.objects.select_related("instructor"), pk=pk)
         instr = getattr(request.user, "personnel", None)
-        if not instr or booking.instructor_id != getattr(instr, "id", None):
+        if not instr or not instructor_can_access_booking(instr, booking):
             return HttpResponseForbidden("You do not have access to this booking.")
 
         # 2) File present?
@@ -5372,7 +5382,7 @@ def instructor_list_receipts(request, pk):
     try:
       booking = get_object_or_404(Booking.objects.select_related("instructor"), pk=pk)
       instr = getattr(request.user, "personnel", None)
-      if not instr or booking.instructor_id != getattr(instr, "id", None):
+      if not instr or not instructor_can_access_booking(instr, booking):
           return HttpResponseForbidden("Forbidden")
 
       svc = get_drive_service(settings.GOOGLE_OAUTH_CLIENT_SECRET, settings.GOOGLE_OAUTH_TOKEN)
@@ -5407,7 +5417,7 @@ def instructor_delete_receipt(request, pk):
     try:
       booking = get_object_or_404(Booking.objects.select_related("instructor"), pk=pk)
       instr = getattr(request.user, "personnel", None)
-      if not instr or booking.instructor_id != getattr(instr, "id", None):
+      if not instr or not instructor_can_access_booking(instr, booking):
           return HttpResponseForbidden("Forbidden")
 
       file_id = request.POST.get("file_id")
@@ -5455,7 +5465,7 @@ def instructor_booking_certificates_pdf(request, pk):
     if not (
         request.user.is_staff
         or request.user.is_superuser
-        or (instr and booking.instructor_id == getattr(instr, "id", None))
+        or (instr and instructor_can_access_booking(instr, booking))
     ):
         return HttpResponseForbidden("You do not have access to this booking.")
 

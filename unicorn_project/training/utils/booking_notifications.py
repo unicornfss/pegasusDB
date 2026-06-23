@@ -22,6 +22,14 @@ def should_notify_booking(booking) -> bool:
     return True
 
 
+def should_notify_booking_detail_changes(booking) -> bool:
+    """
+    Whether to alert the instructor about booking detail edits.
+    Suppressed while a course is in progress (Telegram now; email when added).
+    """
+    return getattr(booking, "status", None) != "in_progress"
+
+
 def personnel_wants_notification(personnel, notification_type: str) -> bool:
     if notification_type == "new_booking":
         return bool(personnel.notify_new_bookings_telegram)
@@ -89,6 +97,8 @@ def notify_new_booking(booking):
 
 def notify_booking_changes(booking, *, intro=None, changed_areas=None):
     if not changed_areas:
+        return False
+    if not should_notify_booking_detail_changes(booking):
         return False
     if intro is None:
         intro = "A booking assigned to you has been updated."

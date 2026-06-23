@@ -13,7 +13,7 @@ from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_GET, require_POST
 from django.template.loader import render_to_string
 from urllib.parse import urlencode
-from .models import AccidentReport, Business, TrainingLocation, CourseType, Personnel, Booking, BookingDay, DelegateRegister, FeedbackResponse
+from .models import AccidentReport, Business, TrainingLocation, CourseType, Personnel, Booking, BookingDay, DelegateRegister, FeedbackResponse, InstructorCourseRequestStatus
 from .forms import (
     AccidentReportForm,
     BookingForm,
@@ -733,7 +733,72 @@ def user_profile(request):
         "telegram_linked": bool((personnel.telegram_chat_id or "").strip()),
         "telegram_linked_at": personnel.telegram_linked_at,
         "telegram_bot_configured": bool(settings.TELEGRAM_BOT_USERNAME),
+        "is_instructor_profile": is_instructor_user(request.user),
+        "deliverable_courses": (
+            personnel.deliverable_course_types.filter(is_suspended=False).order_by("name")
+            if is_instructor_user(request.user)
+            else []
+        ),
+        "requestable_courses": _requestable_courses_for_instructor(personnel)
+        if is_instructor_user(request.user)
+        else [],
+        "pending_course_requests": (
+            personnel.course_delivery_requests.filter(
+                status=InstructorCourseRequestStatus.PENDING,
+            )
+            .select_related("course_type")
+            .order_by("course_type__name")
+            if is_instructor_user(request.user)
+            else []
+        ),
     })
+
+
+def _requestable_courses_for_instructor(personnel):
+    from .models import CourseType, InstructorCourseRequestStatus
+
+    approved_ids = personnel.deliverable_course_types.values_list("pk", flat=True)
+    pending_ids = personnel.course_delivery_requests.filter(
+        status=InstructorCourseRequestStatus.PENDING,
+    ).values_list("course_type_id", flat=True)
+    return CourseType.objects.filter(is_suspended=False).exclude(
+        pk__in=approved_ids,
+    ).exclude(pk__in=pending_ids).order_by("name")
+
+
+@login_required
+@require_POST
+def instructor_request_course_delivery(request):
+    from .models import CourseType
+    from .services.instructor_course_requests import (
+        CourseDeliveryRequestError,
+        create_course_delivery_request,
+    )
+
+    if not is_instructor_user(request.user):
+        messages.error(request, "Only instructors can request course delivery approval.")
+        return redirect("user_profile")
+
+    try:
+        personnel = request.user.personnel
+    except Personnel.DoesNotExist:
+        messages.error(request, "No personnel profile linked to this account.")
+        return redirect("no_roles")
+
+    course_type_id = (request.POST.get("course_type_id") or "").strip()
+    message = (request.POST.get("message") or "").strip()
+    course_type = get_object_or_404(CourseType, pk=course_type_id, is_suspended=False)
+
+    try:
+        create_course_delivery_request(personnel, course_type, message=message)
+        messages.success(
+            request,
+            f"Request sent to admin for approval to deliver {course_type.name}.",
+        )
+    except CourseDeliveryRequestError as exc:
+        messages.error(request, str(exc))
+
+    return redirect("user_profile")
 
 
 @login_required

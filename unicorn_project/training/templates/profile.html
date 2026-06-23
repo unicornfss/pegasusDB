@@ -244,6 +244,7 @@
                     </div>
                 </div>
                 {% endif %}
+
             </div>
 
             <div class="col-lg-4">
@@ -336,6 +337,67 @@
             </div>
         </div>
     </form>
+
+    {% if is_instructor_profile %}
+    <div class="row g-4 mt-1">
+        <div class="col-lg-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0"><i class="bi bi-journal-bookmark me-2"></i>Courses you can deliver</h5>
+                </div>
+                <div class="card-body">
+                    {% if deliverable_courses %}
+                        <ul class="list-unstyled mb-3 small">
+                            {% for course in deliverable_courses %}
+                                <li class="mb-1">
+                                    <i class="bi bi-check-circle-fill text-success me-1"></i>
+                                    {{ course.name }}{% if course.code %} <span class="text-muted">({{ course.code }})</span>{% endif %}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="small text-muted mb-3">No courses are assigned yet. Ask admin or request access below.</p>
+                    {% endif %}
+
+                    {% if pending_course_requests %}
+                        <div class="alert alert-warning py-2 small mb-3">
+                            <strong>Pending approval:</strong>
+                            {% for req in pending_course_requests %}
+                                {{ req.course_type.name }}{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
+                    {% if requestable_courses %}
+                        <h6 class="fw-bold small text-uppercase text-muted">Request access to deliver</h6>
+                        <form method="post" action="{% url 'instructor_request_course_delivery' %}" class="row g-2 align-items-end">
+                            {% csrf_token %}
+                            <div class="col-md-5">
+                                <label class="form-label small mb-1" for="course-type-request">Course</label>
+                                <select name="course_type_id" id="course-type-request" class="form-select form-select-sm" required>
+                                    <option value="">— Select course —</option>
+                                    {% for course in requestable_courses %}
+                                        <option value="{{ course.pk }}">{{ course.name }}{% if course.code %} ({{ course.code }}){% endif %}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label small mb-1" for="course-request-message">Note (optional)</label>
+                                <input type="text" name="message" id="course-request-message" class="form-control form-control-sm" maxlength="500" placeholder="e.g. I completed train-the-trainer in 2024">
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-outline-primary btn-sm w-100">Request</button>
+                            </div>
+                        </form>
+                        <p class="form-text small mb-0 mt-2">Requests appear in the admin <strong>Staff inbox</strong> for approval.</p>
+                    {% else %}
+                        <p class="small text-muted mb-0">You have requested or been assigned all available courses.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <script>

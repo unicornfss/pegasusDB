@@ -8,6 +8,15 @@
   </a>
 </div>
 
+{% if missing_own_profile %}
+  <div class="alert alert-warning">
+    <i class="bi bi-exclamation-triangle me-1"></i>
+    Your login account does not have a linked staff profile, so you will not appear in this list.
+    <a href="{% url 'admin_personnel_new' %}" class="alert-link">Create a staff profile</a>
+    using the same email as your login ({{ request.user.email|default:request.user.username }}).
+  </div>
+{% endif %}
+
 <table class="table table-sm align-middle">
   <thead><tr>
     <th>Name</th><th>User</th><th>Email</th><th>Phone</th><th></th>
@@ -15,7 +24,15 @@
   <tbody>
   {% for i in instructors %}
     <tr>
-      <td>{{ i.name }}</td>
+      <td>
+        {{ i.name }}
+        {% if i.user and i.user.is_superuser %}
+          <span class="badge bg-dark ms-1">Superuser</span>
+        {% endif %}
+        {% if request.user.personnel and i.pk == request.user.personnel.pk %}
+          <span class="badge bg-primary ms-1">You</span>
+        {% endif %}
+      </td>
       <td>{% if i.user %}{{ i.user.username }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
       <td>{{ i.email|default:"—" }}</td>
       <td>{{ i.telephone|default:"—" }}</td>

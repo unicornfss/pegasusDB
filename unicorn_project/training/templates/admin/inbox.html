@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-inbox text-primary me-2"></i>{{ title }}</h2>
+      <p class="text-muted mb-0">Requests from instructors and other staff actions requiring admin attention.</p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url 'admin_inbox_list' %}?status=open"
+         class="btn btn-sm {% if status == 'open' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        Open ({{ open_count }})
+      </a>
+      <a href="{% url 'admin_inbox_list' %}?status=resolved"
+         class="btn btn-sm {% if status == 'resolved' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
+        Resolved
+      </a>
+    </div>
+  </div>
+
+  {% if not items %}
+    <div class="alert alert-light border">No {{ status }} inbox items.</div>
+  {% else %}
+    <div class="vstack gap-3">
+      {% for item in items %}
+        <div class="card shadow-sm">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+              <div>
+                <div class="small text-muted mb-1">
+                  {{ item.get_kind_display }} · {{ item.created_at|date:"j M Y H:i" }}
+                </div>
+                <h5 class="mb-2">{{ item.summary }}</h5>
+                {% if item.course_delivery_request %}
+                  {% with req=item.course_delivery_request %}
+                    <div class="small text-muted mb-2">
+                      <strong>Instructor:</strong> {{ req.instructor.name }}<br>
+                      <strong>Course:</strong> {{ req.course_type.name }} ({{ req.course_type.code }})
+                    </div>
+                    {% if req.message %}
+                      <div class="alert alert-secondary py-2 small mb-2">
+                        <strong>Instructor note:</strong> {{ req.message }}
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+                {% endif %}
+              </div>
+
+              {% if status == 'open' and item.course_delivery_request %}
+                <form method="post" action="{% url 'admin_inbox_course_request_action' item.pk %}" class="d-flex flex-column gap-2" style="min-width:260px;">
+                  {% csrf_token %}
+                  <textarea name="admin_note" class="form-control form-control-sm" rows="2" placeholder="Optional note to instructor"></textarea>
+                  <div class="d-flex gap-2">
+                    <button type="submit" name="action" value="approve" class="btn btn-success btn-sm flex-grow-1">
+                      <i class="bi bi-check2 me-1"></i>Approve
+                    </button>
+                    <button type="submit" name="action" value="decline" class="btn btn-outline-danger btn-sm flex-grow-1">
+                      <i class="bi bi-x-lg me-1"></i>Decline
+                    </button>
+                  </div>
+                </form>
+              {% elif item.resolved_at %}
+                <div class="small text-muted text-end">
+                  Resolved {{ item.resolved_at|date:"j M Y H:i" }}
+                  {% if item.resolved_by %}by {{ item.resolved_by.get_full_name|default:item.resolved_by.username }}{% endif %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

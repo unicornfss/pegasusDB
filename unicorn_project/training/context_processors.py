@@ -1,7 +1,13 @@
 # unicorn_project/training/context_processors.py
 from django.conf import settings
 from .services.logos import get_current_logo
-from .utils.user_roles import available_roles_for_user, resolve_active_role, user_has_role
+from .utils.user_roles import (
+    ADMIN_BOOKING_URL_NAMES,
+    available_roles_for_user,
+    resolve_active_role,
+    sync_active_role_from_path,
+    user_has_role,
+)
 
 def role_context(request):
     """
@@ -23,7 +29,10 @@ def role_context(request):
 
     active_role = None
     if user and user.is_authenticated:
+        sync_active_role_from_path(request)
         active_role = resolve_active_role(user, request.session)
+
+    url_name = getattr(getattr(request, "resolver_match", None), "url_name", "") or ""
 
     return {
         "is_admin": is_admin,
@@ -32,6 +41,7 @@ def role_context(request):
         "is_inspector": is_inspector,
         "current_role": active_role,
         "has_dual_roles": len(available_roles_for_user(user)) > 1 if user and user.is_authenticated else False,
+        "nav_admin_bookings_active": url_name in ADMIN_BOOKING_URL_NAMES,
     }
 
 def globals(request):
@@ -79,20 +89,35 @@ def two_factor_prompt(request):
 
 
 def course_swap_badges(request):
-    """Sidebar badge counts for course swap notifications."""
-    defaults = {
+    """Legacy — cover swap counts now live in the unified inbox."""
+    return {
         "course_swap_menu_badge_count": 0,
         "course_swap_incoming_count": 0,
         "course_swap_outcome_count": 0,
     }
+
+
+def inbox_badges(request):
     user = getattr(request, "user", None)
     if not user or not user.is_authenticated:
-        return defaults
+        return {
+            "inbox_unread_count": 0,
+            "staff_inbox_unread_count": 0,
+            "admin_inbox_unread_count": 0,
+        }
 
     personnel = getattr(user, "personnel", None)
     if not personnel:
-        return defaults
+        return {
+            "inbox_unread_count": 0,
+            "staff_inbox_unread_count": 0,
+            "admin_inbox_unread_count": 0,
+        }
 
-    from .services.course_swaps import menu_badge_counts
+    from .services.staff_inbox import unread_inbox_count
 
-    return menu_badge_counts(personnel)
+    return {
+        "inbox_unread_count": unread_inbox_count(personnel),
+        "staff_inbox_unread_count": unread_inbox_count(personnel, scope="staff"),
+        "admin_inbox_unread_count": unread_inbox_count(personnel, scope="admin"),
+    }

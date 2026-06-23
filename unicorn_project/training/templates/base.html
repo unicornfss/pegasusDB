@@ -28,7 +28,11 @@
   {% endif %}
 
 </head>
-<body class="min-vh-100 d-flex flex-column">
+<body class="min-vh-100 d-flex flex-column"
+    {% if request.user.is_authenticated and request.user.personnel %}
+      data-inbox-notify-enabled="1"
+      data-inbox-stream-url="{% url 'api_inbox_stream' %}"
+    {% endif %}>
 
   {# Mobile top bar (only < lg) #}
   <header class="d-lg-none d-flex align-items-center justify-content-between bg-unicorn text-white px-3 py-2 border-bottom">
@@ -115,7 +119,7 @@
                 <summary><i class="bi bi-calendar2-check"></i> Bookings</summary>
                 <ul>
                     <li>
-                        <a class="leaf {% if request.resolver_match.url_name == 'admin_booking_list' %}active{% endif %}"
+                        <a class="leaf {% if nav_admin_bookings_active %}active{% endif %}"
                            href="{% url 'admin_booking_list' %}">
                            <i class="bi bi-columns"></i> View / edit / add
                         </a>
@@ -128,14 +132,24 @@
                <i class="bi bi-search"></i> Delegate search
             </a>
 
+            <a class="leaf {% if request.resolver_match.url_name == 'admin_inbox_list' %}active{% endif %}"
+               href="{% url 'admin_inbox_list' %}">
+                <i class="bi bi-inbox"></i> Inbox
+                {% if admin_inbox_unread_count %}
+                <span class="sidebar-menu-badge" data-inbox-badge="admin" title="Unread admin messages">{{ admin_inbox_unread_count }}</span>
+                {% else %}
+                <span class="sidebar-menu-badge d-none" data-inbox-badge="admin"></span>
+                {% endif %}
+            </a>
+
             <a class="leaf {% if request.resolver_match.url_name == 'admin_personnel_list' %}active{% endif %}"
                href="{% url 'admin_personnel_list' %}">
                <i class="bi bi-people"></i> Personnel
             </a>
 
-            <a class="leaf {% if request.resolver_match.url_name == 'admin_meta_settings' %}active{% endif %}"
-              href="{% url 'admin_meta_settings' %}">
-                <i class="bi bi-sliders"></i> Meta Settings
+            <a class="leaf {% if request.resolver_match.url_name == 'admin_site_settings' or request.resolver_match.url_name == 'admin_meta_settings' or request.resolver_match.url_name == 'admin_meta_settings_edit' or request.resolver_match.url_name == 'admin_logo_override_edit' %}active{% endif %}"
+              href="{% url 'admin_site_settings' %}">
+                <i class="bi bi-sliders"></i> Site settings
             </a>
 
 
@@ -167,11 +181,21 @@
                href="{% url 'instructor_course_swaps' %}">
                 <i class="bi bi-arrow-left-right"></i>
                 <span class="sidebar-leaf-label">Course swaps</span>
-                {% if course_swap_menu_badge_count %}
-                  <span class="sidebar-menu-badge"
-                        title="{% if course_swap_incoming_count and course_swap_outcome_count %}Incoming requests and status updates{% elif course_swap_incoming_count %}Incoming cover request{{ course_swap_incoming_count|pluralize }}{% else %}Cover request status update{{ course_swap_outcome_count|pluralize }}{% endif %}">
-                    {{ course_swap_menu_badge_count }}
-                  </span>
+            </a>
+
+            <a class="leaf {% if request.resolver_match.url_name == 'instructor_emergency_takeover' or request.resolver_match.url_name == 'instructor_emergency_takeover_confirm' %}active{% endif %}"
+               href="{% url 'instructor_emergency_takeover' %}">
+                <i class="bi bi-lightning-charge"></i>
+                <span class="sidebar-leaf-label">Emergency course takeover</span>
+            </a>
+
+            <a class="leaf {% if request.resolver_match.url_name == 'inbox_list' or request.resolver_match.url_name == 'inbox_swap_accept' or request.resolver_match.url_name == 'inbox_swap_decline' %}active{% endif %}"
+               href="{% url 'inbox_list' %}">
+                <i class="bi bi-inbox"></i> Inbox
+                {% if staff_inbox_unread_count %}
+                <span class="sidebar-menu-badge" data-inbox-badge="staff" title="Unread messages">{{ staff_inbox_unread_count }}</span>
+                {% else %}
+                <span class="sidebar-menu-badge d-none" data-inbox-badge="staff"></span>
                 {% endif %}
             </a>
 
@@ -287,6 +311,12 @@
           </span>
         </label>
       </form>
+
+      {% if request.user.is_superuser %}
+      <a href="{% url 'admin:index' %}" class="leaf text-start">
+          <i class="bi bi-gear-wide-connected"></i> Django admin
+      </a>
+      {% endif %}
 
       <form method="post" action="{% url 'logout' %}" class="m-0">
           {% csrf_token %}
@@ -565,6 +595,9 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{% static 'training/js/app.js' %}"></script>
   <script src="{% static 'training/js/places.js' %}"></script>
+  {% if request.user.is_authenticated and request.user.personnel %}
+  <script src="{% static 'training/js/inbox-notify.js' %}?v={% now 'U' %}"></script>
+  {% endif %}
 
   {% if GOOGLE_MAPS_API_KEY %}
   <script async defer

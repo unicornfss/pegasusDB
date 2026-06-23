@@ -1,8 +1,11 @@
 import json
 import calendar
 import datetime as dt
+from dataclasses import dataclass
 from pathlib import Path
+
 from django.conf import settings
+from django.contrib.staticfiles import finders
 
 # Try to import the override model, but don’t crash if migrations aren’t ready
 try:
@@ -11,6 +14,86 @@ except Exception:  # ImportError, AppRegistryNotReady, etc.
     LogoOverride = None
 
 SCHEDULE_PATH = Path(settings.BASE_DIR) / "config" / "logo_schedule.json"
+LOGO_IMG_DIR = (
+    Path(settings.BASE_DIR) / "unicorn_project" / "training" / "static" / "training" / "img"
+)
+_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+
+
+@dataclass(frozen=True)
+class LogoCatalogEntry:
+    file: str
+    is_default: bool
+    is_current: bool
+    on_disk: bool
+    rules: list[dict]
+
+
+def _logo_img_directories() -> list[Path]:
+    """Directories that may contain sidebar/header logo images."""
+    candidates = [
+        LOGO_IMG_DIR,
+        Path(settings.BASE_DIR) / "staticfiles" / "training" / "img",
+    ]
+    for static_dir in getattr(settings, "STATICFILES_DIRS", []):
+        candidates.append(Path(static_dir) / "training" / "img")
+    static_root = getattr(settings, "STATIC_ROOT", None)
+    if static_root:
+        candidates.append(Path(static_root) / "training" / "img")
+
+    directories: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.resolve()).lower() if path.exists() else str(path).lower()
+        if path.is_dir() and key not in seen:
+            directories.append(path)
+            seen.add(key)
+    return directories
+
+
+def _is_logo_image_name(name: str) -> bool:
+    lower = name.lower()
+    return lower.startswith("logo") and Path(lower).suffix in _IMAGE_SUFFIXES
+
+
+def logo_file_exists(file_name: str) -> bool:
+    if finders.find(f"training/img/{file_name}"):
+        return True
+    return any((directory / file_name).is_file() for directory in _logo_img_directories())
+
+
+def available_logo_filenames() -> list[str]:
+    names: set[str] = set()
+    for directory in _logo_img_directories():
+        for path in directory.iterdir():
+            if path.is_file() and _is_logo_image_name(path.name):
+                names.add(path.name)
+
+    spec = load_schedule_spec()
+    for rule in spec.get("rules", []):
+        file_name = (rule.get("file") or "").strip()
+        if file_name and logo_file_exists(file_name):
+            names.add(file_name)
+    default_file = (spec.get("default") or "logo.png").strip()
+    if default_file:
+        names.add(default_file)
+
+    return sorted(names) or ["logo.png"]
+
+
+def load_schedule_spec() -> dict:
+    try:
+        with open(SCHEDULE_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {"rules": [], "default": "logo.png"}
+
+
+def save_schedule_spec(spec: dict) -> None:
+    SCHEDULE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(SCHEDULE_PATH, "w", encoding="utf-8") as f:
+        json.dump(spec, f, indent=2)
+        f.write("\n")
 
 
 # ----------------------------
@@ -51,9 +134,113 @@ def _apply_window(anchor, rule):
     return start, end
 
 
-# ----------------------------
-#  MAIN SCHEDULE PICKER
-# ----------------------------
+def _month_day_label(value: str) -> str:
+    month, day = map(int, value.split("-"))
+    return dt.date(2000, month, day).strftime("%d %B").lstrip("0")
+
+
+_WEEKDAYS = (
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+    "Sunday",
+)
+
+
+def describe_schedule_rule(rule: dict) -> str:
+    """Human-readable summary of a logo schedule rule."""
+    rule_type = rule.get("type", "")
+    window_note = ""
+    start_off = int(rule.get("start_offset_days", 0))
+    end_off = int(rule.get("end_offset_days", 0))
+    if start_off or end_off:
+        window_note = f" (window: {start_off:+d} to {end_off:+d} days)"
+
+    if rule_type == "single":
+        return f"Each year on {_month_day_label(rule['date'])}{window_note}"
+
+    if rule_type == "range":
+        return (
+            f"Each year from {_month_day_label(rule['start'])} "
+            f"to {_month_day_label(rule['end'])}"
+        )
+
+    if rule_type == "range_yearwrap":
+        return (
+            f"Each year from {_month_day_label(rule['start'])} "
+            f"through {_month_day_label(rule['end'])} (crosses New Year)"
+        )
+
+    if rule_type == "range_absolute":
+        return (
+            f"Each year from {_month_day_label(rule['start_abs'])} "
+            f"to {_month_day_label(rule['end_abs'])}"
+        )
+
+    if rule_type == "weekday_in_month":
+        month_name = dt.date(2000, int(rule["month"]), 1).strftime("%B")
+        weekday = _WEEKDAYS[int(rule["weekday"])]
+        occurrence = rule.get("occurrence", "last")
+        return f"{occurrence.title()} {weekday} in {month_name}{window_note}"
+
+    if rule_type == "easter_range":
+        before = int(rule.get("days_before", 6))
+        after = int(rule.get("days_after", 6))
+        return f"From {before} day{'s' if before != 1 else ''} before Easter Sunday to {after} day{'s' if after != 1 else ''} after"
+
+    return f"Rule type: {rule_type or 'unknown'}"
+
+
+def build_logo_catalog(spec: dict, *, current_logo: str | None = None) -> list[LogoCatalogEntry]:
+    """Group schedule rules by logo file for display."""
+    default_file = spec.get("default", "logo.png")
+    rules_by_file: dict[str, list[dict]] = {}
+    for rule in spec.get("rules", []):
+        file_name = (rule.get("file") or "").strip()
+        if not file_name:
+            continue
+        rules_by_file.setdefault(file_name, []).append(
+            {
+                "name": rule.get("name") or "Scheduled rule",
+                "summary": describe_schedule_rule(rule),
+            }
+        )
+
+    catalog_files: list[str] = []
+    seen: set[str] = set()
+    for file_name in available_logo_filenames():
+        seen.add(file_name)
+        catalog_files.append(file_name)
+    for file_name in sorted(rules_by_file):
+        if file_name not in seen:
+            catalog_files.append(file_name)
+            seen.add(file_name)
+    if default_file and default_file not in seen:
+        catalog_files.append(default_file)
+
+    catalog: list[LogoCatalogEntry] = []
+    for file_name in catalog_files:
+        catalog.append(
+            LogoCatalogEntry(
+                file=file_name,
+                is_default=file_name == default_file,
+                is_current=bool(current_logo and file_name == current_logo),
+                on_disk=logo_file_exists(file_name),
+                rules=rules_by_file.get(file_name, []),
+            )
+        )
+    catalog.sort(
+        key=lambda item: (
+            0 if item.is_default else 1,
+            0 if item.rules else 1,
+            item.file.lower(),
+        )
+    )
+    return catalog
+
 
 def _pick_from_schedule(today: dt.date, spec: dict) -> str:
     for rule in spec.get("rules", []):
@@ -136,8 +323,7 @@ def get_current_logo(today: dt.date | None = None) -> str:
 
     # 2) Scheduled rules
     try:
-        with open(SCHEDULE_PATH, "r", encoding="utf-8") as f:
-            spec = json.load(f)
+        spec = load_schedule_spec()
         return _pick_from_schedule(today, spec)
-    except FileNotFoundError:
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return "logo.png"

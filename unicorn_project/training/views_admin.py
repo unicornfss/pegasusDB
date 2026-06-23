@@ -14,7 +14,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.db import transaction
-from django.db.models import Q, Count, Min, Max, Avg
+from django.db.models import Q, Count, Min, Max, Avg, OuterRef, Subquery
 from django.db.models.deletion import ProtectedError
 from django.forms import modelformset_factory, inlineformset_factory
 from django.http import Http404, HttpResponseForbidden, HttpResponse, JsonResponse
@@ -34,7 +34,8 @@ from .models import (
     Business, CourseType, Personnel, Booking, TrainingLocation,
     BookingDay, DelegateRegister, CourseCompetency,
     Exam, ExamQuestion, ExamAttempt, ExamAttemptAnswer, CompetencyAssessment,
-    FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem, MetaSetting
+    FeedbackResponse, CertificateNameChange, Invoice, InvoiceItem, MetaSetting,
+    LogoOverride,
 )
 
 from .forms import (
@@ -42,10 +43,16 @@ from .forms import (
     PersonnelForm, BookingForm, DelegateRegisterAdminForm,CourseCompetencyForm,
     CourseTypeForm, QuestionFormSet, AnswerFormSet, ExamForm, PersonnelProfileForm,
     delivery_personnel_queryset,
-    MetaSettingForm
+    MetaSettingForm,
+    LogoOverrideForm,
 )
 
-from .views_instructor import _feedback_queryset_for_booking, list_course_receipts_drive, render_invoice_pdf_via_preview
+from .views_instructor import (
+    _assessment_selection_context,
+    _feedback_queryset_for_booking,
+    list_course_receipts_drive,
+    render_invoice_pdf_via_preview,
+)
 from .utils.certificates import build_certificates_pdf_for_booking, _unique_delegates_for_booking
 from .google_oauth import get_drive_service
 from .services.dummy_bookings import (
@@ -868,9 +875,20 @@ def booking_list(request):
         auto_update_booking_statuses()
 
 
-    qs = (Booking.objects
-      .select_related("business", "training_location", "course_type", "instructor", "invoice")
-      .all())
+    qs = (
+        Booking.objects
+        .select_related("business", "training_location", "course_type", "instructor")
+        .annotate(
+            lead_invoice_status=Subquery(
+                Invoice.objects.filter(
+                    booking_id=OuterRef("pk"),
+                    instructor_id=OuterRef("instructor_id"),
+                ).values("status")[:1]
+            )
+        )
+        .prefetch_related("invoices")
+        .all()
+    )
 
     # ----- filters
     q           = (request.GET.get("q") or "").strip()
@@ -913,7 +931,7 @@ def booking_list(request):
         "status":     "status",
         "instructor": "instructor__name",
         "ref":        "course_reference",
-        "invoice":    "invoice__status",
+        "invoice":    "lead_invoice_status",
     }
     order_field = allowed.get(sort_key, "course_date")
     if sort_dir == "desc":
@@ -1400,11 +1418,12 @@ def booking_form(request, pk=None):
         fb_count = fb_qs.count()
         fb_avg = fb_qs.aggregate(avg=Avg("overall_rating"))["avg"]
 
-    # ---------- NEW: tab + register detail support ----------
-    # which tab is active (default = registers)
-    active_tab = request.GET.get("tab", "registers")
+    # ---------- tab + register detail support ----------
+    active_tab = request.GET.get("tab", "course-info")
+    if active_tab == "registers":
+        active_tab = "days"
     if obj and obj.is_dummy_business and active_tab == "invoice":
-        active_tab = "registers"
+        active_tab = "course-info"
 
     regs_day = None
     regs = None
@@ -1425,43 +1444,22 @@ def booking_form(request, pk=None):
     # ---------- Read-only assessment matrix for admin ----------
     assessment_delegates = []
     assessment_competencies = []
+    assessment_optional_slots = []
     assessment_existing = {}
 
     if obj and obj.pk and obj.course_type_id:
-        # 1) Delegates: dedupe by (normalized name, DOB) like instructor view
-        qs = (
-            DelegateRegister.objects
-            .filter(booking_day__booking=obj)
-            .order_by("name", "date_of_birth", "id")
-        )
-        seen = set()
-        delegates = []
-        for r in qs:
-            nm = (r.name or "").strip().lower()
-            dob = getattr(r, "date_of_birth", None)
-            key = (nm, dob) if dob else ("__nodedob__", r.id)
-            if key in seen:
-                continue
-            seen.add(key)
-            delegates.append(r)
+        assessment_delegates = _unique_delegates_for_booking(obj)
+        selection_ctx = _assessment_selection_context(obj, assessment_delegates)
+        assessment_competencies = selection_ctx["mandatory_competencies"]
+        assessment_optional_slots = selection_ctx["optional_slots"]
+        required_competencies = selection_ctx["required_competencies"]
 
-        assessment_delegates = delegates
-
-        # 2) Competencies for this course
-        competencies = list(
-            CourseCompetency.objects
-            .filter(course_type=obj.course_type)
-            .order_by("sort_order", "name", "id")
-        )
-        assessment_competencies = competencies
-
-        # 3) Existing assessments: (register_id, competency_id) -> CompetencyAssessment
-        if delegates and competencies:
+        if assessment_delegates and required_competencies:
             assessments_qs = (
                 CompetencyAssessment.objects
                 .filter(
-                    register__booking_day__booking=obj,
-                    course_competency__in=competencies,
+                    register__in=assessment_delegates,
+                    course_competency__in=required_competencies,
                 )
                 .select_related("register", "course_competency")
             )
@@ -1522,7 +1520,7 @@ def booking_form(request, pk=None):
     # If user somehow has ?tab=exams but this course has no exams,
     # force the tab back to 'registers' so template doesn't get confused.
     if active_tab == "exams" and not has_exam:
-        active_tab = "registers"
+        active_tab = "course-info"
 
     # ----------------- BUILD CONTEXT -----------------
     ctx = {
@@ -1549,6 +1547,7 @@ def booking_form(request, pk=None):
         # assessments (read-only matrix)
         "assessment_delegates": assessment_delegates,
         "assessment_competencies": assessment_competencies,
+        "assessment_optional_slots": assessment_optional_slots,
         "assessment_existing": assessment_existing,
         # exams (read-only list of attempts)
         "course_exams": course_exams,
@@ -1927,17 +1926,15 @@ def admin_user_edit(request, pk: int):
 # =========================
 @admin_required
 def admin_personnel_list(request):
-    people = Personnel.objects.select_related("user")
-
-    if not request.user.is_superuser:
-        people = people.filter(Q(user__isnull=True) | Q(user__is_superuser=False))
-
-    people = people.order_by("name")
+    people = Personnel.objects.select_related("user").order_by("name")
 
     return render(
         request,
         "admin/personnel/list.html",
-        {"instructors": people},   # keep the same key so template still works
+        {
+            "instructors": people,
+            "missing_own_profile": not getattr(request.user, "personnel", None),
+        },
     )
 
 @admin_required
@@ -2021,6 +2018,7 @@ def admin_personnel_new(request):
             inst.can_login = can_login if is_active else False
 
             inst.save()
+            form.save_m2m()
 
             # --- CREATE DJANGO USER IF LOGIN ALLOWED ---
             if inst.can_login and inst.user is None:
@@ -2081,10 +2079,7 @@ def admin_personnel_new(request):
 @admin_required
 def admin_personnel_edit(request, pk):
     inst = get_object_or_404(Personnel.objects.select_related("user"), pk=pk)
-
-    # Protect superusers
-    if inst.user and inst.user.is_superuser and not request.user.is_superuser:
-        return HttpResponseForbidden("You cannot edit an account attached to a superuser.")
+    roles_locked = bool(inst.user and inst.user.is_superuser)
 
     if request.method == "POST":
         # Handle 2FA operations
@@ -2107,7 +2102,7 @@ def admin_personnel_edit(request, pk):
                 messages.success(request, f"Password reset for {inst.name}. Email sent.")
             return redirect("admin_personnel_edit", pk=inst.pk)
         
-        form = PersonnelForm(request.POST, instance=inst)
+        form = PersonnelForm(request.POST, instance=inst, lock_groups=roles_locked)
 
         if form.is_valid():
             inst = form.save(commit=False)
@@ -2120,6 +2115,7 @@ def admin_personnel_edit(request, pk):
             inst.can_login = can_login if is_active else False
 
             inst.save()
+            form.save_m2m()
 
             groups = form.cleaned_data.get("groups")
 
@@ -2160,7 +2156,7 @@ def admin_personnel_edit(request, pk):
                     inst.user.save()
 
                 # SYNC GROUPS
-                if groups is not None:
+                if groups is not None and not roles_locked:
                     inst.user.groups.set(groups)
                     inst.user.save()
 
@@ -2181,7 +2177,7 @@ def admin_personnel_edit(request, pk):
             messages.error(request, "Please fix the errors below.")
 
     else:
-        form = PersonnelForm(instance=inst)
+        form = PersonnelForm(instance=inst, lock_groups=roles_locked)
 
         if inst.user:
             form.fields["groups"].initial = inst.user.groups.all()
@@ -2191,6 +2187,7 @@ def admin_personnel_edit(request, pk):
         "form": form,
         "back_url": "admin_personnel_list",
         "instructor": inst,
+        "roles_locked": roles_locked,
     })
 
 @admin_required
@@ -2843,9 +2840,53 @@ def api_instructor_postcode(request, pk):
     return JsonResponse({"postcode": inst.postcode or ""})
 
 @admin_required
-def meta_settings_list(request):
-    settings = MetaSetting.objects.order_by("key")
-    return render(request, "admin/meta_settings_list.html", {"settings": settings})
+def site_settings(request):
+    from .services.logos import (
+        available_logo_filenames,
+        build_logo_catalog,
+        get_current_logo,
+        load_schedule_spec,
+        save_schedule_spec,
+    )
+
+    if request.method == "POST" and request.POST.get("action") == "save_logo_schedule":
+        schedule_raw = (request.POST.get("schedule_json") or "").strip()
+        try:
+            spec = json.loads(schedule_raw) if schedule_raw else {"rules": [], "default": "logo.png"}
+        except json.JSONDecodeError:
+            messages.error(request, "Logo schedule JSON is not valid.")
+            return redirect("admin_site_settings")
+
+        if not isinstance(spec, dict):
+            messages.error(request, "Logo schedule must be a JSON object.")
+            return redirect("admin_site_settings")
+        if "rules" not in spec or not isinstance(spec["rules"], list):
+            messages.error(request, 'Logo schedule must include a "rules" array.')
+            return redirect("admin_site_settings")
+        default_logo = (request.POST.get("default_logo") or spec.get("default") or "logo.png").strip()
+        spec["default"] = default_logo
+        save_schedule_spec(spec)
+        messages.success(request, "Logo schedule saved.")
+        return redirect("admin_site_settings")
+
+    schedule_spec = load_schedule_spec()
+    schedule_json = json.dumps(schedule_spec, indent=2)
+    current_logo = get_current_logo()
+
+    return render(
+        request,
+        "admin/site_settings.html",
+        {
+            "title": "Site settings",
+            "settings": MetaSetting.objects.order_by("key"),
+            "logo_overrides": LogoOverride.objects.order_by("priority", "-id"),
+            "current_logo": current_logo,
+            "schedule_json": schedule_json,
+            "schedule_default": schedule_spec.get("default", "logo.png"),
+            "logo_files": available_logo_filenames(),
+            "logo_catalog": build_logo_catalog(schedule_spec, current_logo=current_logo),
+        },
+    )
 
 
 @admin_required
@@ -2862,7 +2903,7 @@ def meta_settings_edit(request, pk):
         if form.is_valid():
             form.save()
             messages.success(request, "Setting saved.")
-            return redirect("admin_meta_settings")
+            return redirect("admin_site_settings")
     else:
         form = MetaSettingForm(instance=setting)
 
@@ -2870,3 +2911,40 @@ def meta_settings_edit(request, pk):
         "form": form,
         "setting": setting,
     })
+
+
+@admin_required
+@transaction.atomic
+def logo_override_edit(request, pk):
+    if pk == 0:
+        override = None
+    else:
+        override = get_object_or_404(LogoOverride, pk=pk)
+
+    if request.method == "POST":
+        form = LogoOverrideForm(request.POST, instance=override)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Logo override saved.")
+            return redirect("admin_site_settings")
+    else:
+        form = LogoOverrideForm(instance=override)
+
+    return render(
+        request,
+        "admin/logo_override_edit.html",
+        {
+            "title": "Add logo override" if override is None else "Edit logo override",
+            "form": form,
+            "override": override,
+        },
+    )
+
+
+@admin_required
+@require_http_methods(["POST"])
+def logo_override_delete(request, pk):
+    override = get_object_or_404(LogoOverride, pk=pk)
+    override.delete()
+    messages.success(request, "Logo override deleted.")
+    return redirect("admin_site_settings")

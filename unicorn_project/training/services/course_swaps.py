@@ -101,7 +101,7 @@ def accept_swap(*, swap_id, recipient):
 
     BookingDay.objects.filter(booking=booking).update(instructor=swap.to_instructor)
 
-    invoice = getattr(booking, "invoice", None)
+    invoice = booking.invoices.filter(instructor_id=swap.from_instructor_id).first()
     if invoice and invoice.status in ("draft", "awaiting_review"):
         invoice.instructor = swap.to_instructor
         invoice.account_name = (swap.to_instructor.name_on_account or "").strip()
@@ -131,6 +131,13 @@ def cancel_swap(*, swap_id, offerer):
     swap.status = CourseSwapStatus.CANCELLED
     swap.responded_at = timezone.now()
     swap.save(update_fields=["status", "responded_at"])
+    from ..models import StaffInboxItemKind
+    from .staff_inbox import resolve_inbox_items_for_swap
+
+    resolve_inbox_items_for_swap(
+        swap,
+        kinds=[StaffInboxItemKind.COURSE_SWAP_INCOMING],
+    )
     return swap
 
 
@@ -142,21 +149,43 @@ def _booking_summary_line(booking):
 
 def notify_swap_offer(swap):
     from ..utils.telegram_course_swaps import send_cover_request_telegram
+    from .staff_inbox import create_inbox_item_for_swap_offer
 
+    create_inbox_item_for_swap_offer(swap)
     send_cover_request_telegram(swap)
 
 
 def notify_swap_accepted(swap):
     from ..utils.booking_notifications import notify_new_booking
     from ..utils.telegram_course_swaps import send_cover_outcome_telegram_to_offerer
+    from ..models import StaffInboxItemKind
+    from .staff_inbox import (
+        create_inbox_item_for_swap_outcome,
+        resolve_inbox_items_for_swap,
+    )
 
+    resolve_inbox_items_for_swap(
+        swap,
+        kinds=[StaffInboxItemKind.COURSE_SWAP_INCOMING],
+    )
+    create_inbox_item_for_swap_outcome(swap, accepted=True)
     notify_new_booking(swap.booking)
     send_cover_outcome_telegram_to_offerer(swap, accepted=True)
 
 
 def notify_swap_declined(swap):
     from ..utils.telegram_course_swaps import send_cover_outcome_telegram_to_offerer
+    from ..models import StaffInboxItemKind
+    from .staff_inbox import (
+        create_inbox_item_for_swap_outcome,
+        resolve_inbox_items_for_swap,
+    )
 
+    resolve_inbox_items_for_swap(
+        swap,
+        kinds=[StaffInboxItemKind.COURSE_SWAP_INCOMING],
+    )
+    create_inbox_item_for_swap_outcome(swap, accepted=False)
     send_cover_outcome_telegram_to_offerer(swap, accepted=False)
 
 

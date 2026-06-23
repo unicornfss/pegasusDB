@@ -1,6 +1,13 @@
 {% load dict_extras %}
 
-{% if assessment_delegates and assessment_competencies %}
+{% if assessment_competencies or assessment_optional_slots %}
+  {% if not assessment_delegates %}
+    <div class="alert alert-info py-2 small mb-2">
+      No delegates registered yet. Competencies for this course are listed below — add delegates on
+      <strong>Course days / registers</strong> to record assessments.
+    </div>
+  {% endif %}
+
   <div class="matrix-wrap">
     <table class="matrix-table" aria-describedby="assessment-help">
       <colgroup>
@@ -55,6 +62,49 @@
           </tr>
         {% endfor %}
 
+        {% for slot in assessment_optional_slots %}
+          <tr class="{% cycle 'row-odd' 'row-even' %} optional-row">
+            <th class="sticky left comp-cell">
+              <div class="comp-code">O{{ forloop.counter }}</div>
+              <div class="comp-name">
+                {% if slot.selected %}
+                  {{ slot.selected.name }}
+                {% else %}
+                  Optional module {{ forloop.counter }}
+                {% endif %}
+              </div>
+            </th>
+
+            {% for d in assessment_delegates %}
+              {% if slot.selected %}
+                {% with key=d.id|pair:slot.selected.id %}
+                  {% with a=assessment_existing|get:key %}
+                    <td class="cell {% if forloop.counter0|divisibleby:2 %}col-a{% else %}col-b{% endif %}">
+                      <input type="checkbox"
+                             class="lv-chk"
+                             disabled
+                             {% if a %}
+                               {% if a.level == 'c' or a.level == 'e' %}
+                                 checked
+                               {% endif %}
+                             {% endif %}
+                             aria-label="Assessment for {{ d.name }} / {{ slot.selected.name }}" />
+                      {% if a and a.is_locked %}
+                        <span class="lock-indicator" aria-hidden="true">🔒</span>
+                      {% endif %}
+                    </td>
+                  {% endwith %}
+                {% endwith %}
+              {% else %}
+                <td class="cell optional-empty-cell {% if forloop.counter0|divisibleby:2 %}col-a{% else %}col-b{% endif %}">
+                  <span class="text-muted small">—</span>
+                </td>
+              {% endif %}
+            {% endfor %}
+          </tr>
+        {% endfor %}
+
+        {% if assessment_delegates %}
         <!-- Outcome row -->
         <tr class="outcome-row">
           <th class="sticky left comp-cell outcome-label">
@@ -76,6 +126,7 @@
             </td>
           {% endfor %}
         </tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
@@ -177,6 +228,14 @@
     .comp-code { font-weight: 600; color: #6c757d; font-size: .85rem; }
     .comp-name { font-size: .9rem; line-height: 1.15; }
 
+    .matrix-table tr.optional-row th.comp-cell {
+      background: #f8f9fb;
+    }
+    .matrix-table td.optional-empty-cell {
+      color: #6c757d;
+      font-size: .85rem;
+    }
+
     /* header names (vertical) */
     .rotate { height: 92px; padding: 0 .15rem; }
     .name-rotator {
@@ -210,6 +269,6 @@
 
 {% else %}
   <div class="text-muted">
-    No delegates or competencies found for this booking.
+    No competencies are configured for this course type.
   </div>
 {% endif %}

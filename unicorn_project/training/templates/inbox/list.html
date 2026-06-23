@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+
+<div class="container-fluid">
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+      <h2 class="mb-1"><i class="bi bi-inbox text-primary me-2"></i>{{ title }}</h2>
+      <p class="text-muted mb-0">
+        {% if is_admin_view %}
+          Unread course delivery requests awaiting your approval.
+        {% else %}
+          Unread cover swaps, delivery updates, and other messages for you.
+        {% endif %}
+      </p>
+    </div>
+    <div class="btn-group">
+      <a href="{% url inbox_url_name %}?status=open"
+         class="btn btn-sm {% if status == 'open' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+        Unread ({{ open_count }})
+      </a>
+      <a href="{% url inbox_url_name %}?status=resolved"
+         class="btn btn-sm {% if status == 'resolved' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
+        Read / resolved
+      </a>
+    </div>
+  </div>
+
+  {% if not items %}
+    <div class="alert alert-light border">No {{ status }} messages.</div>
+  {% else %}
+    <div class="vstack gap-3">
+      {% for item in items %}
+        <div class="card shadow-sm{% if item.is_unread %} border-primary{% endif %}">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+              <div>
+                <div class="small text-muted mb-1">
+                  {{ item.get_kind_display }} · {{ item.created_at|date:"j M Y H:i" }}
+                  {% if item.is_unread %}<span class="badge bg-primary ms-1">New</span>{% endif %}
+                </div>
+                <h5 class="mb-2">{{ item.summary }}</h5>
+
+                {% if item.course_delivery_request %}
+                  {% with req=item.course_delivery_request %}
+                    <div class="small text-muted mb-2">
+                      {% if item.kind == 'course_delivery_outcome' %}
+                        <strong>Course:</strong> {{ req.course_type.name }}{% if req.course_type.code %} ({{ req.course_type.code }}){% endif %}<br>
+                        <strong>Status:</strong> {{ req.get_status_display }}
+                      {% else %}
+                        <strong>Instructor:</strong> {{ req.instructor.name }}<br>
+                        <strong>Course:</strong> {{ req.course_type.name }}{% if req.course_type.code %} ({{ req.course_type.code }}){% endif %}
+                      {% endif %}
+                    </div>
+                    {% if req.message and item.kind != 'course_delivery_outcome' %}
+                      <div class="alert alert-secondary py-2 small mb-2">
+                        <strong>Note:</strong> {{ req.message }}
+                      </div>
+                    {% endif %}
+                    {% if req.admin_note and item.kind == 'course_delivery_outcome' %}
+                      <div class="alert alert-secondary py-2 small mb-2">
+                        <strong>Admin note:</strong> {{ req.admin_note }}
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+                {% endif %}
+
+                {% if item.course_swap %}
+                  {% with swap=item.course_swap booking=swap.booking %}
+                    <div class="small text-muted mb-2">
+                      <strong>From:</strong> {{ swap.from_instructor.name }}<br>
+                      <strong>To:</strong> {{ swap.to_instructor.name }}<br>
+                      {% if booking %}
+                        <strong>Booking:</strong> {{ booking.course_reference|default:booking.id }}
+                        · {{ booking.course_type.name }}
+                        {% if booking.course_date %}· {{ booking.course_date|date:"j M Y" }}{% endif %}
+                      {% endif %}
+                    </div>
+                    {% if swap.message %}
+                      <div class="alert alert-secondary py-2 small mb-2">
+                        <strong>Message:</strong> {{ swap.message }}
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+                {% endif %}
+              </div>
+
+              {% if item.kind == 'course_delivery_request' and is_admin_view and item.course_delivery_request and item.course_delivery_request.status == 'pending' %}
+                <form method="post" action="{% url 'inbox_course_request_action' item.pk %}" class="d-flex flex-column gap-2" style="min-width:260px;">
+                  {% csrf_token %}
+                  <input type="hidden" name="return_to" value="{{ inbox_url_name }}">
+                  <textarea name="admin_note" class="form-control form-control-sm" rows="2" placeholder="Optional note to instructor"></textarea>
+                  <div class="d-flex gap-2">
+                    <button type="submit" name="action" value="approve" class="btn btn-success btn-sm flex-grow-1">
+                      <i class="bi bi-check2 me-1"></i>Approve
+                    </button>
+                    <button type="submit" name="action" value="decline" class="btn btn-outline-danger btn-sm flex-grow-1">
+                      <i class="bi bi-x-lg me-1"></i>Decline
+                    </button>
+                  </div>
+                </form>
+              {% elif item.kind == 'course_swap_incoming' and item.course_swap and item.course_swap.status == 'pending' %}
+                <div class="d-flex flex-column gap-2" style="min-width:200px;">
+                  <form method="post" action="{% url 'inbox_swap_accept' item.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="return_to" value="{{ inbox_url_name }}">
+                    <button type="submit" class="btn btn-success btn-sm w-100">
+                      <i class="bi bi-check2 me-1"></i>Accept cover
+                    </button>
+                  </form>
+                  <form method="post" action="{% url 'inbox_swap_decline' item.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="return_to" value="{{ inbox_url_name }}">
+                    <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                      <i class="bi bi-x-lg me-1"></i>Decline
+                    </button>
+                  </form>
+                  <a href="{% url 'instructor_course_swaps' %}" class="btn btn-link btn-sm">Open course swaps</a>
+                </div>
+              {% elif item.kind == 'course_swap_outcome' %}
+                <a href="{% url 'instructor_course_swaps' %}" class="btn btn-outline-primary btn-sm">View course swaps</a>
+              {% elif item.kind == 'course_delivery_outcome' %}
+                <a href="{% url 'user_profile' %}" class="btn btn-outline-primary btn-sm">View my profile</a>
+              {% elif item.read_at and not item.resolved_at %}
+                <div class="small text-muted text-end">
+                  Read {{ item.read_at|date:"j M Y H:i" }}
+                </div>
+              {% elif item.resolved_at %}
+                <div class="small text-muted text-end">
+                  Resolved {{ item.resolved_at|date:"j M Y H:i" }}
+                  {% if item.resolved_by %}by {{ item.resolved_by.get_full_name|default:item.resolved_by.username }}{% endif %}
+                </div>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

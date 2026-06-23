@@ -19,7 +19,7 @@ import subprocess
 from pathlib import Path
 
 MAJOR = 0
-MINOR = 2
+MINOR = 3
 
 _ROOT = Path(__file__).resolve().parent.parent  # manage.py lives here
 
@@ -39,19 +39,7 @@ def _git_patch_count() -> int:
             return int(result.stdout.strip())
     except Exception:
         pass
-    # Tag doesn't exist yet — fall back to total commit count
-    try:
-        result = subprocess.run(
-            ["git", "rev-list", "--count", "HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-            cwd=_ROOT,
-        )
-        if result.returncode == 0:
-            return int(result.stdout.strip())
-    except Exception:
-        pass
+    # Tag doesn't exist yet — patch starts at 0 until the release is tagged
     return 0
 
 
