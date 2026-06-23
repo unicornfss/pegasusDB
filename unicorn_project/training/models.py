@@ -112,6 +112,11 @@ class CourseType(models.Model):
         help_text="How many optional competencies must be selected in the assessment matrix (0-5).",
     )
 
+    has_online_exercises = models.BooleanField(
+        default=False,
+        verbose_name="Delegates need to submit online exercises (e.g. accident reports)",
+    )
+
     onedrive_folder_link = models.URLField(
     blank=True,
     help_text="Optional OneDrive folder link for instructors"
@@ -148,6 +153,35 @@ class CourseType(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.code})"
+
+
+class CourseTypeOnlineExercise(models.Model):
+    """Online delegate exercises enabled for a course type (e.g. accident reports)."""
+
+    EXERCISE_ACCIDENT_REPORTS = "accident_reports"
+
+    EXERCISE_CHOICES = [
+        (EXERCISE_ACCIDENT_REPORTS, "Accident reports"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    course_type = models.ForeignKey(
+        CourseType,
+        on_delete=models.CASCADE,
+        related_name="online_exercises",
+    )
+    exercise_key = models.CharField(max_length=40, choices=EXERCISE_CHOICES)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["course_type", "exercise_key"],
+                name="course_type_online_exercise_unique",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.course_type.code}: {self.get_exercise_key_display()}"
 
 
 class Personnel(models.Model):
@@ -284,6 +318,22 @@ class Personnel(models.Model):
     notify_cover_requests_telegram = models.BooleanField(
         default=True,
         help_text="Telegram alerts for course cover requests and responses.",
+    )
+    notify_new_bookings_email = models.BooleanField(
+        default=False,
+        help_text="Email alert when a new booking is assigned to you.",
+    )
+    notify_booking_changes_email = models.BooleanField(
+        default=False,
+        help_text="Email alert when a booking is updated or cancelled.",
+    )
+    notify_reminders_email = models.BooleanField(
+        default=False,
+        help_text="Email departure reminder on the course day.",
+    )
+    notify_upcoming_bookings_email = models.BooleanField(
+        default=False,
+        help_text="Email reminders before upcoming bookings (days chosen on profile).",
     )
     deliverable_course_types = models.ManyToManyField(
         "CourseType",
@@ -1450,6 +1500,23 @@ class AccidentReport(models.Model):
     first_aider_name = models.CharField(max_length=255)
     reporter_name = models.CharField(max_length=255)
 
+    booking = models.ForeignKey(
+        "Booking",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accident_reports",
+    )
+
+    reported_to = models.ForeignKey(
+        "Personnel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accident_reports_received",
+        verbose_name="Reported to",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -1583,6 +1650,34 @@ class TelegramNotification(models.Model):
 
     def __str__(self):
         return f"{self.notification_type} for booking {self.booking_id}"
+
+
+class EmailNotification(models.Model):
+    """Audit log of booking notification emails sent to instructors."""
+
+    booking = models.ForeignKey(
+        Booking,
+        on_delete=models.CASCADE,
+        related_name="email_notifications",
+    )
+    personnel = models.ForeignKey(
+        Personnel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="email_notifications",
+    )
+    notification_type = models.CharField(max_length=32)
+    provider_message_id = models.CharField(max_length=128, blank=True, default="")
+    sent_at = models.DateTimeField(auto_now_add=True)
+    success = models.BooleanField(default=True)
+    error_text = models.TextField(blank=True, default="")
+
+    class Meta:
+        ordering = ["-sent_at"]
+
+    def __str__(self):
+        return f"{self.notification_type} email for booking {self.booking_id}"
 
 
 class InstructorCourseRequestStatus(models.TextChoices):

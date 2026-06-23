@@ -13,7 +13,7 @@
 
   {% if booking %}
   <div class="col-lg-3 col-md-6">
-    {% include "partials/booking_telegram_resend.html" with send_url_name="admin_booking_telegram_send" inside_booking_form=True panel=True %}
+    {% include "partials/booking_telegram_resend.html" with telegram_send_url_name="admin_booking_telegram_send" email_send_url_name="admin_booking_email_send" inside_booking_form=True panel=True %}
   </div>
   {% endif %}
 

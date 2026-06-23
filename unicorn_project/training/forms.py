@@ -368,6 +368,13 @@ class DummyBookingQuickCreateForm(forms.Form):
 
 # ---------------- CourseType ----------------
 class CourseTypeForm(forms.ModelForm):
+    online_exercises = forms.MultipleChoiceField(
+        choices=[],
+        required=False,
+        label="Delegate submitted exercises",
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "form-check-input"}),
+    )
+
     class Meta:
         model = CourseType
         fields = [
@@ -375,6 +382,7 @@ class CourseTypeForm(forms.ModelForm):
             "certificate_duration", "onedrive_folder_link",
             "default_course_fee", "default_instructor_fee",
             "has_exam", "number_of_exams", "optional_modules_required",
+            "has_online_exercises",
             "is_suspended",
         ]
         widgets = {
@@ -385,11 +393,18 @@ class CourseTypeForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        from .models import CourseTypeOnlineExercise
+
         super().__init__(*args, **kwargs)
+        self.fields["online_exercises"].choices = CourseTypeOnlineExercise.EXERCISE_CHOICES
+        if self.instance and self.instance.pk:
+            self.fields["online_exercises"].initial = list(
+                self.instance.online_exercises.values_list("exercise_key", flat=True)
+            )
         if self.instance._state.adding:
             self.fields.pop("is_suspended", None)
         for name, field in self.fields.items():
-            if name == "has_exam":
+            if name in {"has_exam", "has_online_exercises"}:
                 field.widget.attrs.setdefault("class", "form-check-input")
             elif name == "is_suspended":
                 field.widget.attrs.setdefault("class", "form-check-input suspend-course-toggle")
@@ -397,6 +412,8 @@ class CourseTypeForm(forms.ModelForm):
                 field.help_text = "Existing bookings and records are unaffected."
             elif name == "optional_modules_required":
                 field.widget.attrs.setdefault("class", "form-select")
+            elif isinstance(field.widget, forms.CheckboxSelectMultiple):
+                pass
             elif not isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs.setdefault("class", "form-control")
 
@@ -1122,6 +1139,103 @@ class AccidentReportForm(forms.ModelForm):
         self.fields["injured_address"].widget.attrs.setdefault("id", "ar-injured-address")
         self.fields["first_aider_name"].widget.attrs.setdefault("id", "ar-first-aider")
         self.fields["reporter_name"].widget.attrs.setdefault("id", "ar-reporter")
+
+
+class PublicAccidentReportForm(AccidentReportForm):
+    """Public accident report with course context and instructor routing."""
+
+    course_type = forms.ModelChoiceField(
+        queryset=CourseType.objects.none(),
+        required=False,
+        label="Course",
+        widget=forms.Select(attrs={"class": "form-select", "id": "ar-course-type"}),
+    )
+    reported_to = forms.ModelChoiceField(
+        queryset=Personnel.objects.none(),
+        required=True,
+        label="Reported to",
+        widget=forms.Select(attrs={"class": "form-select", "id": "ar-reported-to"}),
+    )
+
+    class Meta(AccidentReportForm.Meta):
+        fields = AccidentReportForm.Meta.fields
+
+    def __init__(
+        self,
+        *args,
+        instructors=None,
+        show_accident_date=False,
+        prefilled_course=None,
+        lock_course=False,
+        **kwargs,
+    ):
+        from .utils.online_exercises import course_types_with_accident_reports
+
+        super().__init__(*args, **kwargs)
+        self.show_accident_date = show_accident_date
+        self.lock_course = lock_course
+        self.prefilled_course = prefilled_course
+
+        self.fields["course_type"].queryset = course_types_with_accident_reports()
+
+        if not show_accident_date:
+            self.fields["date"].widget = forms.HiddenInput(attrs={"id": "ar-date"})
+            if not self.is_bound:
+                self.initial.setdefault("date", timezone.localdate())
+        else:
+            self.fields["date"].label = "Incident date"
+            self.fields["date"].help_text = "Change this when testing on a different course date."
+
+        if lock_course and prefilled_course:
+            self.fields["course_type"].widget = forms.HiddenInput()
+            if not self.is_bound:
+                self.initial["course_type"] = prefilled_course.pk
+            self.fields["course_type"].required = False
+        elif prefilled_course and not self.is_bound:
+            self.initial.setdefault("course_type", prefilled_course.pk)
+
+        instructors = list(instructors or [])
+        self.single_instructor = None
+        if len(instructors) == 1:
+            self.single_instructor = instructors[0]
+            self.fields["reported_to"].widget = forms.HiddenInput(attrs={"id": "ar-reported-to"})
+            if not self.is_bound:
+                self.initial["reported_to"] = instructors[0].pk
+            self.fields["reported_to"].required = True
+        elif len(instructors) > 1:
+            self.fields["reported_to"].queryset = Personnel.objects.filter(
+                pk__in=[i.pk for i in instructors]
+            ).order_by("name")
+            self.fields["reported_to"].empty_label = "Select instructor…"
+            self.fields["reported_to"].error_messages = {
+                "required": "Please select the instructor you are reporting to.",
+            }
+        else:
+            self.fields["reported_to"].queryset = Personnel.objects.none()
+            self.fields["reported_to"].required = True
+            self.single_instructor = None
+
+    def clean(self):
+        from .utils.online_exercises import course_types_with_accident_reports
+
+        cleaned = super().clean()
+        course = self.prefilled_course or cleaned.get("course_type")
+        if not self.lock_course and not course:
+            self.add_error("course_type", "Please select the course this report relates to.")
+        elif course and not course_types_with_accident_reports().filter(pk=course.pk).exists():
+            self.add_error("course_type", "Accident reports are not enabled for this course type.")
+
+        reported_to = cleaned.get("reported_to") or self.single_instructor
+        if reported_to and not cleaned.get("reported_to"):
+            cleaned["reported_to"] = reported_to
+        if not self.single_instructor and not reported_to:
+            self.add_error(
+                "reported_to",
+                "No instructor is scheduled for this course on the selected date. "
+                "Try a different incident date or check with your trainer.",
+            )
+        return cleaned
+
 
 class PersonnelForm(forms.ModelForm):
 

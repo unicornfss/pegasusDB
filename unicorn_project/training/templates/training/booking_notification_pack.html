@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Course pack — {{ booking.course_reference }}</title>
+    <style>
+      @page {
+        size: A4;
+        margin: 14mm 16mm;
+      }
+      * { box-sizing: border-box; }
+      body {
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        font-size: 10pt;
+        color: #222;
+        margin: 0;
+        line-height: 1.45;
+      }
+      .header {
+        background: #8b0000;
+        color: #fff;
+        padding: 14px 16px;
+        margin: -4mm -2mm 12px -2mm;
+        border-radius: 4px;
+      }
+      .header h1 {
+        margin: 0;
+        font-size: 20pt;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+      .header .sub {
+        margin: 4px 0 0;
+        font-size: 10pt;
+        color: #ffdddd;
+      }
+      .intro {
+        margin-bottom: 10px;
+        color: #333;
+      }
+      .intro strong { color: #111; }
+      .banner {
+        background: #fff3cd;
+        border: 1px solid #ffe69c;
+        border-radius: 4px;
+        padding: 10px 12px;
+        margin-bottom: 14px;
+        font-size: 9.5pt;
+        color: #664d00;
+      }
+      h2 {
+        font-size: 12pt;
+        color: #8b0000;
+        margin: 16px 0 8px;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #e8d0d0;
+      }
+      table.details {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 10px;
+        font-size: 9.5pt;
+      }
+      table.details th {
+        text-align: left;
+        width: 30%;
+        padding: 7px 10px;
+        vertical-align: top;
+        background: #f5f5f5;
+        border: 1px solid #ccc;
+        font-weight: 600;
+        color: #444;
+      }
+      table.details td {
+        padding: 7px 10px;
+        border: 1px solid #ccc;
+        vertical-align: top;
+      }
+      table.details ul {
+        margin: 0;
+        padding-left: 16px;
+      }
+      .map-block {
+        margin: 12px 0;
+        text-align: center;
+      }
+      .map-block img {
+        width: 100%;
+        max-height: 280px;
+        object-fit: cover;
+        border: 1px solid #bbb;
+        border-radius: 6px;
+      }
+      .map-caption {
+        font-size: 8pt;
+        color: #666;
+        margin-top: 4px;
+      }
+      .qr-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 8px;
+      }
+      .qr-item {
+        border: 1px solid #ccc;
+        border-radius: 6px;
+        padding: 12px;
+        text-align: center;
+        page-break-inside: avoid;
+        background: #fafafa;
+      }
+      .qr-item img {
+        width: 128px;
+        height: 128px;
+        display: block;
+        margin: 0 auto 10px;
+      }
+      .qr-item .title {
+        font-weight: 700;
+        font-size: 10pt;
+        margin-bottom: 4px;
+        color: #111;
+      }
+      .qr-item .url {
+        font-size: 7.5pt;
+        color: #555;
+        word-break: break-all;
+        line-height: 1.3;
+      }
+      .footer {
+        margin-top: 20px;
+        padding-top: 10px;
+        border-top: 1px solid #ddd;
+        font-size: 8.5pt;
+        color: #666;
+      }
+      a { color: #8b0000; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Unicorn Training</h1>
+      <p class="sub">Course details pack · {{ booking.course_reference|default:"—" }}</p>
+    </div>
+
+    <p class="intro">
+      <strong>{{ course_name }}</strong>{% if business_name %} · {{ business_name }}{% endif %}
+      {% if instructor_display %}<br>Instructor: {{ instructor_display }}{% endif %}
+    </p>
+
+    {% if disclaimer_lines %}
+    <div class="banner">
+      {% for line in disclaimer_lines %}{% if line %}{{ line }}<br>{% endif %}{% endfor %}
+    </div>
+    {% endif %}
+
+    <h2>Booking</h2>
+    <table class="details">
+      <tr><th>Reference</th><td>{{ booking.course_reference|default:"—" }}</td></tr>
+      <tr><th>Course</th><td>{{ course_name }}</td></tr>
+      {% if business_name %}<tr><th>Business</th><td>{{ business_name }}</td></tr>{% endif %}
+      <tr><th>Status</th><td>{{ status_display }}</td></tr>
+      {% if day_lines %}
+      <tr><th>Date(s)</th><td><ul>{% for line in day_lines %}<li>{{ line }}</li>{% endfor %}</ul></td></tr>
+      {% endif %}
+      <tr><th>Instructor fee</th><td>{{ instructor_fee }}</td></tr>
+      {% if mileage_fee and mileage_fee != "—" %}<tr><th>Mileage</th><td>{{ mileage_fee }}</td></tr>{% endif %}
+      {% if course_notes %}<tr><th>Course notes</th><td>{{ course_notes }}</td></tr>{% endif %}
+      {% if cancel_reason %}<tr><th>Cancellation reason</th><td>{{ cancel_reason }}</td></tr>{% endif %}
+    </table>
+
+    <h2>Venue &amp; contact</h2>
+    <table class="details">
+      {% if location_lines %}
+      <tr><th>Venue</th><td>{{ location_lines|join:", " }}</td></tr>
+      {% endif %}
+      {% if training_address %}<tr><th>Address</th><td>{{ training_address }}</td></tr>{% endif %}
+      {% if contact_line %}<tr><th>On-site contact</th><td>{{ contact_line }}</td></tr>{% endif %}
+      {% if plus_code %}<tr><th>Plus code</th><td>{{ plus_code }}</td></tr>{% endif %}
+      {% if maps_url %}<tr><th>Directions</th><td><a href="{{ maps_url }}">{{ maps_url }}</a></td></tr>{% endif %}
+    </table>
+
+    {% if map_image_data_uri %}
+    <div class="map-block">
+      <img src="{{ map_image_data_uri }}" alt="Venue map">
+      <div class="map-caption">Venue map (Google Maps)</div>
+    </div>
+    {% endif %}
+
+    {% if qr_codes %}
+    <h2>QR codes</h2>
+    <p style="font-size:9pt;color:#444;margin:0 0 8px;">Scan with a phone camera to open registration, feedback or exam forms.</p>
+    <div class="qr-grid">
+      {% for qr in qr_codes %}
+      <div class="qr-item">
+        {% if qr.image_data_uri %}
+        <img src="{{ qr.image_data_uri }}" alt="{{ qr.title }}">
+        {% endif %}
+        <div class="title">{{ qr.title }}</div>
+        <div class="url">{{ qr.url }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="footer">
+      Unicorn Fire &amp; Safety Training{% if office_phone %} · {{ office_phone }}{% endif %}
+      {% if pegasus_url %}<br>Pegasus: <a href="{{ pegasus_url }}">{{ pegasus_url }}</a>{% endif %}
+      <br>Generated {{ generated_date }}
+    </div>
+  </body>
+</html>

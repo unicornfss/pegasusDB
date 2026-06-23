@@ -74,6 +74,10 @@ class PersonnelProfileForm(forms.ModelForm):
             "notify_reminders_telegram",
             "notify_upcoming_bookings_telegram",
             "notify_cover_requests_telegram",
+            "notify_new_bookings_email",
+            "notify_booking_changes_email",
+            "notify_reminders_email",
+            "notify_upcoming_bookings_email",
             "upcoming_reminder_days_1",
             "upcoming_reminder_days_2",
             "upcoming_reminder_days_3",
@@ -97,6 +101,10 @@ class PersonnelProfileForm(forms.ModelForm):
             "notify_reminders_telegram": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "notify_upcoming_bookings_telegram": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "notify_cover_requests_telegram": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_new_bookings_email": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_booking_changes_email": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_reminders_email": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "notify_upcoming_bookings_email": forms.CheckboxInput(attrs={"class": "form-check-input"}),
             "upcoming_reminder_days_1": forms.Select(attrs={"class": "form-select form-select-sm"}),
             "upcoming_reminder_days_2": forms.Select(attrs={"class": "form-select form-select-sm"}),
             "upcoming_reminder_days_3": forms.Select(attrs={"class": "form-select form-select-sm"}),
@@ -150,7 +158,7 @@ class PersonnelProfileForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
-        if cleaned.get("notify_upcoming_bookings_telegram"):
+        if cleaned.get("notify_upcoming_bookings_telegram") or cleaned.get("notify_upcoming_bookings_email"):
             days = [
                 cleaned.get("upcoming_reminder_days_1"),
                 cleaned.get("upcoming_reminder_days_2"),

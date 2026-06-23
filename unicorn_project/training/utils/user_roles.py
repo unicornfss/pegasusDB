@@ -108,6 +108,8 @@ ADMIN_BOOKING_URL_NAMES = frozenset({
     "admin_booking_cancel",
     "admin_booking_reinstate",
     "admin_booking_telegram_send",
+    "admin_booking_email_send",
+    "admin_booking_course_pack_pdf",
     "admin_booking_unlock",
     "admin_booking_certificates_selected",
     "admin_certificate_name_edit",

@@ -123,6 +123,11 @@
     {{ form.instructor_fee }}
     {% for err in form.instructor_fee.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
   </div>
+  {% if form.instance.pk %}
+  <div class="col-12">
+    {% include "partials/booking_course_pack_pdf_button.html" with pdf_url_name="admin_booking_course_pack_pdf" booking=form.instance %}
+  </div>
+  {% endif %}
   <div class="col-12">
     <button type="button" class="btn btn-warning btn-sm btn-reset-defaults py-0 px-2" onclick="resetContactsToLocationDefaults()">
       <i class="bi bi-arrow-counterclockwise me-1"></i>Reset contacts to location defaults

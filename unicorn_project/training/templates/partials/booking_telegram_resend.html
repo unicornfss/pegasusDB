@@ -5,27 +5,48 @@
     <span class="booking-panel-title">Resend notifications</span>
   </div>
   <div class="card-body{% if stacked %} d-flex flex-column justify-content-center flex-grow-1{% endif %}">
-    <p class="small text-muted mb-3 mb-md-2">
-      Resend course dates, type, business, location, reference, instructor fee, and a Google Maps link.
+    <p class="small text-muted mb-3">
+      Resend full booking details to the assigned instructor. Email includes a PDF with venue map, contacts, fees and QR codes.
     </p>
-    {% if booking.instructor.telegram_chat_id %}
+    <div class="d-flex flex-wrap gap-2">
+      {% if booking.instructor.telegram_chat_id %}
+        {% if inside_booking_form %}
+        <button type="submit"
+                formaction="{% url telegram_send_url_name booking.pk %}"
+                formmethod="post"
+                formnovalidate
+                class="btn btn-outline-primary btn-sm">
+          <i class="bi bi-send me-1"></i>Resend via Telegram
+        </button>
+        {% else %}
+        <form method="post" action="{% url telegram_send_url_name booking.pk %}" class="d-inline">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-send me-1"></i>Resend via Telegram
+          </button>
+        </form>
+        {% endif %}
+      {% else %}
+        <span class="small text-muted align-self-center">Telegram not linked.</span>
+      {% endif %}
+
       {% if inside_booking_form %}
       <button type="submit"
-              formaction="{% if send_url_name == 'admin_booking_telegram_send' %}/app/admin/bookings/{{ booking.pk }}/telegram-send/{% else %}/app/instructor/booking/{{ booking.pk }}/telegram-send/{% endif %}"
+              formaction="{% url email_send_url_name booking.pk %}"
               formmethod="post"
               formnovalidate
-              class="btn btn-outline-primary btn-sm">
-        <i class="bi bi-send me-1"></i>Resend notification via Telegram
+              class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-envelope me-1"></i>Resend via email
       </button>
       {% else %}
-      <form method="post" action="{% if send_url_name == 'admin_booking_telegram_send' %}/app/admin/bookings/{{ booking.pk }}/telegram-send/{% else %}/app/instructor/booking/{{ booking.pk }}/telegram-send/{% endif %}">
+      <form method="post" action="{% url email_send_url_name booking.pk %}" class="d-inline">
         {% csrf_token %}
-        <button type="submit" class="btn btn-outline-primary btn-sm">
-          <i class="bi bi-send me-1"></i>Resend notification via Telegram
+        <button type="submit" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-envelope me-1"></i>Resend via email
         </button>
       </form>
       {% endif %}
-    {% endif %}
+    </div>
   </div>
 </div>
 {% endif %}

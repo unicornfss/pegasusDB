@@ -1,0 +1,163 @@
+{% load static %}
+<div class="booking-accident-reports-tab" data-booking-id="{{ booking.id }}">
+  <div class="d-flex flex-wrap gap-2 mb-2">
+    <button type="button"
+            class="btn btn-outline-secondary btn-sm js-accident-report-bulk"
+            data-action="{{ accident_report_export_url }}">
+      <i class="bi bi-filetype-pptx"></i> Export PPTX
+    </button>
+
+    <button type="button"
+            class="btn btn-warning btn-sm js-accident-report-bulk"
+            data-action="{{ accident_report_anonymise_url }}"
+            data-confirm="Anonymise the selected reports now? This cannot be undone."
+            data-require-selection="1">
+      <i class="bi bi-shield-lock"></i> Anonymise selected
+    </button>
+
+    <button type="button"
+            class="btn btn-danger btn-sm js-accident-report-bulk"
+            data-action="{{ accident_report_delete_url }}"
+            data-require-selection="1"
+            data-confirm-delete="1">
+      <i class="bi bi-trash"></i> Delete selected
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-sm align-middle table-hover mb-0">
+      <thead>
+        <tr>
+          <th style="width:36px;">
+            <input type="checkbox" class="accident-report-select-all" data-booking="{{ booking.id }}">
+          </th>
+          <th style="width:120px;">Date</th>
+          <th style="width:90px;">Time</th>
+          <th>Location</th>
+          <th>Injured person</th>
+          <th>First aider</th>
+          <th>Reporter</th>
+        </tr>
+      </thead>
+      <tbody id="accident-report-rows-{{ booking.id }}" class="accident-report-rows">
+        {% include "instructor/_accident_report_rows.html" with reports=accident_reports booking=booking %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .accident-report-rows tr[data-href] { cursor: pointer; }
+</style>
+
+<script>
+(function(){
+  const bookingId = "{{ booking.id }}";
+  const tbody = document.getElementById("accident-report-rows-" + bookingId);
+  const pollUrl = "{{ accident_report_poll_url|escapejs }}";
+  const tabRoot = document.querySelector('.booking-accident-reports-tab[data-booking-id="' + bookingId + '"]');
+  if (!tbody || !pollUrl) return;
+
+  const selectAll = document.querySelector('.accident-report-select-all[data-booking="' + bookingId + '"]');
+
+  function getSelectedIds() {
+    return Array.from(tbody.querySelectorAll('input[name="ids"]:checked')).map(cb => cb.value);
+  }
+  function restoreSelectedIds(ids) {
+    const set = new Set(ids);
+    tbody.querySelectorAll('input[name="ids"]').forEach(cb => {
+      if (set.has(cb.value)) cb.checked = true;
+    });
+  }
+
+  function csrfToken() {
+    const el = document.querySelector('#booking-form [name=csrfmiddlewaretoken]')
+      || document.querySelector('[name=csrfmiddlewaretoken]');
+    return el ? el.value : '';
+  }
+
+  function submitBulkAction(btn) {
+    const requireSelection = btn.dataset.requireSelection === '1';
+    const selected = getSelectedIds();
+    if (requireSelection && !selected.length) {
+      alert('Select at least one report.');
+      return;
+    }
+    if (btn.dataset.confirmDelete === '1') {
+      if (!confirm('Delete ' + selected.length + ' selected report' + (selected.length > 1 ? 's' : '') + '? This cannot be undone.')) {
+        return;
+      }
+    } else if (btn.dataset.confirm && !window.confirm(btn.dataset.confirm)) {
+      return;
+    }
+
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = btn.dataset.action || '';
+    form.style.display = 'none';
+
+    const csrf = document.createElement('input');
+    csrf.type = 'hidden';
+    csrf.name = 'csrfmiddlewaretoken';
+    csrf.value = csrfToken();
+    form.appendChild(csrf);
+
+    const bookingInput = document.createElement('input');
+    bookingInput.type = 'hidden';
+    bookingInput.name = 'booking_id';
+    bookingInput.value = bookingId;
+    form.appendChild(bookingInput);
+
+    selected.forEach(function(id) {
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'ids';
+      input.value = id;
+      form.appendChild(input);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
+  }
+
+  if (tabRoot) {
+    tabRoot.querySelectorAll('.js-accident-report-bulk').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        submitBulkAction(btn);
+      });
+    });
+  }
+
+  if (selectAll) {
+    selectAll.addEventListener('change', function(){
+      tbody.querySelectorAll('input[name="ids"]').forEach(cb => {
+        cb.checked = selectAll.checked;
+      });
+    });
+  }
+
+  tbody.addEventListener('click', function(e){
+    const tag = e.target.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'button' || tag === 'a' || e.target.closest('a,button,input,label')) return;
+    const tr = e.target.closest('tr[data-href]');
+    if (tr && tr.dataset.href) window.location = tr.dataset.href;
+  });
+
+  async function refresh() {
+    try {
+      const selected = getSelectedIds();
+      const resp = await fetch(pollUrl, { credentials: 'same-origin' });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (!data || typeof data.html !== 'string') return;
+      if (tbody.innerHTML.trim() !== data.html.trim()) {
+        tbody.innerHTML = data.html;
+        restoreSelectedIds(selected);
+      }
+    } catch (e) {}
+  }
+
+  refresh();
+  setInterval(refresh, 10000);
+})();
+</script>

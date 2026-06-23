@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 from .models import AccidentReport, Business, TrainingLocation, CourseType, Personnel, Booking, BookingDay, DelegateRegister, FeedbackResponse, InstructorCourseRequestStatus
 from .forms import (
     AccidentReportForm,
+    PublicAccidentReportForm,
     BookingForm,
     PersonnelAdminForm,
     PersonnelProfileForm,
@@ -353,6 +354,35 @@ def public_exam_short_qr(request, code):
     if not exam:
         return HttpResponse(status=404)
     png = qr_png_bytes(exam_short_url(request, exam.exam_code))
+    return HttpResponse(png, content_type="image/png")
+
+
+def _course_type_with_accident_reports(code: str):
+    from .utils.online_exercises import course_types_with_accident_reports
+
+    return course_types_with_accident_reports().filter(code__iexact=(code or "").strip()).first()
+
+
+@require_GET
+def public_accident_report_short(request, code):
+    """Short URL for accident reports: /ar/<course_code>/ → form with course pre-selected."""
+    course = _course_type_with_accident_reports(code)
+    if not course:
+        return HttpResponse("Course not found or accident reports are not enabled.", status=404)
+    target = f"{reverse('accident_report_public')}?{urlencode({'course': course.code})}"
+    return redirect(target)
+
+
+@require_GET
+def public_accident_report_short_qr(request, code):
+    """PNG QR code encoding the short accident report URL for a course type."""
+    from .utils.accident_report_links import course_accident_report_short_url
+    from .utils.register_links import qr_png_bytes
+
+    course = _course_type_with_accident_reports(code)
+    if not course:
+        return HttpResponse(status=404)
+    png = qr_png_bytes(course_accident_report_short_url(request, course.code))
     return HttpResponse(png, content_type="image/png")
 
 
@@ -1252,8 +1282,61 @@ def no_roles_assigned(request):
 
 @login_required
 def accident_report_list(request):
-    reports = AccidentReport.objects.order_by("-date", "-time")
-    return render(request, "instructor/accident_report_list.html", {"reports": reports})
+    messages.info(
+        request,
+        "Accident reports are now shown on each relevant course booking (Accident reports tab).",
+    )
+    return redirect("instructor_bookings")
+
+
+def _accident_report_booking_redirect(booking, *, portal: str):
+    if portal == "admin":
+        return redirect(f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=accident-reports")
+    return redirect(f"{reverse('instructor_booking_detail', args=[booking.pk])}?tab=accident-reports")
+
+
+def _accident_report_poll_response(request, booking):
+    from .utils.accident_reports import accident_reports_for_booking
+
+    reports = accident_reports_for_booking(booking)
+    rows_html = render_to_string(
+        "instructor/_accident_report_rows.html",
+        {"reports": reports, "booking": booking},
+        request=request,
+    )
+    return JsonResponse({"html": rows_html})
+
+
+def _accident_report_booking_guard(request, booking_id, *, portal: str):
+    from .utils.accident_reports import user_may_view_booking_accident_reports
+    from .utils.online_exercises import booking_accident_reports_enabled
+
+    booking = get_object_or_404(
+        Booking.objects.select_related("course_type"),
+        pk=booking_id,
+    )
+    if not user_may_view_booking_accident_reports(request.user, booking):
+        return None, HttpResponseForbidden("You do not have access to this booking.")
+    if not booking_accident_reports_enabled(booking):
+        return None, HttpResponseForbidden("Accident reports are not enabled for this course.")
+    return booking, None
+
+
+@login_required
+def instructor_booking_accident_reports_poll(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="instructor")
+    if denied:
+        return denied
+    return _accident_report_poll_response(request, booking)
+
+
+@login_required
+def admin_booking_accident_reports_poll(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="admin")
+    if denied:
+        return denied
+    return _accident_report_poll_response(request, booking)
+
 
 @login_required
 def accident_report_create(request):
@@ -1270,21 +1353,232 @@ def accident_report_create(request):
 
 from django.utils import timezone
 
+def _accident_report_show_date() -> bool:
+    return getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG)
+
+
 def accident_report_public(request):
-    form = AccidentReportForm(request.POST or None)
+    """
+    Public accident report form.
+
+    Links to a booking via:
+      - ?ref=<course_reference>  (booking link from the Accident reports tab), or
+      - course + incident date + reported-to instructor (resolved on save).
+    """
+    from .utils.accident_reports import (
+        booking_incident_dates,
+        default_incident_date_for_booking,
+        default_incident_date_for_course,
+        incident_date_on_booking,
+        instructors_for_accident_report_course_date,
+        instructors_for_booking_report,
+        resolve_accident_report_booking,
+    )
+    from .utils.online_exercises import booking_accident_reports_enabled, course_types_with_accident_reports
+
+    booking = None
+    ref = (request.GET.get("ref") or request.POST.get("ref") or "").strip()
+    if ref:
+        booking = (
+            Booking.objects.filter(course_reference__iexact=ref)
+            .select_related("course_type", "instructor")
+            .prefetch_related("course_type__online_exercises", "days")
+            .first()
+        )
+        if booking and not booking_accident_reports_enabled(booking):
+            booking = None
+
+    course_code = (request.GET.get("course") or request.POST.get("course") or "").strip()
+    prefilled_course = None
+    if booking:
+        prefilled_course = booking.course_type
+    elif course_code:
+        prefilled_course = course_types_with_accident_reports().filter(code__iexact=course_code).first()
+
+    show_accident_date = _accident_report_show_date()
+    if booking:
+        incident_date = default_incident_date_for_booking(booking)
+    elif prefilled_course:
+        incident_date = default_incident_date_for_course(prefilled_course)
+    else:
+        incident_date = timezone.localdate()
+
+    if request.method == "POST":
+        parsed = _parse_flexible_date((request.POST.get("date") or "").strip())
+        if parsed:
+            incident_date = parsed
+    elif show_accident_date and request.GET.get("date"):
+        parsed = _parse_flexible_date(request.GET.get("date").strip())
+        if parsed:
+            incident_date = parsed
+
+    booking_link_active = bool(booking and incident_date_on_booking(booking, incident_date))
+    booking_day_dates = sorted(booking_incident_dates(booking)) if booking else []
+
+    init = {"date": incident_date}
+    inst_q = (request.GET.get("instructor") or request.POST.get("reported_to") or "").strip()
+    if booking and booking.instructor_id and booking_link_active:
+        init["reported_to"] = booking.instructor_id
+    elif inst_q:
+        try:
+            init["reported_to"] = Personnel.objects.get(pk=inst_q)
+        except Personnel.DoesNotExist:
+            pass
+
+    course = prefilled_course
+    if not course and request.method == "POST":
+        posted_course = (request.POST.get("course_type") or "").strip()
+        if posted_course:
+            try:
+                course = course_types_with_accident_reports().get(pk=posted_course)
+            except (CourseType.DoesNotExist, ValueError):
+                course = _resolve_course_type(posted_course)
+
+    instructors = []
+    if booking_link_active:
+        instructors = instructors_for_booking_report(booking, incident_date)
+    elif course:
+        instructors = instructors_for_accident_report_course_date(course, incident_date)
+
+    instructors_unavailable = bool(course and not booking_link_active and not instructors)
+
+    form = PublicAccidentReportForm(
+        request.POST or None,
+        initial=init,
+        instructors=instructors,
+        show_accident_date=show_accident_date,
+        prefilled_course=prefilled_course,
+        lock_course=bool(booking or prefilled_course),
+    )
+
+    if prefilled_course:
+        form.fields["course_type"].initial = prefilled_course.id
+
+    matching_sessions = []
+    session_errors = []
+    if booking_link_active:
+        single = instructors[0] if len(instructors) == 1 else None
+        if not single and request.method == "POST":
+            rid = (request.POST.get("reported_to") or "").strip()
+            if rid:
+                single = Personnel.objects.filter(pk=rid).first()
+        matching_sessions = _public_matching_sessions(
+            booking.course_type, incident_date, single, request
+        )
+    elif course:
+        single = instructors[0] if len(instructors) == 1 else None
+        if not single and request.method == "POST":
+            rid = (request.POST.get("reported_to") or "").strip()
+            if rid:
+                single = Personnel.objects.filter(pk=rid).first()
+        matching_sessions = _public_matching_sessions(course, incident_date, single, request)
+
     if request.method == "POST" and form.is_valid():
-        form.save()
-        messages.success(request, "Accident report submitted successfully.")
-        return redirect("accident_report_thanks")  # or wherever your thank-you lives
+        cd = form.cleaned_data
+        course = prefilled_course or cd.get("course_type")
+        the_date = cd.get("date")
+        reported_to = cd.get("reported_to")
+        posted_day_code = (request.POST.get("day_code") or "").strip()
+
+        if matching_sessions and len(matching_sessions) > 1 and not posted_day_code:
+            session_errors = ["Please select which session this incident relates to."]
+            form.add_error(None, session_errors[0])
+        else:
+            submit_link_active = bool(booking and incident_date_on_booking(booking, the_date))
+            resolved_booking = resolve_accident_report_booking(
+                booking_ref=ref if submit_link_active else "",
+                course=course,
+                incident_date=the_date,
+                reported_to=reported_to,
+                day_code=posted_day_code,
+            )
+            report = form.save(commit=False)
+            report.reported_to = reported_to
+            if resolved_booking:
+                report.booking = resolved_booking
+            report.save()
+            messages.success(request, "Accident report submitted successfully.")
+            return redirect("accident_report_thanks")
 
     return render(
         request,
         "public/accident_report_form.html",
         {
             "form": form,
-            "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,  # <-- important
+            "booking": booking,
+            "course_type": prefilled_course,
+            "show_accident_date": show_accident_date,
+            "booking_link_active": booking_link_active,
+            "booking_day_dates": booking_day_dates,
+            "incident_date": incident_date,
+            "instructors_unavailable": instructors_unavailable,
+            "matching_sessions": matching_sessions,
+            "session_errors": session_errors,
+            "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,
         },
     )
+
+
+@require_GET
+def accident_report_instructors_api(request):
+    """
+    Instructors for the Reported to dropdown.
+    Query: ?course=<code>&date=YYYY-MM-DD  or  ?ref=<booking_ref>&date=YYYY-MM-DD
+    """
+    from .utils.accident_reports import (
+        incident_date_on_booking,
+        instructors_for_accident_report_course_date,
+        instructors_for_booking_report,
+    )
+    from .utils.online_exercises import booking_accident_reports_enabled, course_types_with_accident_reports
+
+    date_str = (request.GET.get("date") or "").strip()
+    day_date = _parse_yyyy_mm_dd(date_str) or _parse_flexible_date(date_str) or timezone.localdate()
+
+    ref = (request.GET.get("ref") or "").strip()
+    if ref:
+        booking = (
+            Booking.objects.filter(course_reference__iexact=ref)
+            .select_related("course_type", "instructor")
+            .prefetch_related("days")
+            .first()
+        )
+        if not booking or not booking_accident_reports_enabled(booking):
+            return JsonResponse({"instructors": [], "booking_link_active": False})
+        active = incident_date_on_booking(booking, day_date)
+        instructors = (
+            instructors_for_booking_report(booking, day_date) if active else []
+        )
+        payload = {
+            "instructors": [{"id": str(i.id), "name": i.name} for i in instructors],
+            "booking_link_active": active,
+        }
+        if not active:
+            payload["message"] = (
+                f"No course day on {day_date.strftime('%d %b %Y')} "
+                f"for booking {booking.course_reference}."
+            )
+        return JsonResponse(payload)
+
+    code = (request.GET.get("course") or request.GET.get("ct") or "").strip()
+    course = course_types_with_accident_reports().filter(code__iexact=code).first()
+    if not course:
+        return JsonResponse({"instructors": []})
+
+    instructors = instructors_for_accident_report_course_date(course, day_date)
+    payload = {
+        "instructors": [{"id": str(i.id), "name": i.name} for i in instructors],
+        "booking_link_active": False,
+    }
+    if not instructors:
+        payload["message"] = (
+            f"No instructors are scheduled for {course.name} on "
+            f"{day_date.strftime('%d %b %Y')}. Try another incident date."
+        )
+        hint = _dev_instructor_register_hint(course, day_date)
+        if hint:
+            payload["dev_hint"] = hint
+    return JsonResponse(payload)
 
 def accident_report_thanks(request):
     return render(request, "public/accident_report_thanks.html")
@@ -1293,9 +1587,35 @@ def accident_report_thanks(request):
 
 @login_required
 def accident_report_detail(request, pk):
-    # Use select_related / only as you like; keeping simple
-    report = get_object_or_404(AccidentReport, pk=pk)
-    return render(request, "instructor/accident_report_detail.html", {"report": report})
+    from .utils.accident_reports import user_may_view_accident_report
+
+    report = get_object_or_404(AccidentReport.objects.select_related("booking", "reported_to"), pk=pk)
+    if not user_may_view_accident_report(request.user, report):
+        return HttpResponseForbidden("You do not have access to this report.")
+
+    back_url = None
+    booking_id = (request.GET.get("booking") or "").strip()
+    if booking_id:
+        booking, denied = _accident_report_booking_guard(request, booking_id, portal="instructor")
+        if booking and not denied:
+            back_url = f"{reverse('instructor_booking_detail', args=[booking.pk])}?tab=accident-reports"
+        else:
+            booking, denied = _accident_report_booking_guard(request, booking_id, portal="admin")
+            if booking and not denied:
+                back_url = f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=accident-reports"
+    elif report.booking_id:
+        from .services.dummy_bookings import admin_may_view_booking
+
+        if admin_may_view_booking(request.user, report.booking):
+            back_url = f"{reverse('admin_booking_edit', args=[report.booking_id])}?tab=accident-reports"
+        else:
+            back_url = f"{reverse('instructor_booking_detail', args=[report.booking_id])}?tab=accident-reports"
+
+    return render(
+        request,
+        "instructor/accident_report_detail.html",
+        {"report": report, "back_url": back_url},
+    )
 
 # --- Accident reports: EXPORT PPTX (selected IDs) -----------------------------
 
@@ -1312,13 +1632,18 @@ def accident_report_export_pptx(request):
     if not ids:
         return HttpResponseBadRequest("No IDs supplied")
 
+    reports_qs = AccidentReport.objects.filter(pk__in=ids)
+    booking = getattr(request, "_accident_report_booking", None)
+    if booking is not None:
+        reports_qs = reports_qs.filter(booking=booking)
+
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
     from pptx.enum.text import PP_PARAGRAPH_ALIGNMENT
 
     reports = list(
-        AccidentReport.objects.filter(pk__in=ids).order_by("date", "time")
+        reports_qs.order_by("date", "time")
     )
     if not reports:
         return HttpResponseBadRequest("No matching reports")
@@ -1497,55 +1822,138 @@ def accident_report_export_pptx(request):
     resp["Content-Disposition"] = 'attachment; filename="Accident reports.pptx"'
     return resp
 
+
+def _accident_report_export_for_booking(request, booking, *, portal: str):
+    request._accident_report_booking = booking
+    return accident_report_export_pptx(request)
+
+
+@require_POST
+@login_required
+def instructor_booking_accident_reports_export(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="instructor")
+    if denied:
+        return denied
+    return _accident_report_export_for_booking(request, booking, portal="instructor")
+
+
+@require_POST
+@login_required
+def admin_booking_accident_reports_export(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="admin")
+    if denied:
+        return denied
+    return _accident_report_export_for_booking(request, booking, portal="admin")
+
+
 @require_POST
 @login_required
 def accident_report_delete(request):
     """
     Bulk-delete accident reports by ids[]=...
     """
+    booking = getattr(request, "_accident_report_booking", None)
+    portal = getattr(request, "_accident_report_portal", "instructor")
     ids = request.POST.getlist("ids[]") or request.POST.getlist("ids")
     if not ids:
         messages.warning(request, "No reports selected.")
-        return redirect("accident_report_list")
+        if booking:
+            return _accident_report_booking_redirect(booking, portal=portal)
+        return redirect("instructor_bookings")
 
     qs = AccidentReport.objects.filter(pk__in=ids)
+    if booking is not None:
+        qs = qs.filter(booking=booking)
     count = qs.count()
     if count == 0:
         messages.warning(request, "No matching reports found.")
-        return redirect("accident_report_list")
+        if booking:
+            return _accident_report_booking_redirect(booking, portal=portal)
+        return redirect("instructor_bookings")
 
     qs.delete()
     messages.success(request, f"Deleted {count} report{'s' if count != 1 else ''}.")
-    return redirect("accident_report_list")
+    if booking:
+        return _accident_report_booking_redirect(booking, portal=portal)
+    return redirect("instructor_bookings")
+
+
+def _accident_report_delete_for_booking(request, booking, *, portal: str):
+    request._accident_report_booking = booking
+    request._accident_report_portal = portal
+    return accident_report_delete(request)
+
+
+@require_POST
+@login_required
+def instructor_booking_accident_reports_delete(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="instructor")
+    if denied:
+        return denied
+    return _accident_report_delete_for_booking(request, booking, portal="instructor")
+
+
+@require_POST
+@login_required
+def admin_booking_accident_reports_delete(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="admin")
+    if denied:
+        return denied
+    return _accident_report_delete_for_booking(request, booking, portal="admin")
+
 
 @login_required
 def accident_report_poll(request):
-    """
-    Returns just the table rows (HTML) for the accident report list.
-    Frontend replaces <tbody> with this HTML, preserving selections.
-    """
-    reports = AccidentReport.objects.order_by("-date", "-time", "-id")
-    rows_html = render_to_string(
-        "instructor/_accident_report_rows.html",
-        {"reports": reports},
-        request=request,
-    )
-    return JsonResponse({"html": rows_html})
+    """Legacy global poll — redirects empty; booking tabs use scoped poll URLs."""
+    return JsonResponse({"html": ""})
+
 
 @require_POST
+@login_required
 def accident_report_anonymise(request):
-    ids = request.POST.getlist("ids")  # matches name="ids" in the list form rows
+    booking = getattr(request, "_accident_report_booking", None)
+    portal = getattr(request, "_accident_report_portal", "instructor")
+    ids = request.POST.getlist("ids")
     if not ids:
         messages.warning(request, "Select at least one report to anonymise.")
-        return redirect("accident_report_list")
+        if booking:
+            return _accident_report_booking_redirect(booking, portal=portal)
+        return redirect("instructor_bookings")
 
     qs = AccidentReport.objects.filter(id__in=ids, anonymized_at__isnull=True)
-    # Use update for speed, then set anonymized_at in a second pass
+    if booking is not None:
+        qs = qs.filter(booking=booking)
     now = timezone.now()
     updated = qs.update(injured_name="", injured_address="", anonymized_at=now)
 
     messages.success(request, f"Anonymised {updated} report{'s' if updated != 1 else ''}.")
-    return redirect("accident_report_list")
+    if booking:
+        return _accident_report_booking_redirect(booking, portal=portal)
+    return redirect("instructor_bookings")
+
+
+def _accident_report_anonymise_for_booking(request, booking, *, portal: str):
+    request._accident_report_booking = booking
+    request._accident_report_portal = portal
+    return accident_report_anonymise(request)
+
+
+@require_POST
+@login_required
+def instructor_booking_accident_reports_anonymise(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="instructor")
+    if denied:
+        return denied
+    return _accident_report_anonymise_for_booking(request, booking, portal="instructor")
+
+
+@require_POST
+@login_required
+def admin_booking_accident_reports_anonymise(request, booking_id):
+    booking, denied = _accident_report_booking_guard(request, booking_id, portal="admin")
+    if denied:
+        return denied
+    return _accident_report_anonymise_for_booking(request, booking, portal="admin")
 
 
 @require_GET

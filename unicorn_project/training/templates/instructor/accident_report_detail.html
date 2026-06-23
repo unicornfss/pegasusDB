@@ -15,7 +15,8 @@
       <td>{{ report.actions_prevent_recurrence|linebreaksbr|default:"—" }}</td></tr>
   <tr><th>First aider</th>        <td>{{ report.first_aider_name|default:"—" }}</td></tr>
   <tr><th>Reporter</th>           <td>{{ report.reporter_name|default:"—" }}</td></tr>
+  <tr><th>Reported to</th>        <td>{{ report.reported_to.name|default:"—" }}</td></tr>
 </table>
 
-<a class="btn btn-outline-secondary" href="{% url 'accident_report_list' %}">&larr; Back to reports</a>
+<a class="btn btn-outline-secondary" href="{% if back_url %}{{ back_url }}{% else %}{% url 'instructor_bookings' %}{% endif %}">&larr; Back</a>
 {% endblock %}

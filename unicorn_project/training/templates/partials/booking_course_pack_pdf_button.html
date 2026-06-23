@@ -1,0 +1,9 @@
+{% if booking and booking.pk %}
+<a href="{% url pdf_url_name booking.pk %}"
+   class="btn btn-outline-primary btn-sm"
+   target="_blank"
+   rel="noopener"
+   title="Open course details PDF (map, contacts, fees and QR codes)">
+  <i class="bi bi-file-earmark-pdf me-1"></i>Course details PDF
+</a>
+{% endif %}

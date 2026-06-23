@@ -1,5 +1,5 @@
 {% for r in reports %}
-  <tr data-href="{% url 'accident_report_detail' r.id %}">
+  <tr data-href="{% url 'accident_report_detail' r.id %}{% if booking %}?booking={{ booking.id }}{% endif %}">
     <td><input type="checkbox" name="ids" value="{{ r.id }}"></td>
     <td>{% if r.date %}{{ r.date|date:"d/m/Y" }}{% else %}—{% endif %}</td>
     <td>{% if r.time %}{{ r.time|time:"H:i" }}{% else %}—{% endif %}</td>

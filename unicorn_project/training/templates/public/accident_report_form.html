@@ -4,7 +4,6 @@
 {% block title %}Accident / Incident Report{% endblock %}
 {% block title_text %}Accident / Incident Report{% endblock %}
 
-{# Header: logo + company name #}
 {% block header %}
   <div class="d-flex align-items-center gap-3 py-2">
     <img src="{% static 'training/img/logo.png' %}" alt="Unicorn Fire and Safety Solutions" height="100">
@@ -13,92 +12,340 @@
 {% endblock %}
 
 {% block content %}
-<form method="post" novalidate>
-  {% csrf_token %}
+<style>
+  .ar-page { max-width: 40rem; margin-inline: auto; }
+  .ar-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 0.85rem;
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+    overflow: hidden;
+  }
+  .ar-section { padding: 1.15rem 1.2rem 0.35rem; }
+  .ar-section + .ar-section {
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    margin-top: 0.2rem;
+    padding-top: 1.15rem;
+  }
+  .ar-section-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 0.85rem;
+  }
+  .ar-footer {
+    padding: 1rem 1.2rem 1.2rem;
+    border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    background: var(--app-surface-2, #f8fafc);
+  }
+</style>
 
-  <div class="card card-narrow shadow-sm">
-    <div class="card-body">
-      {{ form.as_p }}
-      <button class="btn btn-primary">Submit report</button>
+<div class="ar-page">
+  <form method="post" novalidate id="accident-report-form">
+    {% csrf_token %}
+    {% if booking %}
+      <input type="hidden" name="ref" value="{{ booking.course_reference }}">
+    {% endif %}
+
+    <div class="ar-card">
+      {% if form.non_field_errors %}
+        <div class="alert alert-danger m-3 mb-0">{{ form.non_field_errors }}</div>
+      {% endif %}
+
+      {% if form.course_type.is_hidden %}
+        {{ form.course_type }}
+        {% if course_type %}
+        <input type="hidden" id="ar-course-code" value="{{ course_type.code }}">
+        {% endif %}
+      {% else %}
+        <div class="d-none">
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="{{ form.course_type.id_for_label }}">Course</label>
+            <select name="course_type" class="form-select" id="ar-course-type" required>
+              <option value="">Select course…</option>
+              {% for ct in form.fields.course_type.queryset %}
+                <option value="{{ ct.pk }}" data-code="{{ ct.code }}" {% if form.course_type.value|stringformat:"s" == ct.pk|stringformat:"s" %}selected{% endif %}>{{ ct.name }}</option>
+              {% endfor %}
+            </select>
+            {% for e in form.course_type.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
+      {% endif %}
+
+      <div class="ar-section">
+        <div class="ar-section-title">When &amp; where</div>
+
+        {% if show_accident_date %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="{{ form.date.id_for_label }}">Incident date</label>
+            {{ form.date }}
+            <div class="form-text">Editable on dev so you can test reports for other course dates.</div>
+            {% for e in form.date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        {% else %}
+          {{ form.date }}
+        {% endif %}
+
+        {% if matching_sessions|length > 1 %}
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Session</label>
+            {% for s in matching_sessions %}
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="day_code" id="day-{{ s.day_code }}" value="{{ s.day_code }}" required>
+                <label class="form-check-label" for="day-{{ s.day_code }}">{{ s.label }}</label>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+
+      <div class="ar-section">
+        <div class="ar-section-title">Incident details</div>
+
+        <div class="row g-3">
+          <div class="col-sm-6">
+            <label class="form-label fw-semibold" for="{{ form.time.id_for_label }}">Time</label>
+            {{ form.time }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.location.id_for_label }}">Location</label>
+            {{ form.location }}
+            {% for e in form.location.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.injured_name.id_for_label }}">Injured person</label>
+            {{ form.injured_name }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.injured_address.id_for_label }}">Injured person address</label>
+            {{ form.injured_address }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.what_happened.id_for_label }}">What happened?</label>
+            {{ form.what_happened }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.injuries_sustained.id_for_label }}">Injuries sustained</label>
+            {{ form.injuries_sustained }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.actions_carried_out.id_for_label }}">Actions carried out</label>
+            {{ form.actions_carried_out }}
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold" for="{{ form.actions_prevent_recurrence.id_for_label }}">Actions to prevent recurrence</label>
+            {{ form.actions_prevent_recurrence }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold" for="{{ form.first_aider_name.id_for_label }}">First aider</label>
+            {{ form.first_aider_name }}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold" for="{{ form.reporter_name.id_for_label }}">Reporter</label>
+            {{ form.reporter_name }}
+          </div>
+        </div>
+      </div>
+
+      <div class="ar-section">
+        <div class="ar-section-title">Reported to</div>
+        <div class="mb-2" id="ar-reported-to-wrap">
+          {% if form.single_instructor %}
+            {{ form.reported_to }}
+            <p class="form-control-plaintext fw-semibold mb-0 py-2 px-3 border rounded bg-light" id="ar-reported-to-display">
+              {{ form.single_instructor.name }}
+            </p>
+          {% else %}
+            <label class="form-label fw-semibold" for="{{ form.reported_to.id_for_label }}">Instructor</label>
+            {{ form.reported_to }}
+            <div class="form-text" id="ar-reported-to-help">Only instructors teaching this course on the selected date are listed.</div>
+          {% endif %}
+          <div class="alert alert-warning py-2 px-3 small mb-0 mt-2 {% if not instructors_unavailable %}d-none{% endif %}" id="ar-no-instructors-alert" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            No instructors are scheduled for this course on the selected date. Try another incident date or check with your trainer.
+          </div>
+          {% for e in form.reported_to.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+      </div>
+
+      <div class="ar-footer">
+        <button type="submit" class="btn btn-primary w-100">Submit report</button>
+      </div>
     </div>
-  </div>
-</form>
+  </form>
+</div>
 
 <script>
 (function () {
   function byId(id) { return document.getElementById(id); }
 
-  // --- 1) Default date/time (only if blank) ---
-  function defaultDateTime() {
+  function defaultTime() {
     try {
-      var d = byId('ar-date');
       var t = byId('ar-time');
-
-      if (d && !d.value) {
-        var today = new Date();
-        d.value = today.toISOString().slice(0,10); // yyyy-mm-dd
-      }
       if (t && !t.value) {
         var now = new Date();
-        var hh = String(now.getHours()).padStart(2, '0');
-        var mm = String(now.getMinutes()).padStart(2, '0');
-        t.value = hh + ':' + mm;
+        t.value = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
       }
-    } catch(e) { console.warn('defaultDateTime:', e); }
+    } catch(e) {}
   }
 
-  // --- 2) Mirror first-aider -> reporter (until reporter edited) ---
   function mirrorNames() {
     try {
       var fa  = byId('ar-first-aider');
       var rep = byId('ar-reporter');
       if (!fa || !rep) return;
-
       var reporterTouched = false;
       rep.addEventListener('input', function(){ reporterTouched = true; });
-
       fa.addEventListener('input', function(){
-        if (!reporterTouched) {
-          rep.value = fa.value || '';
-        }
+        if (!reporterTouched) rep.value = fa.value || '';
       });
-      // initial
       if (!rep.value) rep.value = fa.value || '';
-    } catch(e) { console.warn('mirrorNames:', e); }
+    } catch(e) {}
   }
 
-  // --- 3) Google Places for injured address ---
   function initPlaces() {
     try {
       var el = byId('ar-injured-address');
-      if (!el) return;
-      if (!window.google || !google.maps || !google.maps.places) return;
-
+      if (!el || !window.google || !google.maps || !google.maps.places) return;
       var autocomplete = new google.maps.places.Autocomplete(el, {
-        fields: ['formatted_address', 'geometry', 'name'],
+        fields: ['formatted_address'],
         types: ['address'],
-        componentRestrictions: { country: ['gb', 'ie'] } // adjust as you like
+        componentRestrictions: { country: ['gb', 'ie'] }
       });
       autocomplete.addListener('place_changed', function(){
         var place = autocomplete.getPlace();
-        if (place && place.formatted_address) {
-          el.value = place.formatted_address;
-        }
+        if (place && place.formatted_address) el.value = place.formatted_address;
       });
-    } catch(e) { console.warn('initPlaces:', e); }
+    } catch(e) {}
   }
 
-  // Run after DOM is ready
+  function courseCode() {
+    var hidden = document.getElementById('ar-course-code');
+    if (hidden && hidden.value) return hidden.value.trim();
+    var courseEl = byId('ar-course-type');
+    if (!courseEl) return "{{ course_type.code|default:''|escapejs }}";
+    var opt = courseEl.options[courseEl.selectedIndex];
+    if (!opt) return '';
+    return (opt.getAttribute('data-code') || '').trim();
+  }
+
+  function setSingleInstructorDisplay(inst) {
+    var wrap = byId('ar-reported-to-wrap');
+    var field = byId('ar-reported-to');
+    var display = byId('ar-reported-to-display');
+    var help = byId('ar-reported-to-help');
+    if (!wrap) return;
+
+    if (field && field.tagName === 'SELECT') {
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = 'reported_to';
+      hidden.id = 'ar-reported-to';
+      hidden.value = inst.id;
+      field.replaceWith(hidden);
+      field = hidden;
+    } else if (field) {
+      field.value = inst.id;
+    }
+
+    if (help) help.classList.add('d-none');
+
+    if (!display) {
+      display = document.createElement('p');
+      display.id = 'ar-reported-to-display';
+      display.className = 'form-control-plaintext fw-semibold mb-0 py-2 px-3 border rounded bg-light';
+      var anchor = field || wrap.querySelector('[id="ar-reported-to"]') || wrap.firstChild;
+      wrap.insertBefore(display, anchor ? anchor.nextSibling : null);
+    }
+    display.textContent = inst.name;
+    display.classList.remove('d-none');
+  }
+
+  function setMultiInstructorSelect(instructors, message) {
+    var wrap = byId('ar-reported-to-wrap');
+    var field = byId('ar-reported-to');
+    var display = byId('ar-reported-to-display');
+    var help = byId('ar-reported-to-help');
+    var noAlert = byId('ar-no-instructors-alert');
+    if (!wrap) return;
+
+    if (display) display.classList.add('d-none');
+
+    var select = field;
+    if (field && field.tagName !== 'SELECT') {
+      select = document.createElement('select');
+      select.name = 'reported_to';
+      select.id = 'ar-reported-to';
+      select.className = 'form-select';
+      select.required = true;
+      field.replaceWith(select);
+    } else if (select) {
+      select.classList.remove('d-none');
+    }
+
+    if (!select) return;
+
+    var current = select.value;
+    select.innerHTML = '';
+    if (!instructors.length) {
+      var empty = document.createElement('option');
+      empty.value = '';
+      empty.textContent = message || 'No instructors scheduled on this date';
+      select.appendChild(empty);
+      if (noAlert) noAlert.classList.remove('d-none');
+    } else {
+      if (noAlert) noAlert.classList.add('d-none');
+      instructors.forEach(function(item, idx){
+        var opt = document.createElement('option');
+        opt.value = item.id;
+        opt.textContent = item.name;
+        if (item.id === current || (!current && idx === 0)) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+    if (help) help.classList.remove('d-none');
+  }
+
+  function refreshInstructors() {
+    var dateEl = byId('ar-date');
+    var dateVal = dateEl ? dateEl.value : '';
+    var code = courseCode();
+    if (!code) return;
+
+    var url = new URL("{% url 'accident_report_instructors_api' %}", window.location.origin);
+    if (dateVal) url.searchParams.set('date', dateVal);
+    url.searchParams.set('course', code);
+
+    fetch(url, { credentials: 'same-origin' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){
+        if (!data || !Array.isArray(data.instructors)) return;
+        if (data.instructors.length === 1) {
+          setSingleInstructorDisplay(data.instructors[0]);
+          var noAlert = byId('ar-no-instructors-alert');
+          if (noAlert) noAlert.classList.add('d-none');
+        } else {
+          setMultiInstructorSelect(data.instructors, data.message);
+        }
+      })
+      .catch(function(){});
+  }
+
   document.addEventListener('DOMContentLoaded', function(){
-    defaultDateTime();
+    defaultTime();
     mirrorNames();
-
-    // If the Google script announced itself
     document.addEventListener('gmaps:ready', initPlaces);
+    if (window.google && google.maps && google.maps.places) initPlaces();
 
-    // Or if it was already loaded before we got here
-    if (window.google && google.maps && google.maps.places) {
-      initPlaces();
+    var courseEl = byId('ar-course-type');
+    var dateEl = byId('ar-date');
+    if (courseEl) courseEl.addEventListener('change', refreshInstructors);
+    if (dateEl) dateEl.addEventListener('change', refreshInstructors);
+    // Server may already have resolved the instructor; do not wipe on load.
+    if (!byId('ar-reported-to-display') && (byId('ar-course-code') || courseEl)) {
+      refreshInstructors();
     }
   });
 })();

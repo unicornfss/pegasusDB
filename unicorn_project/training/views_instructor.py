@@ -61,6 +61,8 @@ from .services.assessment_exams import (
 from .utils.instructor_access import (
     booking_has_invoice_for,
     instructor_bookings_queryset,
+    instructor_can_access_booking,
+    instructor_can_access_day,
     instructor_visible_booking_ids,
     lead_invoice_status_map,
 )
@@ -1316,13 +1318,64 @@ def instructor_send_telegram_booking(request, pk):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
-    from .utils.booking_notifications import notify_resend
+    from .utils.booking_notifications import notify_resend_telegram
 
-    if notify_resend(booking):
+    if notify_resend_telegram(booking):
         messages.success(request, "Booking details resent via Telegram.")
     else:
-        messages.warning(request, "Could not send Telegram. Link your account on Profile and try again.")
+        messages.warning(request, "Could not send via Telegram. Link Telegram on Profile and try again.")
     return redirect("instructor_booking_detail", pk=booking.pk)
+
+
+@login_required
+@require_POST
+def instructor_send_email_booking(request, pk):
+    booking = get_object_or_404(
+        Booking.objects.select_related(
+            "instructor",
+            "instructor__user",
+            "course_type",
+            "business",
+            "training_location",
+        ).prefetch_related("days"),
+        pk=pk,
+    )
+    instr = getattr(request.user, "personnel", None)
+    if not instr or not instructor_can_access_booking(instr, booking):
+        messages.error(request, "You do not have access to this booking.")
+        return redirect("instructor_bookings")
+
+    from .utils.booking_notifications import notify_resend_email
+
+    if notify_resend_email(booking):
+        messages.success(request, "Booking details resent via email.")
+    else:
+        messages.warning(request, "Could not send via email. Check your email address on Profile.")
+    return redirect("instructor_booking_detail", pk=booking.pk)
+
+
+@login_required
+def instructor_booking_course_pack_pdf(request, pk):
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    booking = get_object_or_404(
+        Booking.objects.select_related(
+            "instructor",
+            "instructor__user",
+            "course_type",
+            "business",
+            "training_location",
+        ).prefetch_related("days", "course_type__exams"),
+        pk=pk,
+    )
+    instr = getattr(request.user, "personnel", None)
+    if not (request.user.is_staff or (instr and instructor_can_access_booking(instr, booking))):
+        return HttpResponseForbidden("You do not have access to this booking.")
+
+    from .utils.booking_notification_pdf import booking_course_pack_pdf_response
+
+    return booking_course_pack_pdf_response(booking)
 
 
 @login_required
@@ -1568,7 +1621,14 @@ def instructor_booking_detail(request, pk):
     booking = get_object_or_404(
         Booking.objects.select_related(
             "course_type", "business", "instructor", "instructor__user", "training_location"
-        ).prefetch_related("telegram_notifications", "telegram_notifications__personnel", "days"),
+        ).prefetch_related(
+            "telegram_notifications",
+            "telegram_notifications__personnel",
+            "email_notifications",
+            "email_notifications__personnel",
+            "course_type__online_exercises",
+            "days",
+        ),
         pk=pk,
     )
 
@@ -2439,8 +2499,17 @@ def instructor_booking_detail(request, pk):
     ctx["exam_wrong_summary_by_seq"] = exam_wrong_summary_by_seq
     ctx["has_exam"] = has_exam
 
-    # If someone manually uses ?tab=exams for a course with no exams, force tab back
+    from .utils.online_exercises import booking_accident_reports_enabled
+    from .utils.accident_reports import booking_accident_reports_context
+
+    has_accident_reports = booking_accident_reports_enabled(booking)
+    ctx["has_accident_reports"] = has_accident_reports
+    if has_accident_reports:
+        ctx.update(booking_accident_reports_context(request, booking, portal="instructor"))
+
     if ctx.get("active_tab") == "exams" and not has_exam:
+        ctx["active_tab"] = "course-info"
+    if ctx.get("active_tab") == "accident-reports" and not has_accident_reports:
         ctx["active_tab"] = "course-info"
     
     # -------------------------------------------------------

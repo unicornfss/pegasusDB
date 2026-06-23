@@ -13,33 +13,86 @@ def user_editable_booking_notes(booking) -> str:
     return "\n".join(kept).strip()
 
 
+def _notification_label(notification_type: str) -> str:
+    if notification_type in NOTIFICATION_LABELS:
+        return NOTIFICATION_LABELS[notification_type]
+    if notification_type.startswith("upcoming_booking_"):
+        offset = notification_type.removeprefix("upcoming_booking_")
+        day_word = "day" if offset == "1" else "days"
+        return f"upcoming booking reminder ({offset} {day_word} before)"
+    return notification_type.replace("_", " ")
+
+
+def _recipient_name(personnel) -> str:
+    if not personnel:
+        return ""
+    return (personnel.name or personnel.email or "instructor").strip()
+
+
+def _format_notification_message(
+    *,
+    channel: str,
+    notification_type: str,
+    personnel,
+    success: bool,
+    error_text: str = "",
+) -> str:
+    label = _notification_label(notification_type)
+    recipient = _recipient_name(personnel)
+
+    if success:
+        message = f"{label} sent"
+        if channel == "Email":
+            message += " with course pack PDF"
+        if recipient:
+            message += f" to {recipient}"
+        return message + "."
+
+    message = f"{label} failed"
+    if recipient:
+        message += f" for {recipient}"
+    message += "."
+    if error_text:
+        message += f" ({error_text})"
+    return message
+
+
+def _entries_from_notifications(queryset, *, channel: str) -> list[dict]:
+    entries = []
+    for item in queryset:
+        entries.append(
+            {
+                "sent_at": item.sent_at,
+                "channel": channel,
+                "message": _format_notification_message(
+                    channel=channel,
+                    notification_type=item.notification_type,
+                    personnel=item.personnel,
+                    success=item.success,
+                    error_text=item.error_text or "",
+                ),
+                "success": item.success,
+            }
+        )
+    return entries
+
+
 def communication_log_entries(booking):
     """Read-only notification history for a booking (newest first)."""
     entries = []
 
-    notifications = booking.telegram_notifications.select_related("personnel").all()
-    for item in notifications:
-        label = NOTIFICATION_LABELS.get(item.notification_type, item.notification_type)
-        recipient = ""
-        if item.personnel:
-            recipient = item.personnel.name or item.personnel.email or "instructor"
-        if item.success:
-            message = f"Telegram {label} sent to {recipient}." if recipient else f"Telegram {label} sent."
-        else:
-            message = f"Telegram {label} failed"
-            if recipient:
-                message += f" for {recipient}"
-            message += "."
-            if item.error_text:
-                message += f" ({item.error_text})"
-        entries.append(
-            {
-                "sent_at": item.sent_at,
-                "channel": "Telegram",
-                "message": message,
-                "success": item.success,
-            }
+    entries.extend(
+        _entries_from_notifications(
+            booking.telegram_notifications.select_related("personnel").all(),
+            channel="Telegram",
         )
+    )
+    entries.extend(
+        _entries_from_notifications(
+            booking.email_notifications.select_related("personnel").all(),
+            channel="Email",
+        )
+    )
 
     seen_messages = {e["message"] for e in entries if e.get("sent_at")}
     for line in (booking.booking_notes or "").splitlines():

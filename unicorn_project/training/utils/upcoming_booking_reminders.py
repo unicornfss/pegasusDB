@@ -4,7 +4,9 @@ from datetime import datetime, time, timedelta
 
 from django.utils import timezone
 
-from ..models import Booking, Personnel, TelegramNotification
+from django.db.models import Q
+
+from ..models import Booking, EmailNotification, Personnel, TelegramNotification
 from .telegram_today import first_day_start_for_booking
 
 logger = logging.getLogger(__name__)
@@ -28,9 +30,16 @@ def upcoming_notification_type(offset_days: int) -> str:
 
 
 def _already_sent(booking, offset_days: int) -> bool:
-    return TelegramNotification.objects.filter(
+    ntype = upcoming_notification_type(offset_days)
+    if TelegramNotification.objects.filter(
         booking=booking,
-        notification_type=upcoming_notification_type(offset_days),
+        notification_type=ntype,
+        success=True,
+    ).exists():
+        return True
+    return EmailNotification.objects.filter(
+        booking=booking,
+        notification_type=ntype,
         success=True,
     ).exists()
 
@@ -52,10 +61,9 @@ def due_upcoming_reminders(now=None) -> list[UpcomingReminderSession]:
     today = now.date()
     due: list[UpcomingReminderSession] = []
 
-    personnel_qs = Personnel.objects.filter(
-        notify_upcoming_bookings_telegram=True,
-        is_active=True,
-    ).exclude(telegram_chat_id="")
+    personnel_qs = Personnel.objects.filter(is_active=True).filter(
+        Q(notify_upcoming_bookings_telegram=True) | Q(notify_upcoming_bookings_email=True)
+    )
 
     for personnel in personnel_qs:
         offsets = personnel.upcoming_reminder_offsets()

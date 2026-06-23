@@ -226,6 +226,10 @@
     background: rgba(255, 193, 7, .18);
     color: #b58100;
   }
+  .collapsible-card .header-icon-badge--exercise {
+    background: rgba(220, 53, 69, .12);
+    color: #b02a37;
+  }
   .collapsible-card .header-icon-badge--qr {
     background: rgba(139, 0, 0, .12);
     color: var(--unicorn-red, #8B0000);
@@ -323,6 +327,10 @@
   .delegate-qr-tile--exam .tile-icon-wrap {
     background: rgba(139, 0, 0, .11);
     color: var(--unicorn-red, #8B0000);
+  }
+  .delegate-qr-tile--accident .tile-icon-wrap {
+    background: rgba(220, 53, 69, .12);
+    color: #b02a37;
   }
   .delegate-qr-tile .tile-title {
     font-weight: 600;
@@ -490,6 +498,14 @@
             <div class="field-compact">{{ form.optional_modules_required }}</div>
             <div class="form-text">How many optional competencies (0–5) instructors must pick in assessments.</div>
             {% for e in form.optional_modules_required.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+
+          <div class="exam-toggle-card mt-3 mb-0">
+            <div class="form-check">
+              {{ form.has_online_exercises }}
+              <label class="form-check-label fw-semibold" for="id_has_online_exercises">Delegates need to submit online exercises (e.g. accident reports)</label>
+            </div>
+            {% for e in form.has_online_exercises.errors %}<div class="text-danger small mt-1">{{ e }}</div>{% endfor %}
           </div>
         </div>
 
@@ -671,6 +687,37 @@
     </div>
   </div>
 
+  <div class="row g-3 course-panels-row {% if not form.has_online_exercises.value %}d-none{% endif %}" id="online-exercises-row">
+    <div class="col-12">
+      <div class="admin-form-card collapsible-card h-100 mb-0">
+        <button class="card-header-toggle collapsed" type="button"
+                data-bs-toggle="collapse" data-bs-target="#online-exercises-panel"
+                aria-expanded="false" aria-controls="online-exercises-panel">
+          <span class="header-icon-badge header-icon-badge--exercise"><i class="bi bi-clipboard2-pulse"></i></span>
+          <span class="card-header-title">Delegate submitted exercises</span>
+          <span class="header-meta-pill">{{ form.online_exercises.field.choices|length }} available</span>
+          <span class="toggle-chevron-wrap ms-auto"><i class="bi bi-chevron-down toggle-chevron"></i></span>
+        </button>
+        <div class="collapse" id="online-exercises-panel">
+        <div class="card-body">
+          <p class="text-muted small mb-3">Tick which online exercises delegates must complete for courses of this type. Enabled exercises appear as tabs on each booking.</p>
+          <div class="row g-2">
+            {% for checkbox in form.online_exercises %}
+              <div class="col-12 col-md-6 col-xl-4">
+                <div class="form-check">
+                  {{ checkbox.tag }}
+                  <label class="form-check-label" for="{{ checkbox.id_for_label }}">{{ checkbox.choice_label }}</label>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+          {% for e in form.online_exercises.errors %}<div class="text-danger small mt-2">{{ e }}</div>{% endfor %}
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   {# ── Delegate QR codes (collapsed by default) ── #}
   <div class="admin-form-card collapsible-card mb-0">
     <button class="card-header-toggle collapsed" type="button"
@@ -685,14 +732,14 @@
     </button>
     <div class="collapse" id="delegate-qr-panel">
     <div class="card-body">
-      {% if register_links or feedback_links or exam_links %}
+      {% if register_links or feedback_links or accident_report_links or exam_links %}
         {% if object.is_suspended %}
         <div class="alert alert-warning py-2 px-3 small mb-3">
           Suspended — registration links will not accept new delegates until reactivated.
         </div>
         {% endif %}
         <p class="text-muted small mb-3 mb-md-4 delegate-qr-panel-intro">
-          Short links and QR codes for delegate registration, feedback, and exams on this course.
+          Short links and QR codes for delegate registration, feedback, accident reports, and exams on this course.
         </p>
         <div class="row g-3 delegate-qr-grid">
           {% if register_links %}
@@ -755,6 +802,40 @@
                 </div>
                 <div>
                   <a class="btn btn-sm btn-outline-primary" href="{{ feedback_links.qr_url }}" download="{{ feedback_links.download_name }}">
+                    <i class="bi bi-download"></i> Download QR
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if accident_report_links %}
+          <div class="col-12 col-md-6 col-xl-4">
+            <div class="delegate-qr-tile delegate-qr-tile--accident">
+              <div class="tile-head">
+                <span class="tile-icon-wrap"><i class="bi bi-clipboard2-pulse"></i></span>
+                <div>
+                  <div class="tile-title">Accident reports</div>
+                  <div class="tile-desc">Incident report form with course pre-selected</div>
+                </div>
+              </div>
+              <label class="form-label fw-semibold small mb-1">Short link</label>
+              <div class="input-group input-group-sm mb-3">
+                <input type="text" class="form-control js-copy-source" readonly value="{{ accident_report_links.short_url }}" id="accident-report-short-url">
+                <button type="button" class="btn btn-outline-secondary js-copy-btn" data-target="#accident-report-short-url" title="Copy">
+                  <i class="bi bi-clipboard"></i>
+                </button>
+                <a class="btn btn-outline-primary" href="{{ accident_report_links.short_url }}" target="_blank" rel="noopener" title="Open">
+                  <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+              </div>
+              <div class="text-center qr-actions">
+                <div class="register-qr-wrap d-inline-block mb-2">
+                  <img src="{{ accident_report_links.qr_url }}" alt="Accident report QR for {{ object.code }}" class="img-fluid" style="max-width: 120px;">
+                </div>
+                <div>
+                  <a class="btn btn-sm btn-outline-primary" href="{{ accident_report_links.qr_url }}" download="{{ accident_report_links.download_name }}">
                     <i class="bi bi-download"></i> Download QR
                   </a>
                 </div>
@@ -896,9 +977,17 @@
     if (compCol) compCol.classList.toggle('col-xl-6', show);
     if (num) { if (show) num.setAttribute('required','required'); else num.removeAttribute('required'); }
   }
+  function syncOnlineExerciseFields(){
+    var has = q('input[name="has_online_exercises"]') || q('#id_has_online_exercises');
+    var row = document.getElementById('online-exercises-row');
+    if (!has || !row) return;
+    row.classList.toggle('d-none', !has.checked);
+  }
   document.addEventListener('DOMContentLoaded', function(){
     var has = q('input[name="has_exam"]') || q('#id_has_exam');
     if (has){ has.addEventListener('change', syncExamFields); syncExamFields(); }
+    var hasEx = q('input[name="has_online_exercises"]') || q('#id_has_online_exercises');
+    if (hasEx){ hasEx.addEventListener('change', syncOnlineExerciseFields); syncOnlineExerciseFields(); }
   });
 })();
 

@@ -2,6 +2,12 @@ from django.conf import settings
 
 from ..models import TelegramNotification
 from .booking_details import NOTIFICATION_HEADINGS, format_booking_telegram_message
+from .booking_email import notify_instructor_via_email
+from .notification_prefs import (
+    personnel_wants_notification,
+    should_notify_booking,
+    should_notify_booking_detail_changes,
+)
 from .telegram_client import send_telegram_message
 
 
@@ -15,33 +21,6 @@ NOTIFICATION_LABELS = {
     "manual": "manual message",
     "resend": "booking details resend",
 }
-
-
-def should_notify_booking(booking) -> bool:
-    """Practice/dummy bookings are notified with a clear not-real banner at the top."""
-    return True
-
-
-def should_notify_booking_detail_changes(booking) -> bool:
-    """
-    Whether to alert the instructor about booking detail edits.
-    Suppressed while a course is in progress (Telegram now; email when added).
-    """
-    return getattr(booking, "status", None) != "in_progress"
-
-
-def personnel_wants_notification(personnel, notification_type: str) -> bool:
-    if notification_type == "new_booking":
-        return bool(personnel.notify_new_bookings_telegram)
-    if notification_type in {"booking_changes", "booking_cancellation"}:
-        return bool(personnel.notify_booking_changes_telegram)
-    if notification_type == "booking_reminder":
-        return bool(personnel.notify_reminders_telegram)
-    if notification_type == "departure_reminder":
-        return bool(personnel.notify_reminders_telegram)
-    if notification_type.startswith("upcoming_booking_"):
-        return bool(personnel.notify_upcoming_bookings_telegram)
-    return True
 
 
 def notify_instructor_via_telegram(
@@ -68,7 +47,7 @@ def notify_instructor_via_telegram(
     if not instructor or not (instructor.telegram_chat_id or "").strip():
         return False
 
-    if not force and not personnel_wants_notification(instructor, notification_type):
+    if not force and not personnel_wants_notification(instructor, notification_type, channel="telegram"):
         return False
 
     text = format_booking_telegram_message(
@@ -92,7 +71,9 @@ def notify_instructor_via_telegram(
 
 
 def notify_new_booking(booking):
-    return notify_instructor_via_telegram(booking, "new_booking")
+    telegram = notify_instructor_via_telegram(booking, "new_booking")
+    email = notify_instructor_via_email(booking, "new_booking")
+    return telegram or email
 
 
 def notify_booking_changes(booking, *, intro=None, changed_areas=None):
@@ -102,12 +83,19 @@ def notify_booking_changes(booking, *, intro=None, changed_areas=None):
         return False
     if intro is None:
         intro = "A booking assigned to you has been updated."
-    return notify_instructor_via_telegram(
+    telegram = notify_instructor_via_telegram(
         booking,
         "booking_changes",
         intro=intro,
         changed_areas=changed_areas,
     )
+    email = notify_instructor_via_email(
+        booking,
+        "booking_changes",
+        intro=intro,
+        changed_areas=changed_areas,
+    )
+    return telegram or email
 
 
 def notify_booking_cancellation(booking, *, intro=None):
@@ -115,68 +103,88 @@ def notify_booking_cancellation(booking, *, intro=None):
 
     if intro is None:
         intro = "A booking assigned to you has been cancelled."
-    return notify_instructor_via_telegram(
+    telegram = notify_instructor_via_telegram(
         booking,
         "booking_cancellation",
         intro=intro,
         changed_areas=[CHANGE_CANCELLATION],
     )
+    email = notify_instructor_via_email(
+        booking,
+        "booking_cancellation",
+        intro=intro,
+        changed_areas=[CHANGE_CANCELLATION],
+    )
+    return telegram or email
 
 
 def notify_manual(booking, *, intro=None):
     if intro is None:
         intro = NOTIFICATION_HEADINGS.get("manual", "Booking details")
-    return notify_instructor_via_telegram(booking, "manual", intro=intro, force=True)
+    telegram = notify_instructor_via_telegram(booking, "manual", intro=intro, force=True)
+    email = notify_instructor_via_email(booking, "manual", intro=intro, force=True)
+    return telegram or email
 
 
-def notify_resend(booking):
+def notify_resend_telegram(booking):
     return notify_instructor_via_telegram(booking, "resend", force=True)
 
 
+def notify_resend_email(booking):
+    return notify_instructor_via_email(booking, "resend", force=True)
+
+
+def notify_resend(booking):
+    return notify_resend_telegram(booking) or notify_resend_email(booking)
+
+
 def notify_booking_reminder(booking):
-    return notify_instructor_via_telegram(booking, "booking_reminder")
+    telegram = notify_instructor_via_telegram(booking, "booking_reminder")
+    email = notify_instructor_via_email(booking, "booking_reminder")
+    return telegram or email
 
 
 def notify_departure_reminder(booking, *, on_date, morning_today=False, travel_seconds=None):
-    from django.conf import settings
-
     from .telegram_today import format_departure_reminder_message, format_morning_today_reminder_message
 
     if not should_notify_booking(booking):
         return False
 
-    if not (settings.TELEGRAM_BOT_TOKEN or "").strip():
-        return False
-
     instructor = booking.instructor
-    if not instructor or not (instructor.telegram_chat_id or "").strip():
-        return False
+    telegram_ok = False
+    email_ok = False
 
-    if not personnel_wants_notification(instructor, "departure_reminder"):
-        return False
+    if (settings.TELEGRAM_BOT_TOKEN or "").strip() and instructor and (instructor.telegram_chat_id or "").strip():
+        if personnel_wants_notification(instructor, "departure_reminder", channel="telegram"):
+            if morning_today:
+                text = format_morning_today_reminder_message(booking, on_date)
+            else:
+                buffer_minutes = int(getattr(settings, "DEPARTURE_REMINDER_BUFFER_MINUTES", 30))
+                text = format_departure_reminder_message(
+                    booking,
+                    on_date,
+                    travel_seconds=int(travel_seconds or 0),
+                    buffer_minutes=buffer_minutes,
+                )
+            message, error = send_telegram_message(instructor.telegram_chat_id, text)
+            telegram_ok = message is not None
+            TelegramNotification.objects.create(
+                booking=booking,
+                personnel=instructor,
+                notification_type="departure_reminder",
+                message_id=str(message.message_id) if message else "",
+                success=telegram_ok,
+                error_text=error or "",
+            )
 
-    if morning_today:
-        text = format_morning_today_reminder_message(booking, on_date)
-    else:
-        buffer_minutes = int(getattr(settings, "DEPARTURE_REMINDER_BUFFER_MINUTES", 30))
-        text = format_departure_reminder_message(
-            booking,
-            on_date,
-            travel_seconds=int(travel_seconds or 0),
-            buffer_minutes=buffer_minutes,
-        )
-    message, error = send_telegram_message(instructor.telegram_chat_id, text)
-    success = message is not None
-
-    TelegramNotification.objects.create(
-        booking=booking,
-        personnel=instructor,
-        notification_type="departure_reminder",
-        message_id=str(message.message_id) if message else "",
-        success=success,
-        error_text=error or "",
+    email_ok = notify_instructor_via_email(
+        booking,
+        "departure_reminder",
+        on_date=on_date,
+        morning_today=morning_today,
+        travel_seconds=travel_seconds,
     )
-    return success
+    return telegram_ok or email_ok
 
 
 def notify_upcoming_booking_reminder(booking, *, offset_days, first_date):
@@ -186,31 +194,32 @@ def notify_upcoming_booking_reminder(booking, *, offset_days, first_date):
     if not should_notify_booking(booking):
         return False
 
-    if not (settings.TELEGRAM_BOT_TOKEN or "").strip():
-        return False
-
     instructor = booking.instructor
-    if not instructor or not (instructor.telegram_chat_id or "").strip():
-        return False
-
     notification_type = upcoming_notification_type(offset_days)
-    if not personnel_wants_notification(instructor, notification_type):
-        return False
+    telegram_ok = False
 
-    text = format_upcoming_booking_reminder_message(
+    if (settings.TELEGRAM_BOT_TOKEN or "").strip() and instructor and (instructor.telegram_chat_id or "").strip():
+        if personnel_wants_notification(instructor, notification_type, channel="telegram"):
+            text = format_upcoming_booking_reminder_message(
+                booking,
+                offset_days=offset_days,
+                first_date=first_date,
+            )
+            message, error = send_telegram_message(instructor.telegram_chat_id, text)
+            telegram_ok = message is not None
+            TelegramNotification.objects.create(
+                booking=booking,
+                personnel=instructor,
+                notification_type=notification_type,
+                message_id=str(message.message_id) if message else "",
+                success=telegram_ok,
+                error_text=error or "",
+            )
+
+    email_ok = notify_instructor_via_email(
         booking,
+        notification_type,
         offset_days=offset_days,
         first_date=first_date,
     )
-    message, error = send_telegram_message(instructor.telegram_chat_id, text)
-    success = message is not None
-
-    TelegramNotification.objects.create(
-        booking=booking,
-        personnel=instructor,
-        notification_type=notification_type,
-        message_id=str(message.message_id) if message else "",
-        success=success,
-        error_text=error or "",
-    )
-    return success
+    return telegram_ok or email_ok

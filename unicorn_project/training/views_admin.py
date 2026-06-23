@@ -648,7 +648,7 @@ CourseCompetencyFormSet = inlineformset_factory(
 @admin_required
 def course_form(request, pk=None):
     if pk:
-        ct = get_object_or_404(CourseType, pk=pk)
+        ct = get_object_or_404(CourseType.objects.prefetch_related("online_exercises"), pk=pk)
         title = "Edit course type"
     else:
         ct = CourseType()
@@ -666,6 +666,20 @@ def course_form(request, pk=None):
                 ct.code = unique_course_code(ct.name, exclude_pk=ct.pk if ct.pk else None)
             ct.save()
             formset.instance = ct
+
+            from .models import CourseTypeOnlineExercise
+
+            selected_exercises = set(form.cleaned_data.get("online_exercises") or [])
+            if ct.has_online_exercises:
+                existing = set(ct.online_exercises.values_list("exercise_key", flat=True))
+                for key in selected_exercises - existing:
+                    CourseTypeOnlineExercise.objects.create(
+                        course_type=ct,
+                        exercise_key=key,
+                    )
+                ct.online_exercises.exclude(exercise_key__in=selected_exercises).delete()
+            else:
+                ct.online_exercises.all().delete()
 
             # Save competencies safely: keep any competency that is still referenced
             # by assessments instead of raising ProtectedError.
@@ -736,9 +750,11 @@ def course_form(request, pk=None):
 
     register_links = None
     feedback_links = None
+    accident_report_links = None
     exam_links = []
     delegate_qr_count = 0
     if pk and (ct.code or "").strip():
+        from .models import CourseTypeOnlineExercise
         from .utils.register_links import (
             course_register_full_url,
             course_register_short_url,
@@ -747,7 +763,12 @@ def course_form(request, pk=None):
             course_feedback_full_url,
             course_feedback_short_url,
         )
+        from .utils.accident_report_links import (
+            course_accident_report_full_url,
+            course_accident_report_short_url,
+        )
         from .utils.exam_links import exam_full_url, exam_short_url
+        from .utils.online_exercises import course_type_has_exercise
 
         register_links = {
             "short_url": course_register_short_url(request, ct.code),
@@ -761,6 +782,13 @@ def course_form(request, pk=None):
             "qr_url": reverse("public_feedback_short_qr", kwargs={"code": ct.code}),
             "download_name": f"feedback-{ct.code}.png",
         }
+        if course_type_has_exercise(ct, CourseTypeOnlineExercise.EXERCISE_ACCIDENT_REPORTS):
+            accident_report_links = {
+                "short_url": course_accident_report_short_url(request, ct.code),
+                "full_url": course_accident_report_full_url(request, ct.code),
+                "qr_url": reverse("public_accident_report_short_qr", kwargs={"code": ct.code}),
+                "download_name": f"accident-report-{ct.code}.png",
+            }
         if ct.has_exam:
             for ex in ct.exams.order_by("sequence"):
                 code = (ex.exam_code or "").strip()
@@ -778,6 +806,7 @@ def course_form(request, pk=None):
         delegate_qr_count = (
             (1 if register_links else 0)
             + (1 if feedback_links else 0)
+            + (1 if accident_report_links else 0)
             + len(exam_links)
         )
 
@@ -795,6 +824,7 @@ def course_form(request, pk=None):
         "object": ct,
         "register_links": register_links,
         "feedback_links": feedback_links,
+        "accident_report_links": accident_report_links,
         "exam_links": exam_links,
         "delegate_qr_count": delegate_qr_count,
         "cancel_url": reverse("admin_course_list"),
@@ -1160,7 +1190,24 @@ def booking_form(request, pk=None):
     - On POST: save and replace BookingDay rows from hidden JSON ('booking_days' or 'days_json').
     - On GET: send booking_days_initial_json so the days table repopulates.
     """
-    obj = get_admin_booking_or_404(request.user, pk) if pk else None
+    obj = (
+        get_admin_booking_or_404(
+            request.user,
+            pk,
+            Booking.objects.select_related(
+                "business", "course_type", "training_location", "instructor"
+            ).prefetch_related(
+                "days",
+                "telegram_notifications",
+                "telegram_notifications__personnel",
+                "email_notifications",
+                "email_notifications__personnel",
+                "course_type__online_exercises",
+            ),
+        )
+        if pk
+        else None
+    )
 
     if request.method == "POST":
         from .utils.booking_change_detection import (
@@ -1528,6 +1575,17 @@ def booking_form(request, pk=None):
     if active_tab == "exams" and not has_exam:
         active_tab = "course-info"
 
+    from .utils.online_exercises import booking_accident_reports_enabled
+    from .utils.accident_reports import booking_accident_reports_context
+
+    has_accident_reports = bool(obj and obj.pk and booking_accident_reports_enabled(obj))
+    if active_tab == "accident-reports" and not has_accident_reports:
+        active_tab = "course-info"
+
+    accident_reports_ctx = {}
+    if has_accident_reports:
+        accident_reports_ctx = booking_accident_reports_context(request, obj, portal="admin")
+
     # ----------------- BUILD CONTEXT -----------------
     ctx = {
         "title": ("Edit Booking" if obj else "New Booking"),
@@ -1559,6 +1617,7 @@ def booking_form(request, pk=None):
         "course_exams": course_exams,
         "attempts_by_exam": attempts_by_exam,
         "has_exam": has_exam,
+        "has_accident_reports": has_accident_reports,
         # certificates
         "cert_delegates": cert_delegates,
         "mileage_rate": get_meta("mileage_rate", "0"),
@@ -1574,6 +1633,9 @@ def booking_form(request, pk=None):
             ctx["communication_log_entries"] = communication_log_entries(obj)
         except Exception:
             ctx["communication_log_entries"] = []
+
+    if accident_reports_ctx:
+        ctx.update(accident_reports_ctx)
 
     return render(request, "admin/form_booking.html", ctx)
 
@@ -1731,16 +1793,62 @@ def admin_booking_telegram_send(request, pk):
             "instructor", "course_type", "business", "training_location"
         ).prefetch_related("days"),
     )
-    from .utils.booking_notifications import notify_resend
+    from .utils.booking_notifications import notify_resend_telegram
 
-    if notify_resend(booking):
+    if notify_resend_telegram(booking):
         messages.success(request, "Booking details resent via Telegram.")
     else:
         messages.warning(
             request,
-            "Could not send Telegram (instructor not linked or bot not configured).",
+            "Could not send via Telegram (instructor not linked or bot not configured).",
         )
     return redirect("admin_booking_edit", pk=booking.pk)
+
+
+@admin_required
+@require_http_methods(["POST"])
+def admin_booking_email_send(request, pk):
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
+        Booking.objects.select_related(
+            "instructor",
+            "instructor__user",
+            "course_type",
+            "business",
+            "training_location",
+        ).prefetch_related("days"),
+    )
+    from .utils.booking_notifications import notify_resend_email
+
+    if notify_resend_email(booking):
+        messages.success(request, "Booking details resent via email.")
+    else:
+        messages.warning(
+            request,
+            "Could not send via email (check the instructor has an email address).",
+        )
+    return redirect("admin_booking_edit", pk=booking.pk)
+
+
+@admin_required
+@require_http_methods(["GET"])
+def admin_booking_course_pack_pdf(request, pk):
+    booking = get_admin_booking_or_404(
+        request.user,
+        pk,
+        Booking.objects.select_related(
+            "instructor",
+            "instructor__user",
+            "course_type",
+            "business",
+            "training_location",
+        ).prefetch_related("days", "course_type__exams"),
+    )
+    from .utils.booking_notification_pdf import booking_course_pack_pdf_response
+
+    return booking_course_pack_pdf_response(booking)
+
 
 # --- Unlock a completed booking so instructor can edit again ---
 @admin_required
