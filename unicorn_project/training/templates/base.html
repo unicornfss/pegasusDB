@@ -603,6 +603,8 @@
   </script>
   {% endif %}
 
+  {% include "partials/release_notes_modal.html" %}
+
   <!-- 2FA Reminder Modal -->
   <div class="modal fade" id="twoFactorReminderModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
     <div class="modal-dialog">
@@ -628,60 +630,85 @@
   </div>
 
   <script>
-    // Show 2FA reminder modal if needed
-    function show2faModalIfNeeded() {
-      // Get the value with a default of 'false' if not present
-      var show2faPrompt = {{ show_2fa_prompt|lower|default:'false' }};
-      var modalEl = document.getElementById('twoFactorReminderModal');
-      
-      if (!modalEl) {
-        console.log('2FA modal element not found');
-        return;
-      }
-      
-      if (!show2faPrompt) {
-        console.log('2FA prompt disabled');
-        return;
-      }
-      
-      if (!window.bootstrap || !bootstrap.Modal) {
-        console.log('Bootstrap Modal not available');
-        // Retry after a short delay
-        setTimeout(show2faModalIfNeeded, 500);
-        return;
-      }
-      
-      try {
-        var modal = new bootstrap.Modal(modalEl, { backdrop: 'static', keyboard: false });
-        modal.show();
-        console.log('2FA modal shown');
-      } catch(err) {
-        console.error('Error showing 2FA modal:', err);
-      }
-    }
-    
-    // Show modal when DOM is ready
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', show2faModalIfNeeded);
-    } else {
-      show2faModalIfNeeded();
+    function postLoginDismiss(url, body) {
+      return fetch(url, {
+        method: 'POST',
+        headers: {
+          'X-CSRFToken': '{{ csrf_token }}',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        credentials: 'same-origin',
+        body: body || '',
+      });
     }
 
-    // Dismiss button: clear session flag so modal won't show on next page
+    function showBootstrapModal(modalId, onHidden) {
+      var modalEl = document.getElementById(modalId);
+      if (!modalEl || !window.bootstrap || !bootstrap.Modal) {
+        if (onHidden) onHidden();
+        return;
+      }
+      var modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static', keyboard: false });
+      if (onHidden) {
+        modalEl.addEventListener('hidden.bs.modal', function once() {
+          modalEl.removeEventListener('hidden.bs.modal', once);
+          onHidden();
+        });
+      }
+      modal.show();
+    }
+
+    function showReleaseNotesModalIfNeeded(onComplete) {
+      var showReleaseNotes = {{ show_release_notes|yesno:"true,false" }};
+      if (!showReleaseNotes) {
+        if (onComplete) onComplete();
+        return;
+      }
+      showBootstrapModal('releaseNotesModal', onComplete);
+    }
+
+    function show2faModalIfNeeded() {
+      var show2faPrompt = {{ show_2fa_prompt|yesno:"true,false" }};
+      if (!show2faPrompt) return;
+      showBootstrapModal('twoFactorReminderModal');
+    }
+
+    function initPostLoginModals() {
+      showReleaseNotesModalIfNeeded(show2faModalIfNeeded);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPostLoginModals);
+    } else {
+      initPostLoginModals();
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
+      var releaseBtn = document.getElementById('dismissReleaseNotesBtn');
+      if (releaseBtn) {
+        releaseBtn.addEventListener('click', function() {
+          var permanent = document.getElementById('releaseNotesDontShowAgain');
+          var body = permanent && permanent.checked ? 'permanent=1' : '';
+          postLoginDismiss('{% url "dismiss_release_notes" %}', body).finally(function() {
+            var modalEl = document.getElementById('releaseNotesModal');
+            if (modalEl) {
+              var modal = bootstrap.Modal.getInstance(modalEl);
+              if (modal) modal.hide();
+            }
+          });
+        });
+      }
+
       var dismissBtn = document.getElementById('dismiss2faPromptBtn');
       if (dismissBtn) {
         dismissBtn.addEventListener('click', function() {
-          fetch('{% url "dismiss_2fa_prompt" %}', {
-            method: 'POST',
-            headers: {'X-CSRFToken': '{{ csrf_token }}'},
-            credentials: 'same-origin'
+          postLoginDismiss('{% url "dismiss_2fa_prompt" %}').finally(function() {
+            var modalEl = document.getElementById('twoFactorReminderModal');
+            if (modalEl) {
+              var modal = bootstrap.Modal.getInstance(modalEl);
+              if (modal) modal.hide();
+            }
           });
-          var modalEl = document.getElementById('twoFactorReminderModal');
-          if (modalEl) {
-            var modal = bootstrap.Modal.getInstance(modalEl);
-            if (modal) modal.hide();
-          }
         });
       }
     });

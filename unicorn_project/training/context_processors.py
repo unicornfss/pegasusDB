@@ -80,6 +80,22 @@ def user_display_name(request):
     return {"display_name": name}
 
 
+def release_notes_prompt(request):
+    """Return whether to show the what's-new modal after login."""
+    from .release_notes import RELEASE_NOTES_FEATURES, RELEASE_NOTES_TITLE
+
+    show_prompt = bool(
+        getattr(request, "user", None)
+        and request.user.is_authenticated
+        and request.session.get("show_release_notes", False)
+    )
+    return {
+        "show_release_notes": show_prompt,
+        "release_notes_title": RELEASE_NOTES_TITLE,
+        "release_notes_features": RELEASE_NOTES_FEATURES,
+    }
+
+
 def two_factor_prompt(request):
     """Return whether to show the 2FA prompt to the user."""
     show_prompt = request.session.get("show_2fa_prompt", False)

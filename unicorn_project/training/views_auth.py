@@ -176,6 +176,29 @@ def _queue_two_factor_prompt(request, user):
         request.session["show_2fa_prompt"] = True
 
 
+def _queue_release_notes_prompt(request, user):
+    """Queue what's-new modal after login unless the user dismissed this release."""
+    from .release_notes import RELEASE_NOTES_ID
+
+    session_key = f"dismissed_release_notes_{RELEASE_NOTES_ID}"
+    try:
+        personnel = user.personnel
+        if personnel.dismissed_release_notes_id == RELEASE_NOTES_ID:
+            request.session["show_release_notes"] = False
+            return
+    except Personnel.DoesNotExist:
+        if request.session.get(session_key):
+            request.session["show_release_notes"] = False
+            return
+
+    request.session["show_release_notes"] = True
+
+
+def _queue_post_login_prompts(request, user):
+    _queue_two_factor_prompt(request, user)
+    _queue_release_notes_prompt(request, user)
+
+
 def custom_login(request):
     """Custom login view with 2FA support."""
     if request.user.is_authenticated:
@@ -193,7 +216,7 @@ def custom_login(request):
                     # Skip 2FA if this device is trusted
                     if _is_device_trusted(request, user):
                         login(request, user)
-                        _queue_two_factor_prompt(request, user)
+                        _queue_post_login_prompts(request, user)
                         return HttpResponseRedirect(reverse("post_login"))
                     # Store user ID and backend in session and redirect to 2FA verification
                     request.session['2fa_user_id'] = user.id
@@ -206,7 +229,7 @@ def custom_login(request):
             request.session.pop('2fa_user_id', None)
             request.session.pop('2fa_backend', None)
             login(request, user)
-            _queue_two_factor_prompt(request, user)
+            _queue_post_login_prompts(request, user)
             return HttpResponseRedirect(reverse("post_login"))
     else:
         form = AuthenticationForm(request)
@@ -220,7 +243,7 @@ def _complete_2fa_login(request, user, trust_device=False):
     user.backend = backend
     login(request, user)
     request.session.pop('2fa_user_id', None)
-    _queue_two_factor_prompt(request, user)
+    _queue_post_login_prompts(request, user)
     response = HttpResponseRedirect(reverse("post_login"))
     if trust_device:
         _set_trust_cookie(response, user)
@@ -491,6 +514,28 @@ def dismiss_2fa_prompt(request):
         request.session.pop("show_2fa_prompt", None)
         return JsonResponse({"ok": True})
     return JsonResponse({"ok": False}, status=405)
+
+
+@require_POST
+def dismiss_release_notes(request):
+    """Dismiss the what's-new modal for this login or permanently."""
+    from .release_notes import RELEASE_NOTES_ID
+
+    if not request.user.is_authenticated:
+        return JsonResponse({"ok": False}, status=403)
+
+    permanent = (request.POST.get("permanent") or "").strip() == "1"
+    if permanent:
+        session_key = f"dismissed_release_notes_{RELEASE_NOTES_ID}"
+        try:
+            personnel = request.user.personnel
+            personnel.dismissed_release_notes_id = RELEASE_NOTES_ID
+            personnel.save(update_fields=["dismissed_release_notes_id"])
+        except Personnel.DoesNotExist:
+            request.session[session_key] = True
+
+    request.session.pop("show_release_notes", None)
+    return JsonResponse({"ok": True})
 
 
 def regenerate_backup_codes(request):

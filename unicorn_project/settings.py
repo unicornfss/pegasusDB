@@ -203,6 +203,7 @@ TEMPLATES = [
                 "unicorn_project.training.context_processors.logo_context",
                 'unicorn_project.training.context_processors.user_display_name',
                 'unicorn_project.training.context_processors.two_factor_prompt',
+                'unicorn_project.training.context_processors.release_notes_prompt',
                 'unicorn_project.training.context_processors.course_swap_badges',
                 'unicorn_project.training.context_processors.inbox_badges',
             ],

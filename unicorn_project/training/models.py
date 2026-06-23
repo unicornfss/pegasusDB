@@ -288,6 +288,13 @@ class Personnel(models.Model):
         default="",
         help_text="Preferred dashboard when logging in (for users with multiple roles).",
     )
+
+    dismissed_release_notes_id = models.CharField(
+        max_length=40,
+        blank=True,
+        default="",
+        help_text="Release-notes modal ID the user chose not to see again.",
+    )
   
     is_active = models.BooleanField(default=True)
     can_login = models.BooleanField(default=True)
