@@ -1,35 +1,67 @@
-services:
-  - type: web
-    name: unicorn-django-starter
-    env: python
-    plan: free
-    buildCommand: |
-      pip install -r requirements.txt
-      python manage.py collectstatic --noinput
-      python manage.py check
-    preDeployCommand: |
-      python manage.py deploy_setup
-      python manage.py telegram_set_webhook
-    startCommand: |
-      gunicorn unicorn_project.wsgi:application --log-file -
-    envVars:
-      - key: DJANGO_SECRET_KEY
-        generateValue: true
-      - key: DJANGO_DEBUG
-        value: "False"
-      - key: GOOGLE_MAPS_API_KEY
-        sync: false
-      - key: ALLOWED_HOSTS
-        value: "unicorn.adminforge.co.uk,unicorn-django-starter.onrender.com,localhost,127.0.0.1"
-      - key: CSRF_TRUSTED_ORIGINS
-        value: "https://unicorn.adminforge.co.uk,https://unicorn-django-starter.onrender.com"
-      - key: SITE_URL
-        value: "https://unicorn.adminforge.co.uk"
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_BOT_USERNAME
-        sync: false
-      - key: TELEGRAM_WEBHOOK_SECRET
-        generateValue: true
-      - key: BOOKING_SCHEDULER_ENABLED
-        value: "true"
+services:
+  - type: web
+    name: unicorn-django-starter
+    env: python
+    plan: free
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py check
+    preDeployCommand: |
+      python manage.py deploy_setup
+      python manage.py telegram_set_webhook
+    startCommand: |
+      gunicorn unicorn_project.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 120 --log-file -
+    envVars:
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: ALLOWED_HOSTS
+        value: "unicorn.adminforge.co.uk,unicorn-django-starter.onrender.com,localhost,127.0.0.1"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://unicorn.adminforge.co.uk,https://unicorn-django-starter.onrender.com"
+      - key: SITE_URL
+        value: "https://unicorn.adminforge.co.uk"
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_BOT_USERNAME
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        generateValue: true
+      - key: BOOKING_SCHEDULER_ENABLED
+        value: "false"
+
+  - type: cron
+    name: pegasus-periodic-jobs
+    env: python
+    schedule: "*/5 * * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py run_periodic_jobs
+    envVars:
+      - fromService:
+          type: web
+          name: unicorn-django-starter
+          envVarKey: DATABASE_URL
+      - fromService:
+          type: web
+          name: unicorn-django-starter
+          envVarKey: DJANGO_SECRET_KEY
+
+  - type: cron
+    name: pegasus-nightly-anonymiser
+    env: python
+    schedule: "5 0 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py anonymise_accident_reports
+    envVars:
+      - fromService:
+          type: web
+          name: unicorn-django-starter
+          envVarKey: DATABASE_URL
+      - fromService:
+          type: web
+          name: unicorn-django-starter
+          envVarKey: DJANGO_SECRET_KEY

@@ -85,11 +85,8 @@ def run_upcoming_booking_reminders():
 
 def start():
     """
-    Start APScheduler once per process.
-    - Adds a 'kickoff' run for update_booking_statuses immediately on startup/wake.
-    - Schedules:
-        * update_booking_statuses: every N minutes (if BOOKING_TEST_INTERVAL_MIN > 0) OR cron 00,15,30,45
-        * anonymise_accident_reports: every N minutes (if ACCIDENT_ANON_TEST_MIN > 0) OR nightly at 00:05 UTC
+    Start APScheduler once per process (local dev only when BOOKING_SCHEDULER_ENABLED).
+    Schedules background management commands on a timer — no immediate kickoff on start.
     """
     global _scheduler
     if _scheduler is not None:
@@ -171,33 +168,6 @@ def start():
             replace_existing=True,
         )
 
-    # Kickoff: run update_booking_statuses once immediately at startup/wake
-    scheduler.add_job(
-        run_update_booking_statuses,
-        next_run_time=datetime.now(dtz.utc),
-        id="update_booking_statuses_kick",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        run_purge_dummy_bookings,
-        next_run_time=datetime.now(dtz.utc),
-        id="purge_dummy_bookings_kick",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        run_departure_reminders,
-        next_run_time=datetime.now(dtz.utc),
-        id="send_departure_reminders_kick",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        run_upcoming_booking_reminders,
-        next_run_time=datetime.now(dtz.utc),
-        id="send_upcoming_booking_reminders_kick",
-        replace_existing=True,
-    )
-
-    # ---- anonymise_accident_reports schedule ----
     anon_test_every = _get_anon_test_interval_minutes()
     if anon_test_every > 0:
         anon_desc = f"anonymiser every {anon_test_every} min (interval)"
@@ -217,9 +187,8 @@ def start():
             replace_existing=True,
         )
 
-    # Start scheduler
+    # No immediate kickoff — avoids blocking web requests on deploy/wake
     scheduler.start()
     _scheduler = scheduler
 
-    # Helpful log lines
     print(f"[APScheduler] Started in PID {os.getpid()}: {bookings_desc}; {dummy_desc}; {departure_desc}; {upcoming_desc}; {anon_desc}.")

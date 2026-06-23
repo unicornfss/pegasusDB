@@ -60,9 +60,8 @@ from .services.assessment_exams import (
 )
 from .utils.instructor_access import (
     booking_has_invoice_for,
-    instructor_can_access_booking,
-    instructor_can_access_day,
     instructor_bookings_queryset,
+    lead_invoice_status_map,
 )
 
 SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9 _\-\(\)\.&]")
@@ -691,19 +690,18 @@ def instructor_bookings(request):
         .order_by("-course_date", "-id")
     )
 
-    in_progress = (
-        base_qs.filter(status="in_progress")
-        .order_by("course_date", "start_time")
+    in_progress = list(
+        base_qs.filter(status="in_progress").order_by("course_date", "start_time")
     )
 
-    awaiting = (
-        base_qs.filter(status="awaiting_closure")
-        .order_by("course_date", "start_time")
+    awaiting = list(
+        base_qs.filter(status="awaiting_closure").order_by("course_date", "start_time")
     )
 
-    scheduled = (
-        base_qs.filter(status="scheduled", course_date__gte=today)
-        .order_by("course_date", "start_time")[:10]
+    scheduled = list(
+        base_qs.filter(status="scheduled", course_date__gte=today).order_by(
+            "course_date", "start_time"
+        )[:10]
     )
 
     # --- CLOSED (completed/closed) ---
@@ -719,28 +717,14 @@ def instructor_bookings(request):
     # Copy the page’s rows so we can annotate them
     closed_rows = list(closed_page.object_list)
 
-    # Map of booking_id -> invoice status (this instructor's invoice)
-    inv_map = {
-        inv.booking_id: (inv.status or "").lower()
-        for inv in Invoice.objects.filter(
-            booking_id__in=[b.id for b in closed_rows],
-            instructor_id=inst.pk,
-        )
-    }
+    inv_map = lead_invoice_status_map(closed_rows, instructor_id=inst.pk)
 
     # Attach invoice_status directly to each booking row
     for b in closed_rows:
-        if b.id not in inv_map and b.instructor_id == inst.pk:
-            lead_inv = b.invoice
-            b.invoice_status = (lead_inv.status or "").lower() if lead_inv else ""
-        else:
-            b.invoice_status = inv_map.get(b.id, "")
-
-    # Simple list fallback (first page items) for older templates
-    closed = list(closed_qs[:10])
+        b.invoice_status = inv_map.get(b.id, "")
 
     # Add first register-day id for direct register-entry links in list rows.
-    visible_bookings = list(in_progress) + list(awaiting) + list(scheduled) + list(closed_rows) + practice_bookings
+    visible_bookings = in_progress + awaiting + scheduled + closed_rows + practice_bookings
     visible_booking_ids = [b.id for b in visible_bookings]
 
     first_day_by_booking = {}
@@ -771,9 +755,8 @@ def instructor_bookings(request):
         "awaiting": awaiting,
         "scheduled": scheduled,
         "closed_page": closed_page,
-        "closed_rows": closed_rows,      # <— use this for rendering closed rows
-        "closed_total": closed_total,    # <— correct badge count
-        "closed": closed,                 # fallback if needed
+        "closed_rows": closed_rows,
+        "closed_total": closed_total,
         "dummy_businesses": dummy_businesses,
         "practice_bookings": practice_bookings,
     })

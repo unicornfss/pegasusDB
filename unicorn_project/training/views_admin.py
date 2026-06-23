@@ -63,6 +63,7 @@ from .services.dummy_bookings import (
     get_admin_booking_day_or_404,
     get_admin_booking_or_404,
 )
+from .utils.instructor_access import lead_invoice_status_map
 
 
 
@@ -870,24 +871,12 @@ def booking_list(request):
     Columns: Date, Course, Business, Status, Instructor, Ref
     Sort keys: date | course | business | status | instructor | ref
     """
-    # Run the automatic status updater
-    if getattr(settings, "BOOKING_AUTO_UPDATE_ON_PAGE", True) and not request.GET.get("noauto"):
+    # Run the automatic status updater (off by default in settings; never on list load)
+    if getattr(settings, "BOOKING_AUTO_UPDATE_ON_PAGE", False) and not request.GET.get("noauto"):
         auto_update_booking_statuses()
 
-
-    qs = (
-        Booking.objects
-        .select_related("business", "training_location", "course_type", "instructor")
-        .annotate(
-            lead_invoice_status=Subquery(
-                Invoice.objects.filter(
-                    booking_id=OuterRef("pk"),
-                    instructor_id=OuterRef("instructor_id"),
-                ).values("status")[:1]
-            )
-        )
-        .prefetch_related("invoices")
-        .all()
+    qs = Booking.objects.select_related(
+        "business", "training_location", "course_type", "instructor"
     )
 
     # ----- filters
@@ -934,6 +923,16 @@ def booking_list(request):
         "invoice":    "lead_invoice_status",
     }
     order_field = allowed.get(sort_key, "course_date")
+
+    if sort_key == "invoice":
+        qs = qs.annotate(
+            lead_invoice_status=Subquery(
+                Invoice.objects.filter(
+                    booking_id=OuterRef("pk"),
+                    instructor_id=OuterRef("instructor_id"),
+                ).values("status")[:1]
+            )
+        )
     if sort_dir == "desc":
         order_field = "-" + order_field
 
@@ -948,6 +947,15 @@ def booking_list(request):
     paginator  = Paginator(qs, 25)
     page_param = request.GET.get("page")
     page_obj   = paginator.get_page(page_param)
+
+    invoice_status_by_booking = (
+        {
+            b.pk: (getattr(b, "lead_invoice_status", None) or "").lower()
+            for b in page_obj.object_list
+        }
+        if sort_key == "invoice"
+        else lead_invoice_status_map(page_obj.object_list)
+    )
 
     # ----- status pill styles
     status_style = {
@@ -975,14 +983,12 @@ def booking_list(request):
         pill = status_style.get(st, {"cls": "badge bg-secondary"})
         label_fn = getattr(b, "get_status_display", lambda: st.replace("_", " ").title())
 
-        # NEW: invoice status pill
-        inv = getattr(b, "invoice", None)
+        # Invoice status pill (one batch query for the page, not per row)
+        inv_st = invoice_status_by_booking.get(b.pk, "")
         inv_ctx = None
-        if inv and not b.is_dummy_business:
-            inv_st = (inv.status or "")
+        if inv_st and not b.is_dummy_business:
             inv_pill = invoice_status_style.get(inv_st, {"cls": "badge bg-secondary"})
-            inv_label_fn = getattr(inv, "get_status_display",
-                                   lambda: inv_st.replace("_", " ").title())
+            inv_label_fn = lambda s=inv_st: s.replace("_", " ").title()
             inv_ctx = {
                 "label": inv_label_fn(),
                 "cls":   inv_pill.get("cls", "badge bg-secondary"),
@@ -1360,7 +1366,7 @@ def booking_form(request, pk=None):
             messages.error(request, "Please correct the errors below.")
     else:
         # Auto-advance statuses before showing the form
-        if getattr(settings, "BOOKING_AUTO_UPDATE_ON_PAGE", True) and not request.GET.get("noauto"):
+        if getattr(settings, "BOOKING_AUTO_UPDATE_ON_PAGE", False) and not request.GET.get("noauto"):
             auto_update_booking_statuses()
 
         form = BookingForm(instance=obj)

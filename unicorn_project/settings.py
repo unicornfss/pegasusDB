@@ -237,6 +237,12 @@ LOGOUT_REDIRECT_URL = "/accounts/login/"
 # Feature flags
 BOOKING_AUTO_UPDATE_ON_PAGE = False
 BOOKING_TEST_INTERVAL_MIN = 0
+# Background scheduler runs in-process only when explicitly enabled (local dev).
+# On Render, use cron jobs instead so the web worker stays responsive.
+BOOKING_SCHEDULER_ENABLED = os.getenv(
+    "BOOKING_SCHEDULER_ENABLED",
+    "true" if DEBUG else "false",
+).lower() == "true"
 
 # --- Email (API-first) ---------------------------------------
 # Use HTTPS APIs (Resend/MailerSend/SMTP2GO) via utils.emailing helper.

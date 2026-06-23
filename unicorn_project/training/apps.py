@@ -32,12 +32,10 @@ class TrainingConfig(AppConfig):
 
         if not _running_under_app_server():
             return
-        if os.environ.get("BOOKING_SCHEDULER_ENABLED", "true").lower() != "true":
-            return
 
         from django.conf import settings
 
-        if getattr(settings, "BOOKING_SCHEDULER_ENABLED", True) is False:
+        if not getattr(settings, "BOOKING_SCHEDULER_ENABLED", False):
             return
 
         try:
