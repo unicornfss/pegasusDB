@@ -22,11 +22,33 @@ def user_has_role(user, role: str) -> bool:
         return False
 
     role = (role or "").lower()
+    roles = get_user_roles(user)
     if role == "admin":
-        return user.is_superuser or user.groups.filter(name__iexact="admin").exists()
-    if role in {"instructor", "engineer", "inspector"}:
-        return user.groups.filter(name__iexact=role).exists()
-    return False
+        return user.is_superuser or "admin" in roles
+    return role in roles
+
+
+def get_user_roles(user) -> set[str]:
+    """Load group roles once per user per request."""
+    cached = getattr(user, "_pegasus_roles", None)
+    if cached is not None:
+        return cached
+
+    roles: set[str] = set()
+    if user.is_authenticated:
+        if user.is_superuser:
+            roles.add("admin")
+        try:
+            roles.update(
+                name.lower()
+                for name in user.groups.values_list("name", flat=True)
+                if name
+            )
+        except Exception:
+            pass
+
+    user._pegasus_roles = roles
+    return roles
 
 
 def available_roles_for_user(user) -> list[str]:
@@ -102,30 +124,31 @@ def sync_active_role_from_path(request) -> None:
         return
 
     path = request.path or ""
+    roles = get_user_roles(user)
 
-    if path.startswith("/app/admin/") and user_has_role(user, "admin"):
+    if path.startswith("/app/admin/") and (user.is_superuser or "admin" in roles):
         set_active_role(session, "admin")
         return
 
-    if path.startswith("/delegates/") and user_has_role(user, "admin"):
+    if path.startswith("/delegates/") and (user.is_superuser or "admin" in roles):
         set_active_role(session, "admin")
         return
 
-    if path.startswith("/app/instructor/") and user_has_role(user, "instructor"):
+    if path.startswith("/app/instructor/") and "instructor" in roles:
         set_active_role(session, "instructor")
         return
 
     if (
         (path == "/app/inbox/" or path.startswith("/app/inbox/"))
-        and user_has_role(user, "instructor")
+        and "instructor" in roles
     ):
         set_active_role(session, "instructor")
         return
 
-    if path.startswith("/app/engineer/") and user_has_role(user, "engineer"):
+    if path.startswith("/app/engineer/") and "engineer" in roles:
         set_active_role(session, "engineer")
         return
 
-    if path.startswith("/app/inspector/") and user_has_role(user, "inspector"):
+    if path.startswith("/app/inspector/") and "inspector" in roles:
         set_active_role(session, "inspector")
         return

@@ -75,13 +75,42 @@ def inbox_items_for_personnel(personnel, *, status: str = "open", scope: str = "
 def unread_inbox_count(personnel, *, scope: str | None = None) -> int:
     if not personnel:
         return 0
-    if scope:
-        return inbox_items_for_personnel(
-            personnel, status="open", scope=scope
-        ).count()
-    return unread_inbox_count(personnel, scope="staff") + unread_inbox_count(
-        personnel, scope="admin"
-    )
+    counts = unread_inbox_counts(personnel)
+    if scope == "staff":
+        return counts["staff"]
+    if scope == "admin":
+        return counts["admin"]
+    return counts["total"]
+
+
+def unread_inbox_counts(personnel) -> dict[str, int]:
+    """Return staff/admin/total unread counts with at most two lightweight queries."""
+    empty = {"staff": 0, "admin": 0, "total": 0}
+    if not personnel:
+        return empty
+
+    open_filter = {
+        "status": StaffInboxItemStatus.OPEN,
+        "read_at__isnull": True,
+    }
+    staff = StaffInboxItem.objects.filter(
+        recipient=personnel,
+        kind__in=(
+            StaffInboxItemKind.COURSE_SWAP_INCOMING,
+            StaffInboxItemKind.COURSE_SWAP_OUTCOME,
+            StaffInboxItemKind.COURSE_DELIVERY_OUTCOME,
+        ),
+        **open_filter,
+    ).count()
+    admin = StaffInboxItem.objects.filter(
+        Q(recipient=personnel, kind=StaffInboxItemKind.COURSE_DELIVERY_REQUEST)
+        | Q(
+            recipient__isnull=True,
+            kind=StaffInboxItemKind.COURSE_DELIVERY_REQUEST,
+        ),
+        **open_filter,
+    ).count()
+    return {"staff": staff, "admin": admin, "total": staff + admin}
 
 
 def mark_inbox_items_read(personnel, *, scope: str = "staff", item_ids=None) -> int:

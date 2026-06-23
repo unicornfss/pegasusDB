@@ -22,11 +22,12 @@ SAFE_ADMIN_WHITELIST = (
 )
 
 def _is_admin(user):
-    return user.is_authenticated and (
-        user.is_superuser
-        or user.is_staff
-        or user.groups.filter(name__iexact="admin").exists()
-    )
+    if not user or not user.is_authenticated:
+        return False
+    from .utils.user_roles import get_user_roles
+
+    roles = get_user_roles(user)
+    return user.is_superuser or user.is_staff or "admin" in roles
 
 class MustChangePasswordMiddleware:
     ALLOWED_PATHS = (

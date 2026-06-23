@@ -3,10 +3,9 @@ from django.conf import settings
 from .services.logos import get_current_logo
 from .utils.user_roles import (
     ADMIN_BOOKING_URL_NAMES,
-    available_roles_for_user,
+    get_user_roles,
     resolve_active_role,
     sync_active_role_from_path,
-    user_has_role,
 )
 
 def role_context(request):
@@ -15,20 +14,20 @@ def role_context(request):
     """
     user = getattr(request, "user", None)
 
-    # Default role flags
     is_admin = False
     is_instructor = False
     is_engineer = False
     is_inspector = False
-
-    if user and user.is_authenticated:
-        is_admin = user_has_role(user, "admin")
-        is_instructor = user_has_role(user, "instructor")
-        is_engineer = user_has_role(user, "engineer")
-        is_inspector = user_has_role(user, "inspector")
-
+    has_dual_roles = False
     active_role = None
+
     if user and user.is_authenticated:
+        roles = get_user_roles(user)
+        is_admin = user.is_superuser or "admin" in roles
+        is_instructor = "instructor" in roles
+        is_engineer = "engineer" in roles
+        is_inspector = "inspector" in roles
+        has_dual_roles = sum((is_admin, is_instructor, is_engineer, is_inspector)) > 1
         sync_active_role_from_path(request)
         active_role = resolve_active_role(user, request.session)
 
@@ -40,7 +39,7 @@ def role_context(request):
         "is_engineer": is_engineer,
         "is_inspector": is_inspector,
         "current_role": active_role,
-        "has_dual_roles": len(available_roles_for_user(user)) > 1 if user and user.is_authenticated else False,
+        "has_dual_roles": has_dual_roles,
         "nav_admin_bookings_active": url_name in ADMIN_BOOKING_URL_NAMES,
     }
 
@@ -114,10 +113,11 @@ def inbox_badges(request):
             "admin_inbox_unread_count": 0,
         }
 
-    from .services.staff_inbox import unread_inbox_count
+    from .services.staff_inbox import unread_inbox_counts
 
+    counts = unread_inbox_counts(personnel)
     return {
-        "inbox_unread_count": unread_inbox_count(personnel),
-        "staff_inbox_unread_count": unread_inbox_count(personnel, scope="staff"),
-        "admin_inbox_unread_count": unread_inbox_count(personnel, scope="admin"),
+        "inbox_unread_count": counts["total"],
+        "staff_inbox_unread_count": counts["staff"],
+        "admin_inbox_unread_count": counts["admin"],
     }

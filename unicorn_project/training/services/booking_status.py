@@ -45,9 +45,13 @@ def auto_update_booking_statuses() -> int:
     )
 
     # 2) -> Awaiting closure after final day ends
-    qs = (Booking.objects
-          .filter(status__in=["scheduled", "in_progress"])
-          .annotate(first_day=Min("days__date"), last_day=Max("days__date")))
+    qs = (
+        Booking.objects
+        .filter(status__in=["scheduled", "in_progress"])
+        .select_related("course_type")
+        .prefetch_related("days")
+        .annotate(first_day=Min("days__date"), last_day=Max("days__date"))
+    )
 
     SAFE_LATE_END = time(23, 59, 59)
     updated = 0
@@ -59,7 +63,7 @@ def auto_update_booking_statuses() -> int:
             continue
 
         # Find day rows and the last-day row
-        day_rows = list(b.days.all().order_by("date"))
+        day_rows = sorted(b.days.all(), key=lambda d: d.date)
         last_row = next((d for d in reversed(day_rows) if d.date == b.last_day), None)
         if not last_row:
             continue

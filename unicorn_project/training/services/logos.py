@@ -81,19 +81,40 @@ def available_logo_filenames() -> list[str]:
     return sorted(names) or ["logo.png"]
 
 
+_SCHEDULE_CACHE: dict | None = None
+_SCHEDULE_MTIME: float | None = None
+
+
 def load_schedule_spec() -> dict:
+    global _SCHEDULE_CACHE, _SCHEDULE_MTIME
+    try:
+        mtime = SCHEDULE_PATH.stat().st_mtime
+    except OSError:
+        return {"rules": [], "default": "logo.png"}
+
+    if _SCHEDULE_CACHE is not None and _SCHEDULE_MTIME == mtime:
+        return _SCHEDULE_CACHE
+
     try:
         with open(SCHEDULE_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except FileNotFoundError:
+            _SCHEDULE_CACHE = json.load(f)
+            _SCHEDULE_MTIME = mtime
+            return _SCHEDULE_CACHE
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return {"rules": [], "default": "logo.png"}
 
 
 def save_schedule_spec(spec: dict) -> None:
+    global _SCHEDULE_CACHE, _SCHEDULE_MTIME
     SCHEDULE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(SCHEDULE_PATH, "w", encoding="utf-8") as f:
         json.dump(spec, f, indent=2)
         f.write("\n")
+    _SCHEDULE_CACHE = spec
+    try:
+        _SCHEDULE_MTIME = SCHEDULE_PATH.stat().st_mtime
+    except OSError:
+        _SCHEDULE_MTIME = None
 
 
 # ----------------------------
@@ -311,17 +332,25 @@ def _pick_from_schedule(today: dt.date, spec: dict) -> str:
 def get_current_logo(today: dt.date | None = None) -> str:
     today = today or dt.date.today()
 
-    # 1) Admin override wins if available and active
     if LogoOverride is not None:
         try:
-            override = next((o for o in LogoOverride.objects.all() if o.is_active_now()), None)
+            from django.db.models import Q
+            from django.utils import timezone
+
+            now = timezone.now()
+            override = (
+                LogoOverride.objects.filter(active=True)
+                .filter(Q(starts_at__isnull=True) | Q(starts_at__lte=now))
+                .filter(Q(ends_at__isnull=True) | Q(ends_at__gte=now))
+                .order_by("priority", "-id")
+                .values_list("file_name", flat=True)
+                .first()
+            )
             if override:
-                return override.file_name
+                return override
         except Exception:
-            # DB not ready during migrations/collectstatic etc.
             pass
 
-    # 2) Scheduled rules
     try:
         spec = load_schedule_spec()
         return _pick_from_schedule(today, spec)
