@@ -476,9 +476,29 @@ class ExamAnswerAdmin(ImportExportModelAdmin):
 
 @admin.register(AccidentReport)
 class AccidentReportAdmin(admin.ModelAdmin):
-    list_display = ("date", "time", "location", "injured_name", "first_aider_name", "reporter_name")
-    search_fields = ("injured_name", "first_aider_name", "reporter_name", "location")
+    list_display = (
+        "date",
+        "time",
+        "booking_reference",
+        "location",
+        "injured_name",
+        "reporter_name",
+    )
+    search_fields = (
+        "injured_name",
+        "first_aider_name",
+        "reporter_name",
+        "location",
+        "booking__course_reference",
+    )
     list_filter = ("date",)
+    list_select_related = ("booking",)
+
+    @admin.display(description="Reference", ordering="booking__course_reference")
+    def booking_reference(self, obj):
+        if obj.booking_id and obj.booking.course_reference:
+            return obj.booking.course_reference
+        return "—"
 
 @admin.register(LogoOverride)
 class LogoOverrideAdmin(admin.ModelAdmin):
