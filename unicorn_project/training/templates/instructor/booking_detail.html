@@ -335,8 +335,10 @@
 
                     <div class="d-flex flex-wrap gap-2">
                       {% for day in gcal_links %}
-                        <a href="{{ day.url }}" target="_blank"
-                          class="btn btn-google-cal btn-sm d-inline-flex align-items-center">
+                        <a href="{{ day.url }}" target="_blank" rel="noopener"
+                          class="btn btn-google-cal btn-sm d-inline-flex align-items-center"
+                          data-gcal-link
+                          data-ics-url="{% url 'download_booking_ics' booking.pk %}">
                           <i class="bi bi-calendar-event me-1"></i>
                           Day {{ forloop.counter }} – {{ day.date|date:"j M Y" }}
                         </a>
@@ -355,6 +357,43 @@
                     Download .ics
                   </a>
                 </div>
+
+                <script>
+                (function () {
+                  var links = document.querySelectorAll("[data-gcal-link]");
+                  if (!links.length) return;
+
+                  var ua = navigator.userAgent || "";
+                  var isAndroid = /Android/i.test(ua);
+                  var isIOS = /iPhone|iPad|iPod/i.test(ua);
+                  if (!isAndroid && !isIOS) return;
+
+                  links.forEach(function (a) {
+                    a.addEventListener("click", function (e) {
+                      var webUrl = a.href;
+                      var icsUrl = a.getAttribute("data-ics-url");
+
+                      if (isAndroid) {
+                        e.preventDefault();
+                        // Prefer the Google Calendar app when installed; fall back to the web URL.
+                        var withoutScheme = webUrl.replace(/^https?:\/\//i, "");
+                        var intentUrl =
+                          "intent://" + withoutScheme +
+                          "#Intent;scheme=https;package=com.google.android.calendar;" +
+                          "S.browser_fallback_url=" + encodeURIComponent(webUrl) + ";end";
+                        window.location.href = intentUrl;
+                        return;
+                      }
+
+                      // iOS: Google Calendar web shows the desktop site; .ics opens Calendar / the installed app.
+                      if (isIOS && icsUrl) {
+                        e.preventDefault();
+                        window.location.href = icsUrl;
+                      }
+                    });
+                  });
+                })();
+                </script>
 
               </div>
             </div>

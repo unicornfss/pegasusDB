@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 import io, contextlib, os, re, mimetypes, logging
 from urllib.parse import urlencode
 from collections import defaultdict
@@ -1705,7 +1705,7 @@ def instructor_booking_detail(request, pk):
         # ✅ FINAL CLOSE — STEP 3 + STEP 4 (BUILD PDFs — NO EMAILS YET)
         if request.POST.get("action") == "final_close_course":
 
-            print("🔥 FINAL CLOSE CLICKED")
+            print("FINAL CLOSE CLICKED")
 
             reg_manual = request.POST.get("registers_send_separately") == "on"
             counts_confirm = request.POST.get("delegate_counts_confirm") == "on"
@@ -1778,12 +1778,12 @@ def instructor_booking_detail(request, pk):
 
             # ✅ Safety check
             if not (reg in ["completed", "send_later"] and ass in ["completed", "send_later"] and booking.status != "completed"):
-                print("⛔ BLOCKED: Closure conditions not met")
+                print("BLOCKED: Closure conditions not met")
                 messages.error(request, "Course cannot be closed yet.")
                 return redirect(f"{request.path}#closure-pane")
 
             # ✅ STEP 4 — BUILD PDFs IN MEMORY (NO EMAILS, NO SAVING)
-            print("📄 Generating closure PDFs...")
+            print("Generating closure PDFs...")
             pdf_files = []
 
             # 1️⃣ Assessment Matrix PDF
@@ -1801,10 +1801,10 @@ def instructor_booking_detail(request, pk):
                 assessment_filename = f"assessment-matrix-{booking.course_reference}.pdf"
 
                 pdf_files.append((assessment_filename, assessment_pdf))
-                print("✅ Assessment Matrix PDF generated")
+                print("Assessment Matrix PDF generated")
 
             except Exception as e:
-                print("⚠️ Assessment Matrix PDF skipped:", e)
+                print("Assessment Matrix PDF skipped:", e)
 
 
             # 2️⃣ Registers PDFs
@@ -1812,9 +1812,9 @@ def instructor_booking_detail(request, pk):
                 for d in BookingDay.objects.filter(booking=booking):
                     file_bytes, filename = _get_register_pdf_bytes_via_existing_view(request, d.pk)
                     pdf_files.append((filename, file_bytes))
-                print("✅ Registers PDFs generated")
+                print("Registers PDFs generated")
             except Exception as e:
-                print("⚠️ Registers PDF skipped:", e)
+                print("Registers PDF skipped:", e)
 
             # 3️⃣ Certificates PDF ✅ SAFE FOR EMAIL
             try:
@@ -1837,10 +1837,10 @@ def instructor_booking_detail(request, pk):
                     raise ValueError("Certificate generator returned invalid format")
 
                 pdf_files.append((cert_filename, cert_bytes))
-                print("✅ Certificates PDF generated")
+                print("Certificates PDF generated")
 
             except Exception as e:
-                print("⚠️ Certificates PDF skipped:", e)
+                print("Certificates PDF skipped:", e)
 
             # 4️⃣ Feedback Summary PDF (STEP 4B)
             try:
@@ -1857,10 +1857,10 @@ def instructor_booking_detail(request, pk):
                 feedback_filename = f"feedback-summary-{booking.course_reference}.pdf"
 
                 pdf_files.append((feedback_filename, feedback_pdf))
-                print("✅ Feedback Summary PDF generated")
+                print("Feedback Summary PDF generated")
 
             except Exception as e:
-                print(f"⚠️ Feedback Summary PDF skipped: {e}")
+                print(f"Feedback Summary PDF skipped: {e}")
 
             # -----------------------------------------------------------
             # STEP 5 — SEND COURSE CLOSURE EMAIL (NO INVOICE ATTACHMENTS)
@@ -1934,10 +1934,10 @@ def instructor_booking_detail(request, pk):
 
                     email.send(fail_silently=False)
                     dummy_closure_email_sent = True
-                    print("📧 Dummy closure email sent to instructor route")
+                    print("Dummy closure email sent to instructor route")
 
                 except Exception as e:
-                    print("❌ Dummy closure email failed:", e)
+                    print("Dummy closure email failed:", e)
                     messages.error(request, f"Dummy course closed, but instructor email failed: {e}")
             else:
                 try:
@@ -2015,19 +2015,19 @@ def instructor_booking_detail(request, pk):
                         email.attach(safe_filename, content, mime)
 
                     email.send(fail_silently=False)
-                    print("📧 Closure email sent successfully")
+                    print("Closure email sent successfully")
 
                 except Exception as e:
-                    print("❌ Closure email failed:", e)
+                    print("Closure email failed:", e)
                     messages.error(request, f"Course closed, but email failed: {e}")
 
-            print(f"📎 TOTAL PDFs GENERATED: {len(pdf_files)}")
+            print(f"TOTAL PDFs GENERATED: {len(pdf_files)}")
 
             # ✅ LOCK THE COURSE
             booking.status = "completed"
             booking.save(update_fields=["status"])
 
-            print("✅ COURSE SUCCESSFULLY CLOSED")
+            print("COURSE SUCCESSFULLY CLOSED")
 
             if booking.is_dummy_business:
                 if dummy_closure_email_sent:
@@ -2403,7 +2403,7 @@ def instructor_booking_detail(request, pk):
     closure_feedback_count = FeedbackResponse.objects.filter(booking=booking).count()
     closure_missing_feedback = closure_feedback_count <= 0
 
-    print("🔎 CLOSURE CHECK:")
+    print("CLOSURE CHECK:")
     print("REGISTER:", repr(reg))
     print("ASSESSMENT:", repr(ass))
     print("BOOKING STATUS:", repr(status))
@@ -2419,7 +2419,7 @@ def instructor_booking_detail(request, pk):
     )
 
 
-    print("✅ CAN CLOSE:", can_close_course)
+    print("CAN CLOSE:", can_close_course)
 
     ctx["can_close_course"] = can_close_course
     ctx["closure_day_delegate_counts"] = closure_day_delegate_counts
@@ -2669,11 +2669,13 @@ def instructor_booking_detail(request, pk):
         else:
             loc = ""
 
-        # Google Calendar event creation URL
+        # TEMPLATE URL opens the Google Calendar app on Android when installed;
+        # the /u/0/r/eventedit path forces the desktop website on mobile.
         gcal_url = (
-            "https://calendar.google.com/calendar/u/0/r/eventedit?"
-            + "text=" + urllib.parse.quote(title)
+            "https://calendar.google.com/calendar/render?action=TEMPLATE"
+            + "&text=" + urllib.parse.quote(title)
             + "&dates=" + date_str + "T" + start_str + "/" + date_str + "T" + end_str
+            + "&ctz=Europe/London"
             + "&details=" + urllib.parse.quote(event_description)
             + "&location=" + urllib.parse.quote(loc)
         )
@@ -4176,9 +4178,10 @@ def download_booking_ics(request, booking_id):
 
     ics_data = "\r\n".join(ics_lines)
 
-    response = HttpResponse(ics_data, content_type="text/calendar")
+    response = HttpResponse(ics_data, content_type="text/calendar; charset=utf-8")
+    # inline so mobile browsers hand off to a calendar app instead of only downloading
     response["Content-Disposition"] = (
-        f'attachment; filename="{booking.course_reference}.ics"'
+        f'inline; filename="{booking.course_reference}.ics"'
     )
     return response
 
