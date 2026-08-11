@@ -3,7 +3,7 @@
 
 {% block content %}
 
-<div class="container-fluid mt-4 px-4">
+<div class="container-fluid mt-4 px-2 px-md-4">
     <h1 id="dashboard-greeting" class="mb-4">Welcome…</h1>
 
     <div class="row g-4">
@@ -15,6 +15,7 @@
                     <h5 class="mb-0">📅 Courses taking place today</h5>
                 </div>
                 <div class="card-body p-0">
+                    <div class="table-responsive">
                     <table class="table table-hover mb-0" id="courses-today-table">
                         <thead class="table-light">
                             <tr>
@@ -27,6 +28,7 @@
                             <tr><td colspan="3" class="text-muted p-3">Loading…</td></tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -38,6 +40,7 @@
                     <h5 class="mb-0">⌛ Awaiting instructor closure</h5>
                 </div>
                 <div class="card-body p-0">
+                    <div class="table-responsive">
                     <table class="table table-hover mb-0" id="courses-awaiting-table">
                         <thead class="table-light">
                             <tr>
@@ -51,6 +54,7 @@
                             <tr><td colspan="4" class="text-muted p-3">Loading…</td></tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -62,6 +66,7 @@
                     <h5 class="mb-0">📆 Courses taking place within next 7 days</h5>
                 </div>
                 <div class="card-body p-0">
+                    <div class="table-responsive">
                     <table class="table table-hover mb-0" id="courses-7days-table">
                         <thead class="table-light">
                             <tr>
@@ -75,6 +80,7 @@
                             <tr><td colspan="4" class="text-muted p-3">Loading…</td></tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -86,6 +92,7 @@
                     <h5 class="mb-0">💰 Outstanding Instructor Invoices</h5>
                 </div>
                 <div class="card-body p-0">
+                    <div class="table-responsive">
                     <table class="table table-hover mb-0" id="invoices-outstanding-table">
                         <thead class="table-light">
                             <tr>
@@ -101,6 +108,7 @@
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -114,6 +122,7 @@
                     <a href="{% url 'admin_inbox_list' %}" class="btn btn-sm btn-outline-primary">View all</a>
                 </div>
                 <div class="card-body p-0">
+                    <div class="table-responsive">
                     <table class="table table-hover mb-0" id="inbox-open-table">
                         <thead class="table-light">
                             <tr>
@@ -125,6 +134,7 @@
                             <tr><td colspan="2" class="text-muted p-3">Loading…</td></tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -161,6 +171,14 @@ function formatDate(dateStr) {
     return `${day}/${month}/${year}`;
 }
 
+function formatScheduleCell(item, fallbackIso) {
+    const label = (item.dates_label || "").trim() || formatDate(fallbackIso);
+    if (!item.dates_nonconsecutive) {
+        return label;
+    }
+    return `${label} <span class="badge text-bg-warning ms-1 align-middle booking-dates-split-badge" title="Course days are not consecutive">Split days</span>`;
+}
+
 // --- Widget 1: today ---
 function loadCoursesToday() {
     fetch("{% url 'api_courses_today' %}")
@@ -181,7 +199,7 @@ function loadCoursesToday() {
             data.forEach(item => {
                 html += `
                     <tr class="clickable-row" data-url="${item.url}">
-                        <td><strong>${item.course}</strong></td>
+                        <td><strong>${item.course}</strong>${item.dates_nonconsecutive ? ' <span class="badge text-bg-warning booking-dates-split-badge" title="Course days are not consecutive">Split days</span>' : ''}</td>
                         <td>${item.business || "–"}</td>
                         <td>${item.instructor || "–"}</td>
                     </tr>`;
@@ -227,7 +245,7 @@ function loadAwaitingClosure() {
                         <td><strong>${item.course}</strong></td>
                         <td>${item.business || "–"}</td>
                         <td>${item.instructor || "–"}</td>
-                        <td>${formatDate(item.completed)}</td>
+                        <td>${formatScheduleCell(item, item.completed)}</td>
                     </tr>`;
             });
 
@@ -271,7 +289,7 @@ function loadCoursesIn7Days() {
                         <td><strong>${item.course}</strong></td>
                         <td>${item.business || "–"}</td>
                         <td>${item.instructor || "–"}</td>
-                        <td>${formatDate(item.date)}</td>
+                        <td>${formatScheduleCell(item, item.date)}</td>
                     </tr>`;
             });
 

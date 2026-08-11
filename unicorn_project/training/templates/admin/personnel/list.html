@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Personnel{% endblock %}
 {% block content %}
-<div class="d-flex align-items-center justify-content-between mb-3">
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
   <h3 class="m-0">Personnel</h3>
   <a class="btn btn-primary" href="{% url 'admin_personnel_new' %}">
     <i class="bi bi-person-plus"></i> New staff member
@@ -17,6 +17,7 @@
   </div>
 {% endif %}
 
+<div class="table-responsive">
 <table class="table table-sm align-middle">
   <thead><tr>
     <th>Name</th><th>User</th><th>Email</th><th>Phone</th><th></th>
@@ -54,4 +55,5 @@
   {% endfor %}
   </tbody>
 </table>
+</div>
 {% endblock %}

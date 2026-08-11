@@ -111,6 +111,73 @@ def instructors_for_accident_report_course_date(course, day_date):
     return list(Personnel.objects.filter(pk__in=ordered_ids).order_by("name"))
 
 
+def accident_report_day_options(day_date):
+    """
+    Courses with accident reports running on *day_date*, and instructors teaching them.
+
+    Each instructor is expected to teach only one such course type that day, so instructor
+    choice can determine the course when more than one course is running.
+    """
+    from .online_exercises import course_types_with_accident_reports
+    from .public_sessions import _active_booking_day_qs
+
+    if not day_date:
+        return {"courses": [], "instructors": [], "mode": "none"}
+
+    course_ids = list(course_types_with_accident_reports().values_list("pk", flat=True))
+    if not course_ids:
+        return {"courses": [], "instructors": [], "mode": "none"}
+
+    days = (
+        _active_booking_day_qs()
+        .filter(date=day_date, booking__course_type_id__in=course_ids)
+        .select_related("booking__course_type", "instructor", "booking__instructor")
+        .order_by("booking__course_type__name", "start_time", "id")
+    )
+
+    courses_by_id = {}
+    instructors = []
+    seen_instructors: set = set()
+
+    for day in days:
+        course = day.booking.course_type
+        if not course:
+            continue
+        courses_by_id[course.pk] = course
+        inst = day.instructor or day.booking.instructor
+        if not inst or inst.pk in seen_instructors:
+            continue
+        seen_instructors.add(inst.pk)
+        instructors.append(
+            {
+                "id": str(inst.pk),
+                "name": inst.name,
+                "course_id": str(course.pk),
+                "course_code": course.code,
+                "course_name": course.name,
+            }
+        )
+
+    courses = sorted(courses_by_id.values(), key=lambda c: (c.name or "", c.code or ""))
+    instructors.sort(key=lambda row: (row["name"] or "").lower())
+
+    if not courses:
+        mode = "none"
+    elif len(courses) == 1:
+        mode = "single_course"
+    else:
+        mode = "multi_course"
+
+    return {
+        "courses": [
+            {"id": str(c.pk), "code": c.code, "name": c.name}
+            for c in courses
+        ],
+        "instructors": instructors,
+        "mode": mode,
+    }
+
+
 def instructors_for_booking_report(booking, incident_date=None):
     """Instructors tied to this booking (optionally for one course day)."""
     from ..models import Personnel

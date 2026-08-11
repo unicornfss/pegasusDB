@@ -252,10 +252,7 @@
               <div class="d-flex flex-wrap gap-2">
                 {% if instructor %}
                 <a href="{% url 'admin_personnel_delete' instructor.id %}"
-                   class="btn btn-danger btn-sm"
-                   onclick="return confirm('⚠️ WARNING: This action is permanent and cannot be undone.\n\n'
-                                           + 'It is recommended to mark the account as inactive instead.\n\n'
-                                           + 'Do you REALLY want to DELETE this staff member?');">
+                   class="btn btn-danger btn-sm">
                    <i class="bi bi-trash me-1"></i>Delete Staff Member
                 </a>
                 {% endif %}

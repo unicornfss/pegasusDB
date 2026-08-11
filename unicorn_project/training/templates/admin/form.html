@@ -21,10 +21,9 @@
     <a class="btn btn-outline-secondary" href="{{ back_url }}">Cancel</a>
 
     {% if delete_url %}
-      <form method="post" action="{{ delete_url }}" class="ms-auto">
+      <form method="post" action="{{ delete_url }}" class="ms-auto" data-confirm="Delete this item? This cannot be undone.">
         {% csrf_token %}
-        <button type="submit" class="btn btn-outline-danger"
-                onclick="return confirm('Delete this item? This cannot be undone.');">
+        <button type="submit" class="btn btn-outline-danger">
           Delete
         </button>
       </form>

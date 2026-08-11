@@ -139,10 +139,12 @@
   <style>
     /* === container === */
     .matrix-wrap {
-      display: inline-block;
+      display: block;
+      width: 100%;
       max-width: 100%;
       max-height: 60vh;
       overflow: auto;
+      -webkit-overflow-scrolling: touch;
       border: 1px solid var(--bs-border-color, #dee2e6);
       border-radius: .5rem;
       background: #fff;
@@ -156,7 +158,8 @@
       --zebra-hover: #cbdaf0;
 
       border-collapse: separate;
-      width: auto;
+      width: max-content;
+      min-width: 100%;
       table-layout: fixed;
       font-size: .9rem;
       border-spacing: 0;
@@ -165,6 +168,14 @@
     /* col widths */
     .matrix-table .col-comp     { width: 240px; }
     .matrix-table .col-delegate { width: var(--delegate-col-width); }
+
+    @media (max-width: 575.98px) {
+      .matrix-table {
+        --delegate-col-width: 78px;
+        font-size: .8rem;
+      }
+      .matrix-table .col-comp { width: 150px; }
+    }
 
     /* base cells */
     .matrix-table th,

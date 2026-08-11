@@ -14,12 +14,6 @@
 <form method="post" class="card p-3">
   {% csrf_token %}
 
-  {% if messages %}
-    {% for m in messages %}
-      <div class="alert alert-{{ m.tags|default:'info' }}">{{ m }}</div>
-    {% endfor %}
-  {% endif %}
-
   {{ formset.non_form_errors }}
 
   <div class="table-responsive">

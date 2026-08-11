@@ -5,12 +5,6 @@
   <div class="col-md-5">
     <h2 class="mb-3">Two-Factor Authentication</h2>
 
-    {% if messages %}
-      {% for message in messages %}
-        <div class="alert alert-{{ message.tags }}">{{ message }}</div>
-      {% endfor %}
-    {% endif %}
-
     {# ── BACKUP CODE MODE ─────────────────────────────────── #}
     {% if mode == "backup" %}
       <p>Enter one of your saved backup codes.</p>

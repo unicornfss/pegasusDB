@@ -60,7 +60,8 @@
         <strong>Practice / familiarisation booking.</strong>
         Can be deleted directly and will auto-delete 7 days after it was created.
       </div>
-      <form method="post" action="{% url 'instructor_delete_dummy_booking' booking.pk %}" class="m-0" onsubmit="return confirm('Delete this dummy booking and all linked registers, feedback, exams, and invoices?');">
+      <form method="post" action="{% url 'instructor_delete_dummy_booking' booking.pk %}" class="m-0"
+            data-confirm="Delete this dummy booking and all linked registers, feedback, exams, and invoices?">
         {% csrf_token %}
         <input type="hidden" name="next" value="{% url 'instructor_bookings' %}">
         <button type="submit" class="btn btn-outline-danger btn-sm">
@@ -69,35 +70,15 @@
       </form>
     </div>
 
-    <div class="d-flex flex-wrap align-items-center gap-2">
-      <span class="small text-muted me-1">Quick test:</span>
-
-      {% for d in days %}
-        <a class="btn btn-outline-primary btn-sm"
-           href="{% url 'public_delegate_register' %}?ct={{ booking.course_type.code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}&day={{ d.day_code|urlencode }}"
-           target="_blank" rel="noopener">
-          <i class="bi bi-people me-1"></i>Register - Day {{ forloop.counter }}
-        </a>
-      {% endfor %}
-
-      {% for ex, d in dummy_exam_day_pairs %}
-        {% if d %}
-          <a class="btn btn-outline-primary btn-sm"
-               href="{% url 'delegate_exam_start' %}?examcode={{ ex.exam_code }}&exam_date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
-             target="_blank" rel="noopener">
-            <i class="bi bi-pencil-square me-1"></i>Exam {{ ex.sequence }} - Day {{ forloop.counter }}
-          </a>
-        {% endif %}
-      {% endfor %}
-
-      {% if last_day %}
-        <a class="btn btn-outline-primary btn-sm"
-           href="{% url 'public_feedback_form' %}?course={{ booking.course_type.code }}&date={{ last_day.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
-           target="_blank" rel="noopener">
-          <i class="bi bi-chat-left-text me-1"></i>Feedback form
-        </a>
-      {% endif %}
+    {% include "partials/booking_quick_test_links.html" %}
+  </div>
+{% elif show_dev_quick_test %}
+  <div class="alert alert-warning mb-3">
+    <div class="mb-2">
+      <strong>Dev only — public form shortcuts.</strong>
+      These open the live register / exam / feedback / accident forms prefilled for this booking. Not shown in production.
     </div>
+    {% include "partials/booking_quick_test_links.html" %}
   </div>
 {% endif %}
 
@@ -469,45 +450,80 @@
   <!-- Pane: Course days / registers -->
   <div class="tab-pane fade booking-pane booking-pane--days{% if active_tab == 'days' %} show active{% endif %}" id="days-pane" role="tabpanel" aria-labelledby="days-tab" tabindex="0">
     <div id="days-refresh-indicator" class="text-end small text-muted" style="opacity:0; transition:opacity .25s;">Updating…</div>
-    <div class="table-responsive">
-      <table class="table table-sm align-middle">
-        <thead>
-          <tr>
-            <th style="width:160px">Date</th>
-            <th style="width:120px">Start</th>
-            <th style="width:120px" class="text-center">Delegates</th>
-            <th style="width:160px" class="text-end">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for d in day_rows %}
-              <tr class="{% if d.warn %}table-warning{% endif %}">
-              <td>{{ d.date }}</td>
-              <td>{% if d.start_time %}{{ d.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
-              <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
-              <td class="text-end">
-                <a class="btn btn-outline-primary btn-sm" href="{{ d.edit_url }}">
-                  <i class="bi bi-people"></i> View / edit in tab
-                </a>
-              </td>
+
+    <form method="post" class="mb-3">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="update_day_times">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+        <div class="small text-muted">
+          Times can be adjusted here. Course dates can only be changed by admin.
+        </div>
+        {% if not is_locked and booking.status != 'cancelled' %}
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-clock"></i> Save times
+          </button>
+        {% endif %}
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="width:160px">Date</th>
+              <th style="width:140px">Start</th>
+              <th style="width:140px">End</th>
+              <th style="width:120px" class="text-center">Delegates</th>
+              <th style="width:160px" class="text-end">Actions</th>
             </tr>
-              {% if d.warn %}
-                <tr class="table-warning">
-                  <td colspan="4" class="small text-danger">
-                    ⚠️ Date of birth mismatch detected on this register
-                    ({{ d.warn_count }} item{{ d.warn_count|pluralize }}).
-                    Please open the register and correct the affected delegate(s).
-                  </td>
-                </tr>
-              {% endif %}
+          </thead>
+          <tbody>
+            {% for d in day_rows %}
+                <tr class="{% if d.warn %}table-warning{% endif %}">
+                <td>{{ d.date }}</td>
+                <td>
+                  {% if not is_locked and booking.status != 'cancelled' %}
+                    <input type="time"
+                           class="form-control form-control-sm"
+                           name="start_{{ d.id }}"
+                           value="{% if d.start_time %}{{ d.start_time|time:'H:i' }}{% endif %}">
+                  {% else %}
+                    {% if d.start_time %}{{ d.start_time|time:"H:i" }}{% else %}—{% endif %}
+                  {% endif %}
+                </td>
+                <td>
+                  {% if not is_locked and booking.status != 'cancelled' %}
+                    <input type="time"
+                           class="form-control form-control-sm"
+                           name="end_{{ d.id }}"
+                           value="{% if d.end_time %}{{ d.end_time|time:'H:i' }}{% endif %}">
+                  {% else %}
+                    {% if d.end_time %}{{ d.end_time|time:"H:i" }}{% else %}—{% endif %}
+                  {% endif %}
+                </td>
+                <td class="text-center"><span class="badge bg-secondary">{{ d.n }}</span></td>
+                <td class="text-end">
+                  <a class="btn btn-outline-primary btn-sm" href="{{ d.edit_url }}">
+                    <i class="bi bi-people"></i> View / edit in tab
+                  </a>
+                </td>
+              </tr>
+                {% if d.warn %}
+                  <tr class="table-warning">
+                    <td colspan="5" class="small text-danger">
+                      ⚠️ Date of birth mismatch detected on this register
+                      ({{ d.warn_count }} item{{ d.warn_count|pluralize }}).
+                      Please open the register and correct the affected delegate(s).
+                    </td>
+                  </tr>
+                {% endif %}
 
 
-          {% empty %}
-            <tr><td colspan="4" class="text-muted">No days created for this booking.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+            {% empty %}
+              <tr><td colspan="5" class="text-muted">No days created for this booking.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </form>
 
     {% if selected_day %}
       <div class="card mt-3" id="selected-day-register-panel">
@@ -536,7 +552,7 @@
                   <th style="width:22%">Name</th>
                   <th style="width:14%">Date of birth</th>
                   <th style="width:18%">Job title</th>
-                  <th style="width:28%">Notes</th>
+                  <th style="width:28%" class="d-none d-md-table-cell">Notes</th>
                   <th style="width:8%" class="d-none d-lg-table-cell">Employee ID</th>
                   <th style="width:6%" class="text-center">Health</th>
                   <th style="width:12%" class="text-end">Actions</th>
@@ -548,12 +564,14 @@
                     <td>{{ r.obj.name }}</td>
                     <td>{{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}</td>
                     <td>{{ r.obj.job_title|default:"—" }}</td>
-                    <td class="text-muted">{% if r.obj.notes %}{{ r.obj.notes|truncatechars:100 }}{% else %}—{% endif %}</td>
+                    <td class="text-muted d-none d-md-table-cell">{% if r.obj.notes %}{{ r.obj.notes|truncatechars:100 }}{% else %}—{% endif %}</td>
                     <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
                     <td class="text-center"><span class="badge {{ r.health_class }}" title="{{ r.health_title }}">{{ r.health_symbol }}</span></td>
                     <td class="text-end">
                       <a class="btn btn-outline-primary btn-sm" href="{{ r.edit_url }}">Edit</a>
-                      <form method="post" action="{% url 'instructor_delegate_delete' r.obj.pk %}" class="d-inline">
+                      <form method="post" action="{% url 'instructor_delegate_delete' r.obj.pk %}"
+                            class="d-inline js-delete-form"
+                            data-confirm-message="Delete this delegate? This cannot be undone.">
                         {% csrf_token %}
                         <input type="hidden" name="next" value="{{ selected_day_back_url }}">
                         <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
@@ -700,13 +718,13 @@
                     <thead>
                       <tr>
                         <th>Delegate</th>
-                        <th style="width: 120px;">DOB</th>
+                        <th class="d-none d-md-table-cell" style="width: 120px;">DOB</th>
                         <th style="width: 90px;">Attempt</th>
-                        <th style="width: 120px;" class="text-center">Time left</th>
-                        <th style="width: 110px;" class="text-center">Score</th>
-                        <th style="width: 90px;"  class="text-center">%</th>
+                        <th class="d-none d-lg-table-cell text-center" style="width: 120px;">Time left</th>
+                        <th class="text-center" style="width: 110px;">Score</th>
+                        <th class="d-none d-md-table-cell text-center" style="width: 90px;">%</th>
                         <th style="width: 120px;">Result</th>
-                        <th class="text-end" style="min-width: 320px;">Actions</th>
+                        <th class="text-end" style="min-width: 140px;">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -715,7 +733,7 @@
                           {% for att in atts %}
                             <tr>
                               <td>{{ att.delegate_name|default:"Delegate" }}</td>
-                              <td>
+                              <td class="d-none d-md-table-cell">
                                 {% if att.date_of_birth %}
                                   {{ att.date_of_birth|date:"j M Y" }}
                                 {% else %}
@@ -724,7 +742,7 @@
                               </td>
                               <td>{{ att.attempt_number|default:"1" }}</td>
 
-                              <td class="text-center">
+                              <td class="d-none d-lg-table-cell text-center">
                                 {% if att.finished_at %}
                                   <span class="text-muted">Submitted</span>
                                 {% else %}
@@ -747,7 +765,7 @@
                               </td>
 
                               <!-- Percentage (only when finished) -->
-                              <td class="text-center">
+                              <td class="d-none d-md-table-cell text-center">
                                 {% if att.finished_at and att.total_questions %}
                                   {% widthratio att.score_correct att.total_questions 100 %}%
                                 {% else %}
@@ -775,24 +793,27 @@
                                 {% endif %}
                               </td>
                               <td class="text-end">
-
+                                <div class="d-flex flex-column flex-md-row flex-md-wrap gap-1 justify-content-md-end">
                                 <a class="btn btn-sm btn-outline-primary"
                                   href="{% url 'instructor_attempt_review' att.id %}?back={{ booking.id }}&tab=exams">
-                                  Review exam
+                                  Review
                                 </a>
 
                                 <button type="button"
                                   class="btn btn-sm btn-outline-secondary exam-incorrect-panel-btn"
                                   data-attempt-id="{{ att.id }}"
                                   data-panel-url="{% url 'instructor_attempt_incorrect' att.id %}?embed=1&amp;back={{ booking.id }}&amp;tab=exams">
-                                  See incorrect, conduct viva &amp; authorise retest
+                                  <span class="d-md-none">Viva / retest</span>
+                                  <span class="d-none d-md-inline">See incorrect, conduct viva &amp; authorise retest</span>
                                 </button>
 
                                 <a class="btn btn-sm btn-outline-dark"
                                    href="{% url 'instructor_attempt_response_pdf' att.id %}"
                                    target="_blank" rel="noopener">
-                                  Export responses PDF
+                                  <span class="d-md-none">PDF</span>
+                                  <span class="d-none d-md-inline">Export responses PDF</span>
                                 </a>
+                                </div>
                               </td>
                             </tr>
                             <tr class="exam-detail-row d-none" data-attempt-id="{{ att.id }}">
@@ -958,9 +979,9 @@
     <div class="tab-pane fade booking-pane booking-pane--feedback{% if active_tab == 'feedback' %} show active{% endif %}" id="feedback-pane" role="tabpanel"
         aria-labelledby="feedback-tab" tabindex="0">
 
-      <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
         <h5 class="mb-0">Feedback</h5>
-        <div class="btn-group btn-group-sm">
+        <div class="d-flex flex-wrap gap-1">
           <a href="{% url 'instructor_feedback_pdf_all' booking.id %}"
             class="btn btn-primary btn-sm"
             target="_blank" rel="noopener">
@@ -1538,10 +1559,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     try {
       var url = window.location.href.split('#')[0];
-      var res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now(), {
-        cache: 'no-store',
-        headers: { 'X-Requested-With': 'fetch' }
-      });
+      var res = await fetch(
+        url + (url.includes('?') ? '&' : '?') + 'exams_poll=1&_=' + Date.now(),
+        {
+          cache: 'no-store',
+          headers: { 'X-Requested-With': 'fetch' }
+        }
+      );
 
       if (!res.ok) return;
 
@@ -1612,6 +1636,15 @@ document.addEventListener('DOMContentLoaded', function () {
   if (examsTabBtn) {
     examsTabBtn.addEventListener('shown.bs.tab', refreshExams);
   }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      stop();
+    } else {
+      start();
+      refreshExams();
+    }
+  });
 
   window.refreshExamsPane = refreshExams;
 

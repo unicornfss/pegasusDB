@@ -281,7 +281,10 @@
       "If this location has NO bookings, it will be permanently deleted.\n\n" +
       "If it HAS been used for bookings, it will be archived instead (so history is preserved).\n\n" +
       "Proceed?";
-    if (!window.confirm(msg)) return;
+    const ok = window.confirmAction
+      ? await window.confirmAction(msg.replace(/\n+/g, " "), { confirmLabel: "Delete / Archive" })
+      : window.confirm(msg);
+    if (!ok) return;
 
     const deleteBtn = document.getElementById("add-location-delete");
     if (deleteBtn) deleteBtn.disabled = true;

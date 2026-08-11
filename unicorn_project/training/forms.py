@@ -1177,6 +1177,9 @@ class PublicAccidentReportForm(AccidentReportForm):
         self.prefilled_course = prefilled_course
 
         self.fields["course_type"].queryset = course_types_with_accident_reports()
+        # Always hidden — delegates never choose course (date + instructor resolve it).
+        self.fields["course_type"].widget = forms.HiddenInput(attrs={"id": "ar-course-type"})
+        self.fields["course_type"].required = False
 
         if not show_accident_date:
             self.fields["date"].widget = forms.HiddenInput(attrs={"id": "ar-date"})
@@ -1186,18 +1189,14 @@ class PublicAccidentReportForm(AccidentReportForm):
             self.fields["date"].label = "Incident date"
             self.fields["date"].help_text = "Change this when testing on a different course date."
 
-        if lock_course and prefilled_course:
-            self.fields["course_type"].widget = forms.HiddenInput()
-            if not self.is_bound:
-                self.initial["course_type"] = prefilled_course.pk
-            self.fields["course_type"].required = False
-        elif prefilled_course and not self.is_bound:
-            self.initial.setdefault("course_type", prefilled_course.pk)
+        if prefilled_course and not self.is_bound:
+            self.initial["course_type"] = prefilled_course.pk
 
         instructors = list(instructors or [])
         self.single_instructor = None
         if len(instructors) == 1:
             self.single_instructor = instructors[0]
+            self.fields["reported_to"].queryset = Personnel.objects.filter(pk=instructors[0].pk)
             self.fields["reported_to"].widget = forms.HiddenInput(attrs={"id": "ar-reported-to"})
             if not self.is_bound:
                 self.initial["reported_to"] = instructors[0].pk
@@ -1216,18 +1215,32 @@ class PublicAccidentReportForm(AccidentReportForm):
             self.single_instructor = None
 
     def clean(self):
+        from .utils.accident_reports import accident_report_day_options
         from .utils.online_exercises import course_types_with_accident_reports
 
         cleaned = super().clean()
         course = self.prefilled_course or cleaned.get("course_type")
-        if not self.lock_course and not course:
-            self.add_error("course_type", "Please select the course this report relates to.")
-        elif course and not course_types_with_accident_reports().filter(pk=course.pk).exists():
-            self.add_error("course_type", "Accident reports are not enabled for this course type.")
-
         reported_to = cleaned.get("reported_to") or self.single_instructor
         if reported_to and not cleaned.get("reported_to"):
             cleaned["reported_to"] = reported_to
+
+        the_date = cleaned.get("date")
+        if not course and reported_to and the_date:
+            for row in accident_report_day_options(the_date).get("instructors") or []:
+                if str(row["id"]) == str(reported_to.pk):
+                    course = course_types_with_accident_reports().filter(pk=row["course_id"]).first()
+                    if course:
+                        cleaned["course_type"] = course
+                    break
+
+        if not course:
+            self.add_error(
+                None,
+                "We could not match this report to a course. Check the incident date and instructor.",
+            )
+        elif not course_types_with_accident_reports().filter(pk=course.pk).exists():
+            self.add_error(None, "Accident reports are not enabled for this course type.")
+
         if not self.single_instructor and not reported_to:
             self.add_error(
                 "reported_to",

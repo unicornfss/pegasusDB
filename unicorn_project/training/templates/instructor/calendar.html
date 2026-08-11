@@ -357,6 +357,18 @@
 
     const hasMultiMonth = !!FullCalendar.multiMonthPlugin;
 
+    const isMobileCalendar = window.matchMedia('(max-width: 575.98px)').matches;
+    const desktopToolbar = {
+      left: 'prev,next today',
+      center: 'title',
+      right: hasMultiMonth ? 'timeGridDay,timeGridWeek,dayGridMonth,multiMonthYear' : 'timeGridDay,timeGridWeek,dayGridMonth'
+    };
+    const mobileToolbar = {
+      left: 'prev,next',
+      center: 'title',
+      right: 'dayGridMonth'
+    };
+
     const calendar = new FullCalendar.Calendar(calendarEl, {
       initialView: 'dayGridMonth',
       height: 'auto',
@@ -364,17 +376,20 @@
       nowIndicator: true,
       selectable: true,
       selectMirror: true,
-      headerToolbar: {
-        left: 'prev,next today',
-        center: 'title',
-        right: hasMultiMonth ? 'timeGridDay,timeGridWeek,dayGridMonth,multiMonthYear' : 'timeGridDay,timeGridWeek,dayGridMonth'
-      },
+      headerToolbar: isMobileCalendar ? mobileToolbar : desktopToolbar,
       buttonText: {
         today: 'Today',
         timeGridDay: 'Day',
         timeGridWeek: 'Week',
         dayGridMonth: 'Month',
         multiMonthYear: 'Year'
+      },
+      windowResize: function(arg) {
+        if (window.matchMedia('(max-width: 575.98px)').matches) {
+          arg.view.calendar.setOption('headerToolbar', mobileToolbar);
+        } else {
+          arg.view.calendar.setOption('headerToolbar', desktopToolbar);
+        }
       },
       events: async function(fetchInfo, successCallback, failureCallback) {
         try {
@@ -546,7 +561,10 @@
     };
 
     window.deletePattern = async function(patternId) {
-      if (!confirm('Delete this recurring pattern?')) return;
+      const ok = window.confirmAction
+        ? await window.confirmAction('Delete this recurring pattern?', { confirmLabel: 'Delete' })
+        : confirm('Delete this recurring pattern?');
+      if (!ok) return;
 
       try {
         const form = new URLSearchParams();

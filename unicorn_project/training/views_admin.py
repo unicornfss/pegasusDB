@@ -50,10 +50,14 @@ from .forms import (
 from .views_instructor import (
     _assessment_selection_context,
     _feedback_queryset_for_booking,
+    _unique_delegates_for_booking as _unique_assessment_delegates_for_booking,
     list_course_receipts_drive,
     render_invoice_pdf_via_preview,
 )
-from .utils.certificates import build_certificates_pdf_for_booking, _unique_delegates_for_booking
+from .utils.certificates import (
+    build_certificates_pdf_for_booking,
+    _unique_delegates_for_booking as _unique_pass_delegates_for_booking,
+)
 from .google_oauth import get_drive_service
 from .services.dummy_bookings import (
     admin_may_view_booking,
@@ -1006,8 +1010,11 @@ def booking_list(request):
     }
 
     # ----- rows for the table
+    from .utils.booking_details import attach_booking_schedule_labels
+
+    page_bookings = attach_booking_schedule_labels(page_obj.object_list)
     rows = []
-    for b in page_obj.object_list:
+    for b in page_bookings:
         # Booking status pill
         st = (b.status or "")
         pill = status_style.get(st, {"cls": "badge bg-secondary"})
@@ -1027,6 +1034,8 @@ def booking_list(request):
 
         rows.append({
             "date":       b.course_date,
+            "dates_display": b.dates_display,
+            "dates_nonconsecutive": b.dates_nonconsecutive,
             "course":     (b.course_type.name if b.course_type else ""),
             "business":   (f"{b.business.name} (Dummy)" if b.is_dummy_business else (b.business.name if b.business else "")),
             "status":     {
@@ -1286,67 +1295,71 @@ def booking_form(request, pk=None):
                 return redirect("admin_booking_edit", pk=booking.pk)
 
             if days_payload:
-                # Normalise the posted days (ignore completely empty rows)
-                def _normalise_rows(rows):
-                    out = []
-                    for r in rows:
-                        day_date = (r.get("day_date") or "").strip()
-                        if not day_date:
-                            continue
-                        start_t = (r.get("start_time") or "").strip()
-                        end_t = (r.get("end_time") or "").strip()
-                        out.append((day_date, start_t, end_t))
-                    return out
-
-                posted_rows = _normalise_rows(days_payload)
                 has_delegates = DelegateRegister.objects.filter(
                     booking_day__booking=booking
                 ).exists()
 
                 if has_delegates:
-                    # Compare dates/times only
-                    existing_rows = [
-                        (
-                            d.date.isoformat(),
-                            d.start_time.strftime("%H:%M") if d.start_time else "",
-                            d.end_time.strftime("%H:%M") if d.end_time else "",
-                        )
-                        for d in booking.days.all().order_by("date", "start_time", "end_time")
+                    # Keep existing BookingDay rows (and their registers), but allow
+                    # admin to update dates/times/instructor/note in place.
+                    existing_days = list(
+                        booking.days.all().order_by("date", "id")
+                    )
+                    payload_rows = [
+                        r for r in days_payload
+                        if (r.get("day_date") or "").strip()
                     ]
 
-                    if posted_rows != existing_rows:
-                        # BLOCK date/time changes only
+                    if len(payload_rows) != len(existing_days):
                         messages.error(
                             request,
-                            "Cannot change course days or times because delegates are already registered."
+                            "Cannot add or remove course days because delegates are already registered. "
+                            "You can still change the start date (which shifts later days) and the times."
                         )
                         if "save_return" in request.POST:
                             return redirect("admin_booking_list")
                         return redirect("admin_booking_edit", pk=booking.pk)
 
-                    # ---------- NEW: Update only instructor + note ----------
-                    # Dates and times unchanged, but instructors ARE allowed to change.
-                    for i, d in enumerate(booking.days.all().order_by("date"), start=1):
-                        row = days_payload[i-1] if i-1 < len(days_payload) else None
-                        if not row:
-                            continue
+                    for i, (d, row) in enumerate(zip(existing_days, payload_rows), start=1):
+                        day_date_str = (row.get("day_date") or "").strip()
+                        try:
+                            new_date = datetime.fromisoformat(day_date_str).date()
+                        except ValueError:
+                            messages.error(request, f"Invalid date on day {i}.")
+                            return redirect("admin_booking_edit", pk=booking.pk)
+
+                        start_t = _parse_time_or_none(row.get("start_time")) or booking.start_time
+                        end_t = _parse_time_or_none(row.get("end_time"))
+                        if not end_t and start_t:
+                            total_days = float(getattr(booking.course_type, "duration_days", 1.0) or 1.0)
+                            rows = max(1, math.ceil(total_days))
+                            end_t = _add_hours_to_time(
+                                start_t,
+                                _hours_for_day_index(i, total_days, rows),
+                            )
 
                         inst_id = (row.get("instructor") or "").strip() or None
                         note = (row.get("note") or "").strip()
 
-                        # Update these two fields only
-                        changed = False
+                        update_fields = []
+                        if d.date != new_date:
+                            d.date = new_date
+                            update_fields.append("date")
+                        if d.start_time != start_t:
+                            d.start_time = start_t
+                            update_fields.append("start_time")
+                        if d.end_time != end_t:
+                            d.end_time = end_t
+                            update_fields.append("end_time")
                         if d.instructor_id != inst_id:
                             d.instructor_id = inst_id
-                            changed = True
+                            update_fields.append("instructor")
                         if hasattr(d, "note") and d.note != note:
                             d.note = note
-                            changed = True
+                            update_fields.append("note")
 
-                        if changed:
-                            d.save(update_fields=["instructor", "note"])
-
-                    # (no change to BookingDay rows).
+                        if update_fields:
+                            d.save(update_fields=update_fields)
 
                 else:
                     # No delegates -> safe to replace all BookingDay rows
@@ -1501,7 +1514,8 @@ def booking_form(request, pk=None):
     assessment_existing = {}
 
     if obj and obj.pk and obj.course_type_id:
-        assessment_delegates = _unique_delegates_for_booking(obj)
+        # All outcomes so admin sees live competency ticks before Pass
+        assessment_delegates = _unique_assessment_delegates_for_booking(obj)
         selection_ctx = _assessment_selection_context(obj, assessment_delegates)
         assessment_competencies = selection_ctx["mandatory_competencies"]
         assessment_optional_slots = selection_ctx["optional_slots"]
@@ -1534,8 +1548,8 @@ def booking_form(request, pk=None):
     has_exam = False
 
     if obj and obj.pk:
-        # Certificates: unique delegates on this booking
-        cert_delegates = _unique_delegates_for_booking(obj)
+        # Certificates: Pass-only (same filter used for certificate PDF generation)
+        cert_delegates = _unique_pass_delegates_for_booking(obj)
 
     if obj and obj.course_type:
         # All exams for this course type
@@ -1636,6 +1650,10 @@ def booking_form(request, pk=None):
 
     if accident_reports_ctx:
         ctx.update(accident_reports_ctx)
+
+    if obj and obj.pk:
+        from .utils.quick_test_links import attach_quick_test_links_context
+        attach_quick_test_links_context(ctx, obj)
 
     return render(request, "admin/form_booking.html", ctx)
 
@@ -2744,6 +2762,8 @@ def api_courses_today(request):
         .select_related("instructor", "business", "training_location", "course_type")
         .distinct(),
     )
+    from .utils.booking_details import attach_booking_schedule_labels
+    bookings = attach_booking_schedule_labels(bookings)
 
     results = []
     for b in bookings:
@@ -2756,6 +2776,8 @@ def api_courses_today(request):
                 "business": str(b.business) if b.business else "",
                 "location": str(b.training_location) if b.training_location else "",
                 "date": b.course_date.isoformat() if b.course_date else "",
+                "dates_label": getattr(b, "dates_display", "") or "",
+                "dates_nonconsecutive": bool(getattr(b, "dates_nonconsecutive", False)),
                 # 🔽 use the booking detail route, not course type
                 "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
             }
@@ -2777,14 +2799,14 @@ def api_courses_awaiting_closure(request):
         .prefetch_related("days")
         .distinct(),
     )
+    from .utils.booking_details import attach_booking_schedule_labels
+    bookings = attach_booking_schedule_labels(bookings)
 
     results = []
     for b in bookings:
         # Determine completed date = last course day
-        last_day = None
-        if hasattr(b, "days"):
-            dates = [d.date for d in b.days.all() if d.date]
-            last_day = max(dates) if dates else None
+        dates = getattr(b, "schedule_dates", None) or []
+        last_day = dates[-1] if dates else None
 
         results.append(
             {
@@ -2795,6 +2817,8 @@ def api_courses_awaiting_closure(request):
                 "business": str(b.business) if b.business else "",
                 "location": str(b.training_location) if b.training_location else "",
                 "completed": last_day.isoformat() if last_day else "",
+                "dates_label": getattr(b, "dates_display", "") or "",
+                "dates_nonconsecutive": bool(getattr(b, "dates_nonconsecutive", False)),
                 "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
             }
         )
@@ -2817,11 +2841,13 @@ def api_courses_in_7_days(request):
         .prefetch_related("days")
         .distinct(),
     )
+    from .utils.booking_details import attach_booking_schedule_labels
+    bookings = attach_booking_schedule_labels(bookings)
 
     results = []
     for b in bookings:
         next_day = min(
-            (day.date for day in b.days.all() if day.date and today < day.date <= target),
+            (day for day in (getattr(b, "schedule_dates", None) or []) if today < day <= target),
             default=b.course_date,
         )
 
@@ -2834,6 +2860,8 @@ def api_courses_in_7_days(request):
                 "business": str(b.business) if b.business else "",
                 "location": str(b.training_location) if b.training_location else "",
                 "date": next_day.isoformat() if next_day else "",
+                "dates_label": getattr(b, "dates_display", "") or "",
+                "dates_nonconsecutive": bool(getattr(b, "dates_nonconsecutive", False)),
                 "url": reverse("admin_booking_edit", kwargs={"pk": b.id}),
             }
         )

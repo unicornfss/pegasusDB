@@ -1,0 +1,8 @@
+{# Expects dates_display (str) and dates_nonconsecutive (bool). #}
+<span class="{% if dates_nonconsecutive %}booking-dates-split{% else %}nowrap{% endif %}"
+      {% if dates_nonconsecutive %}title="Course days are not consecutive"{% endif %}>
+  {{ dates_display|default:"—" }}
+  {% if dates_nonconsecutive %}
+    <span class="badge text-bg-warning ms-1 align-middle booking-dates-split-badge">Split days</span>
+  {% endif %}
+</span>

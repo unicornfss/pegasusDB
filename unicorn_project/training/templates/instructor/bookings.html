@@ -20,7 +20,10 @@
     padding:.25em .6em; border-radius: 999px; font-size:.75rem;
     background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
   }
-  .card-body { padding: .75rem 1rem; }
+  .card-body { padding: .75rem 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 575.98px) {
+    .bookings-hide-sm { display: none !important; }
+  }
 </style>
 
 <script>
@@ -53,22 +56,22 @@
           <tr>
             <th class="nowrap">Date</th>
             <th>Ref</th>
-            <th class="nowrap">Start</th>
+            <th class="nowrap bookings-hide-sm">Start</th>
             <th>Course</th>
-            <th>Business</th>
-            <th>Location</th>
+            <th class="bookings-hide-sm">Business</th>
+            <th class="bookings-hide-sm">Location</th>
             <th class="w-0"></th>
           </tr>
         </thead>
         <tbody>
           {% for b in in_progress %}
           <tr data-href="{% url 'instructor_booking_detail' pk=b.id %}" tabindex="0" role="button" aria-label="Open booking {{ b.course_reference|default:b.id }}">
-            <td class="nowrap">{{ b.course_date|date:"d M Y" }}</td>
+            <td>{% include "partials/booking_dates_cell.html" with dates_display=b.dates_display dates_nonconsecutive=b.dates_nonconsecutive %}</td>
             <td class="nowrap">{{ b.course_reference|default:"—" }}</td>
-            <td class="nowrap">{{ b.start_time|time:"H:i" }}</td>
+            <td class="nowrap bookings-hide-sm">{{ b.start_time|time:"H:i" }}</td>
             <td>{{ b.course_type.name }}</td>
-            <td>{{ b.business.name }}</td>
-            <td>{{ b.training_location.name }}</td>
+            <td class="bookings-hide-sm">{{ b.business.name }}</td>
+            <td class="bookings-hide-sm">{{ b.training_location.name }}</td>
             <td class="text-end">
               <a class="btn btn-light btn-sm" href="{% url 'instructor_booking_detail' pk=b.id %}">Open</a>
             </td>
@@ -95,22 +98,22 @@
           <tr>
             <th class="nowrap">Date</th>
             <th>Ref</th>
-            <th class="nowrap">Start</th>
+            <th class="nowrap bookings-hide-sm">Start</th>
             <th>Course</th>
-            <th>Business</th>
-            <th>Location</th>
+            <th class="bookings-hide-sm">Business</th>
+            <th class="bookings-hide-sm">Location</th>
             <th class="w-0"></th>
           </tr>
         </thead>
         <tbody>
           {% for b in awaiting %}
           <tr data-href="{% url 'instructor_booking_detail' pk=b.id %}" tabindex="0" role="button">
-            <td class="nowrap">{{ b.course_date|date:"d M Y" }}</td>
+            <td>{% include "partials/booking_dates_cell.html" with dates_display=b.dates_display dates_nonconsecutive=b.dates_nonconsecutive %}</td>
             <td class="nowrap">{{ b.course_reference|default:"—" }}</td>
-            <td class="nowrap">{{ b.start_time|time:"H:i" }}</td>
+            <td class="nowrap bookings-hide-sm">{{ b.start_time|time:"H:i" }}</td>
             <td>{{ b.course_type.name }}</td>
-            <td>{{ b.business.name }}</td>
-            <td>{{ b.training_location.name }}</td>
+            <td class="bookings-hide-sm">{{ b.business.name }}</td>
+            <td class="bookings-hide-sm">{{ b.training_location.name }}</td>
             <td class="text-end">
               <a class="btn btn-light btn-sm" href="{% url 'instructor_booking_detail' pk=b.id %}">Open</a>
             </td>
@@ -137,22 +140,22 @@
           <tr>
             <th class="nowrap">Date</th>
             <th>Ref</th>
-            <th class="nowrap">Start</th>
+            <th class="nowrap bookings-hide-sm">Start</th>
             <th>Course</th>
-            <th>Business</th>
-            <th>Location</th>
+            <th class="bookings-hide-sm">Business</th>
+            <th class="bookings-hide-sm">Location</th>
             <th class="w-0"></th>
           </tr>
         </thead>
         <tbody>
           {% for b in scheduled %}
           <tr data-href="{% url 'instructor_booking_detail' pk=b.id %}" tabindex="0" role="button">
-            <td class="nowrap">{{ b.course_date|date:"d M Y" }}</td>
+            <td>{% include "partials/booking_dates_cell.html" with dates_display=b.dates_display dates_nonconsecutive=b.dates_nonconsecutive %}</td>
             <td class="nowrap">{{ b.course_reference|default:"—" }}</td>
-            <td class="nowrap">{{ b.start_time|time:"H:i" }}</td>
+            <td class="nowrap bookings-hide-sm">{{ b.start_time|time:"H:i" }}</td>
             <td>{{ b.course_type.name }}</td>
-            <td>{{ b.business.name }}</td>
-            <td>{{ b.training_location.name }}</td>
+            <td class="bookings-hide-sm">{{ b.business.name }}</td>
+            <td class="bookings-hide-sm">{{ b.training_location.name }}</td>
             <td class="text-end">
               <a class="btn btn-light btn-sm" href="{% url 'instructor_booking_detail' pk=b.id %}">Open</a>
             </td>
@@ -180,7 +183,7 @@
             <th class="nowrap">Date</th>
             <th>Ref</th>
             <th>Course</th>
-            <th>Business</th>
+            <th class="bookings-hide-sm">Business</th>
             <th class="nowrap">Invoice</th>
             <th class="w-0"></th>
           </tr>
@@ -188,10 +191,10 @@
         <tbody>
           {% for b in closed_rows %}
           <tr data-href="{% url 'instructor_booking_detail' pk=b.id %}" tabindex="0" role="button">
-            <td class="nowrap">{{ b.course_date|date:"d M Y" }}</td>
+            <td>{% include "partials/booking_dates_cell.html" with dates_display=b.dates_display dates_nonconsecutive=b.dates_nonconsecutive %}</td>
             <td class="nowrap">{{ b.course_reference|default:"—" }}</td>
             <td>{{ b.course_type.name }}</td>
-            <td>{{ b.business.name }}</td>
+            <td class="bookings-hide-sm">{{ b.business.name }}</td>
             <td class="nowrap">
               {% if b.invoice_status %}
                 {% if b.invoice_status == 'sent' %}
@@ -276,9 +279,9 @@
           <tr>
             <th class="nowrap">Date</th>
             <th>Ref</th>
-            <th class="nowrap">Start</th>
+            <th class="nowrap bookings-hide-sm">Start</th>
             <th>Course</th>
-            <th>Business</th>
+            <th class="bookings-hide-sm">Business</th>
             <th class="nowrap">Status</th>
             <th class="w-0"></th>
           </tr>
@@ -286,11 +289,11 @@
         <tbody>
           {% for b in practice_bookings %}
           <tr data-href="{% url 'instructor_booking_detail' pk=b.id %}" tabindex="0" role="button">
-            <td class="nowrap">{{ b.course_date|date:"d M Y" }}</td>
+            <td>{% include "partials/booking_dates_cell.html" with dates_display=b.dates_display dates_nonconsecutive=b.dates_nonconsecutive %}</td>
             <td class="nowrap">{{ b.course_reference|default:"—" }}</td>
-            <td class="nowrap">{% if b.start_time %}{{ b.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
+            <td class="nowrap bookings-hide-sm">{% if b.start_time %}{{ b.start_time|time:"H:i" }}{% else %}—{% endif %}</td>
             <td>{{ b.course_type.name }}</td>
-            <td>{{ b.business.name }}</td>
+            <td class="bookings-hide-sm">{{ b.business.name }}</td>
             <td class="nowrap">
               {% if b.status == 'scheduled' %}
                 <span class="badge bg-secondary">Scheduled</span>

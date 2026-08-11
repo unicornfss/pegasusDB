@@ -113,7 +113,7 @@
           formaction="{% url 'admin_location_delete' form.instance.pk %}"
           formmethod="post"
           formnovalidate
-          onclick="return confirm('If this location has NO bookings, it will be permanently deleted.\n\nIf it HAS been used for bookings, it will be archived instead (so history is preserved).\n\nProceed?');">
+          data-confirm="If this location has NO bookings, it will be permanently deleted. If it HAS been used for bookings, it will be archived instead (so history is preserved). Proceed?">
           <i class="bi bi-archive"></i> Delete / Archive
         </button>
       {% endif %}

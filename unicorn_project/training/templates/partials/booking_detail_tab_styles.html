@@ -113,6 +113,79 @@
   .booking-pane--certificates { --pane-tint: rgba(13, 202, 240, 0.07); }
   .booking-pane--invoicing { --pane-tint: rgba(73, 80, 87, 0.07); }
 
+  .booking-tab-select-wrap {
+    display: none;
+  }
+
+  .booking-tab-select {
+    font-weight: 600;
+    font-size: 1rem;
+    min-height: 2.75rem;
+    padding-right: 2.75rem;
+    border-width: 2px;
+    border-color: #0d6efd;
+    border-radius: 0.65rem;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%230d6efd' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+    background-size: 16px 12px;
+    background-color: #fff;
+  }
+
+  .booking-tab-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.2);
+  }
+
+  .booking-tab-select-wrap .booking-tab-select-label {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-weight: 600;
+    color: #344054;
+    margin-bottom: 0.35rem;
+  }
+
+  .booking-tab-select-wrap .booking-tab-select-hint {
+    font-size: 0.8rem;
+    color: #667085;
+    font-weight: 400;
+  }
+
+  /* Narrow screens: replace tab strip with a full section dropdown */
+  @media (max-width: 767.98px) {
+    .booking-detail-tabs {
+      display: none !important;
+    }
+
+    .booking-tab-select-wrap {
+      display: block;
+      margin-top: 1rem;
+      margin-bottom: 0.65rem;
+    }
+
+    .booking-detail-tabs-content {
+      border: 1px solid rgba(16, 24, 40, 0.12) !important;
+      border-radius: 0.55rem !important;
+    }
+  }
+
+  html[data-color-scheme="night"] .booking-tab-select {
+    background-color: var(--app-input-bg, #0b1118);
+    color: var(--app-input-text, #f3f4f6);
+    border-color: #7db2ff;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%237db2ff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  }
+
+  html[data-color-scheme="night"] .booking-tab-select-wrap .booking-tab-select-label {
+    color: #e9ecef;
+  }
+
+  html[data-color-scheme="night"] .booking-tab-select-wrap .booking-tab-select-hint {
+    color: #a8b1bf;
+  }
+
   html[data-color-scheme="night"] .booking-detail-tabs {
     border-bottom-color: rgba(255, 255, 255, 0.12);
   }
@@ -132,5 +205,62 @@
 
   html[data-color-scheme="night"] .booking-detail-tabs-content {
     background: var(--bs-body-bg, #212529);
+    border-color: rgba(255, 255, 255, 0.12) !important;
   }
 </style>
+
+<script>
+(function () {
+  function initBookingTabSelect() {
+    var tabs = document.getElementById('bookingTabs');
+    if (!tabs || tabs.dataset.mobileSelectInit === '1') return;
+    tabs.dataset.mobileSelectInit = '1';
+
+    var buttons = Array.prototype.slice.call(
+      tabs.querySelectorAll('[data-bs-toggle="tab"]')
+    );
+    if (!buttons.length) return;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'booking-tab-select-wrap';
+    wrap.innerHTML =
+      '<label class="booking-tab-select-label" for="bookingTabSelect">' +
+      '<i class="bi bi-list-ul" aria-hidden="true"></i>' +
+      '<span>Jump to section</span>' +
+      '<span class="booking-tab-select-hint">(tap to change)</span>' +
+      '</label>' +
+      '<select id="bookingTabSelect" class="form-select booking-tab-select" aria-label="Jump to course section"></select>';
+
+    tabs.parentNode.insertBefore(wrap, tabs);
+
+    var select = wrap.querySelector('select');
+    buttons.forEach(function (btn) {
+      var opt = document.createElement('option');
+      opt.value = btn.getAttribute('data-bs-target') || '';
+      opt.textContent = (btn.textContent || '').replace(/\s+/g, ' ').trim();
+      if (btn.classList.contains('active')) opt.selected = true;
+      select.appendChild(opt);
+    });
+
+    select.addEventListener('change', function () {
+      var target = select.value;
+      var btn = buttons.find(function (b) {
+        return b.getAttribute('data-bs-target') === target;
+      });
+      if (!btn || typeof bootstrap === 'undefined') return;
+      bootstrap.Tab.getOrCreateInstance(btn).show();
+    });
+
+    tabs.addEventListener('shown.bs.tab', function (e) {
+      var target = e.target && e.target.getAttribute('data-bs-target');
+      if (target && select.value !== target) select.value = target;
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initBookingTabSelect);
+  } else {
+    initBookingTabSelect();
+  }
+})();
+</script>

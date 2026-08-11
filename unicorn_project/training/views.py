@@ -1299,6 +1299,12 @@ def _accident_report_poll_response(request, booking):
     from .utils.accident_reports import accident_reports_for_booking
 
     reports = accident_reports_for_booking(booking)
+    ref = getattr(booking, "course_reference", None) or booking.pk
+    # flush=True so Windows/runserver shows it immediately alongside request lines
+    print(
+        f"*** [AccidentReports] poll — {ref} — {len(reports)} report(s) ***",
+        flush=True,
+    )
     rows_html = render_to_string(
         "instructor/_accident_report_rows.html",
         {"reports": reports, "booking": booking},
@@ -1366,6 +1372,7 @@ def accident_report_public(request):
       - course + incident date + reported-to instructor (resolved on save).
     """
     from .utils.accident_reports import (
+        accident_report_day_options,
         booking_incident_dates,
         default_incident_date_for_booking,
         default_incident_date_for_course,
@@ -1415,7 +1422,15 @@ def accident_report_public(request):
     booking_link_active = bool(booking and incident_date_on_booking(booking, incident_date))
     booking_day_dates = sorted(booking_incident_dates(booking)) if booking else []
 
+    # Open form (no booking/course QR): resolve what's running on the incident date.
+    day_options = None
+    if not booking and not prefilled_course and request.method != "POST":
+        day_options = accident_report_day_options(incident_date)
+
     init = {"date": incident_date}
+    if day_options and day_options["mode"] == "single_course" and day_options["courses"]:
+        init["course_type"] = day_options["courses"][0]["id"]
+
     inst_q = (request.GET.get("instructor") or request.POST.get("reported_to") or "").strip()
     if booking and booking.instructor_id and booking_link_active:
         init["reported_to"] = booking.instructor_id
@@ -1424,6 +1439,10 @@ def accident_report_public(request):
             init["reported_to"] = Personnel.objects.get(pk=inst_q)
         except Personnel.DoesNotExist:
             pass
+    elif day_options and len(day_options["instructors"]) == 1:
+        init["reported_to"] = day_options["instructors"][0]["id"]
+        if day_options["mode"] == "multi_course":
+            init["course_type"] = day_options["instructors"][0]["course_id"]
 
     course = prefilled_course
     if not course and request.method == "POST":
@@ -1433,15 +1452,25 @@ def accident_report_public(request):
                 course = course_types_with_accident_reports().get(pk=posted_course)
             except (CourseType.DoesNotExist, ValueError):
                 course = _resolve_course_type(posted_course)
+    elif not course and day_options and day_options["mode"] == "single_course" and day_options["courses"]:
+        course = course_types_with_accident_reports().filter(
+            pk=day_options["courses"][0]["id"]
+        ).first()
 
     instructors = []
     if booking_link_active:
         instructors = instructors_for_booking_report(booking, incident_date)
     elif course:
         instructors = instructors_for_accident_report_course_date(course, incident_date)
+    elif day_options and day_options["instructors"]:
+        instructor_ids = [row["id"] for row in day_options["instructors"]]
+        instructors = list(Personnel.objects.filter(pk__in=instructor_ids).order_by("name"))
 
-    instructors_unavailable = bool(course and not booking_link_active and not instructors)
-
+    instructors_unavailable = bool(
+        (course or (day_options and day_options["mode"] != "none"))
+        and not booking_link_active
+        and not instructors
+    )
     form = PublicAccidentReportForm(
         request.POST or None,
         initial=init,
@@ -1517,6 +1546,31 @@ def accident_report_public(request):
             "GOOGLE_MAPS_API_KEY": settings.GOOGLE_MAPS_API_KEY,
         },
     )
+
+
+@require_GET
+def accident_report_day_options_api(request):
+    """
+    Courses + instructors for accident reports on a date (no booking ref).
+    Query: ?date=YYYY-MM-DD
+    """
+    from .utils.accident_reports import accident_report_day_options
+
+    date_str = (request.GET.get("date") or "").strip()
+    day_date = _parse_yyyy_mm_dd(date_str) or _parse_flexible_date(date_str) or timezone.localdate()
+    options = accident_report_day_options(day_date)
+    payload = {
+        "date": day_date.isoformat(),
+        "mode": options["mode"],
+        "courses": options["courses"],
+        "instructors": options["instructors"],
+    }
+    if options["mode"] == "none":
+        payload["message"] = (
+            f"No courses with accident reports are scheduled on "
+            f"{day_date.strftime('%d %b %Y')}."
+        )
+    return JsonResponse(payload)
 
 
 @require_GET

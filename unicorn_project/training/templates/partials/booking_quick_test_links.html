@@ -1,0 +1,44 @@
+{# Public form shortcuts for dummy bookings (always) and all bookings in DEBUG.
+   Expects: booking, quick_test_days, quick_test_exam_day_pairs,
+            quick_test_last_day, has_accident_reports (optional). #}
+{% if booking and booking.instructor and booking.course_type %}
+<div class="d-flex flex-wrap align-items-center gap-2">
+  <span class="small text-muted me-1">Quick test:</span>
+
+  {% for d in quick_test_days %}
+    <a class="btn btn-outline-primary btn-sm"
+       href="{% url 'public_delegate_register' %}?ct={{ booking.course_type.code }}&date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}&day={{ d.day_code|urlencode }}"
+       target="_blank" rel="noopener">
+      <i class="bi bi-people me-1"></i>Register - Day {{ forloop.counter }}
+    </a>
+  {% empty %}
+    <span class="small text-muted">No course days yet.</span>
+  {% endfor %}
+
+  {% for ex, d in quick_test_exam_day_pairs %}
+    {% if d %}
+      <a class="btn btn-outline-primary btn-sm"
+         href="{% url 'delegate_exam_start' %}?examcode={{ ex.exam_code }}&exam_date={{ d.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+         target="_blank" rel="noopener">
+        <i class="bi bi-pencil-square me-1"></i>Exam {{ ex.sequence }} - Day {{ forloop.counter }}
+      </a>
+    {% endif %}
+  {% endfor %}
+
+  {% if quick_test_last_day %}
+    <a class="btn btn-outline-primary btn-sm"
+       href="{% url 'public_feedback_form' %}?course={{ booking.course_type.code }}&date={{ quick_test_last_day.date|date:'Y-m-d' }}&instructor={{ booking.instructor.pk }}"
+       target="_blank" rel="noopener">
+      <i class="bi bi-chat-left-text me-1"></i>Feedback form
+    </a>
+  {% endif %}
+
+  {% if has_accident_reports and booking.course_reference %}
+    <a class="btn btn-outline-danger btn-sm"
+       href="{% url 'accident_report_public' %}?ref={{ booking.course_reference|urlencode }}"
+       target="_blank" rel="noopener">
+      <i class="bi bi-clipboard2-pulse me-1"></i>Accident report
+    </a>
+  {% endif %}
+</div>
+{% endif %}

@@ -69,6 +69,11 @@ def instructor_course_swaps(request):
     new_outcome_ids = {swap.id for swap in new_outcomes}
     mark_swap_outcomes_seen(inst)
 
+    from .utils.booking_details import attach_booking_schedule_labels
+
+    swap_bookings = [s.booking for s in (incoming + outgoing + recent) if s.booking_id]
+    attach_booking_schedule_labels(swap_bookings + swappable_bookings)
+
     return render(
         request,
         "instructor/course_swaps.html",

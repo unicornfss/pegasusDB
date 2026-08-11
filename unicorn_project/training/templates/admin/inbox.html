@@ -49,7 +49,7 @@
               </div>
 
               {% if status == 'open' and item.course_delivery_request %}
-                <form method="post" action="{% url 'admin_inbox_course_request_action' item.pk %}" class="d-flex flex-column gap-2" style="min-width:260px;">
+                <form method="post" action="{% url 'admin_inbox_course_request_action' item.pk %}" class="d-flex flex-column gap-2 inbox-action-panel">
                   {% csrf_token %}
                   <textarea name="admin_note" class="form-control form-control-sm" rows="2" placeholder="Optional note to instructor"></textarea>
                   <div class="d-flex gap-2">

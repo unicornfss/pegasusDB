@@ -110,6 +110,9 @@
   }
 
   function pollInbox() {
+    if (document.hidden) {
+      return;
+    }
     fetch(pollUrl, {
       credentials: "same-origin",
       headers: { Accept: "application/json" },
@@ -128,4 +131,9 @@
 
   pollInbox();
   window.setInterval(pollInbox, pollIntervalMs);
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) {
+      pollInbox();
+    }
+  });
 })();

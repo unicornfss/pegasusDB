@@ -86,7 +86,7 @@
               </div>
 
               {% if item.kind == 'course_delivery_request' and is_admin_view and item.course_delivery_request and item.course_delivery_request.status == 'pending' %}
-                <form method="post" action="{% url 'inbox_course_request_action' item.pk %}" class="d-flex flex-column gap-2" style="min-width:260px;">
+                <form method="post" action="{% url 'inbox_course_request_action' item.pk %}" class="d-flex flex-column gap-2 inbox-action-panel">
                   {% csrf_token %}
                   <input type="hidden" name="return_to" value="{{ inbox_url_name }}">
                   <textarea name="admin_note" class="form-control form-control-sm" rows="2" placeholder="Optional note to instructor"></textarea>
@@ -100,7 +100,7 @@
                   </div>
                 </form>
               {% elif item.kind == 'course_swap_incoming' and item.course_swap and item.course_swap.status == 'pending' %}
-                <div class="d-flex flex-column gap-2" style="min-width:200px;">
+                <div class="d-flex flex-column gap-2 inbox-action-panel">
                   <form method="post" action="{% url 'inbox_swap_accept' item.pk %}">
                     {% csrf_token %}
                     <input type="hidden" name="return_to" value="{{ inbox_url_name }}">

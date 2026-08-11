@@ -244,14 +244,20 @@
     padding-bottom: max(0.8rem, env(safe-area-inset-bottom));
   }
 
+  .booking-floating-actions__inner {
+    max-width: 100%;
+  }
+
+  @media (max-width: 575.98px) {
+    .booking-page-with-floating-actions {
+      padding-bottom: 7.5rem;
+    }
+  }
+
   @media (min-width: 992px) {
     .booking-floating-actions {
       left: 280px;
     }
-  }
-
-  .booking-floating-actions__inner {
-    max-width: 100%;
   }
 
   html[data-color-scheme="night"] .booking-floating-actions {

@@ -478,24 +478,10 @@ _DASHBOARD_BOOKING_RELATED = ("course_type", "business", "training_location")
 
 
 def _attach_first_day_date(bookings):
-    """Set booking.first_day_date so templates avoid booking.days.first queries."""
-    booking_list = list(bookings)
-    if not booking_list:
-        return booking_list
+    """Set schedule labels (including first_day_date) for dashboard/list templates."""
+    from .utils.booking_details import attach_booking_schedule_labels
 
-    booking_ids = [b.pk for b in booking_list]
-    first_day_by_booking = {}
-    for day in (
-        BookingDay.objects.filter(booking_id__in=booking_ids)
-        .order_by("booking_id", "date", "id")
-        .only("booking_id", "date")
-    ):
-        if day.booking_id not in first_day_by_booking:
-            first_day_by_booking[day.booking_id] = day.date
-
-    for booking in booking_list:
-        booking.first_day_date = first_day_by_booking.get(booking.pk) or booking.course_date
-    return booking_list
+    return attach_booking_schedule_labels(bookings)
 
 
 def _dashboard_action_bookings(personnel, **filters):
@@ -785,7 +771,7 @@ def instructor_bookings(request):
     for b in closed_rows:
         b.invoice_status = inv_map.get(b.id, "")
 
-    # Add first register-day id for direct register-entry links in list rows.
+    # Add first register-day id and schedule labels for list rows.
     visible_bookings = in_progress + awaiting + scheduled + closed_rows + practice_bookings
     visible_booking_ids = [b.id for b in visible_bookings]
 
@@ -801,6 +787,9 @@ def instructor_bookings(request):
 
     for b in visible_bookings:
         b.first_day_id = first_day_by_booking.get(b.id)
+
+    from .utils.booking_details import attach_booking_schedule_labels
+    attach_booking_schedule_labels(visible_bookings)
 
     dummy_businesses = list(
         Business.objects
@@ -1636,6 +1625,10 @@ def instructor_booking_detail(request, pk):
         messages.error(request, "You do not have access to this booking.")
         return redirect("instructor_bookings")
 
+    if request.method == "GET" and request.GET.get("exams_poll"):
+        ref = getattr(booking, "course_reference", None) or booking.pk
+        print(f"*** [Exams] poll — {ref} ***", flush=True)
+
     booking.sync_precise_from_admin(save=True)
 
     is_locked = booking.status == "completed"
@@ -2046,6 +2039,73 @@ def instructor_booking_detail(request, pk):
         print("DEBUG ACTION RECEIVED:", action)
 
         # ------------------------------------------------------
+        # UPDATE DAY START/END TIMES (instructor — dates stay admin-only)
+        # ------------------------------------------------------
+        if action == "update_day_times":
+            if booking.status == "cancelled":
+                messages.error(request, "Cannot change times on a cancelled booking.")
+                return redirect(f"{request.path}#days-pane")
+            if is_locked:
+                return HttpResponseForbidden("Course is locked.")
+
+            days = list(BookingDay.objects.filter(booking=booking).order_by("date", "id"))
+            changed = False
+            first_day = days[0] if days else None
+
+            for d in days:
+                start_raw = (request.POST.get(f"start_{d.pk}") or "").strip()
+                end_raw = (request.POST.get(f"end_{d.pk}") or "").strip()
+
+                new_start = d.start_time
+                new_end = d.end_time
+                if start_raw:
+                    try:
+                        new_start = datetime.strptime(start_raw, "%H:%M").time()
+                    except ValueError:
+                        messages.error(request, f"Invalid start time for {d.date}.")
+                        return redirect(f"{request.path}#days-pane")
+                if end_raw:
+                    try:
+                        new_end = datetime.strptime(end_raw, "%H:%M").time()
+                    except ValueError:
+                        messages.error(request, f"Invalid end time for {d.date}.")
+                        return redirect(f"{request.path}#days-pane")
+
+                update_fields = []
+                if new_start != d.start_time:
+                    d.start_time = new_start
+                    update_fields.append("start_time")
+                if new_end != d.end_time:
+                    d.end_time = new_end
+                    update_fields.append("end_time")
+                if update_fields:
+                    d.save(update_fields=update_fields)
+                    changed = True
+
+            if changed and first_day and first_day.start_time and booking.start_time != first_day.start_time:
+                booking.start_time = first_day.start_time
+                booking.save(update_fields=["start_time"])
+
+            if changed:
+                messages.success(request, "Course times updated.")
+                try:
+                    from .utils.booking_change_detection import CHANGE_DATES_TIMES
+                    from .utils.booking_notifications import notify_booking_changes
+
+                    notify_booking_changes(
+                        booking,
+                        intro="Course times for a booking assigned to you have been updated.",
+                        changed_areas=[CHANGE_DATES_TIMES],
+                    )
+                except Exception:
+                    pass
+            else:
+                messages.info(request, "No time changes to save.")
+
+            return redirect(f"{request.path}#days-pane")
+
+
+        # ------------------------------------------------------
         # PRECISE MAP LOCATION UPDATE (Instructor) ✅ WITH BASELINE
         # ------------------------------------------------------
         if action == "update_precise_location":
@@ -2403,11 +2463,6 @@ def instructor_booking_detail(request, pk):
     closure_feedback_count = FeedbackResponse.objects.filter(booking=booking).count()
     closure_missing_feedback = closure_feedback_count <= 0
 
-    print("CLOSURE CHECK:")
-    print("REGISTER:", repr(reg))
-    print("ASSESSMENT:", repr(ass))
-    print("BOOKING STATUS:", repr(status))
-
     can_close_course = (
         reg in ["completed", "send_later"]
         and ass in ["completed", "send_later"]
@@ -2418,8 +2473,16 @@ def instructor_booking_detail(request, pk):
         and not closure_counts_vary
     )
 
-
-    print("CAN CLOSE:", can_close_course)
+    # Skip noisy debug on background pane refreshes (exams/days poll the full page)
+    if request.method == "GET" and not (
+        request.GET.get("exams_poll")
+        or request.headers.get("X-Requested-With") in ("fetch", "XMLHttpRequest")
+    ):
+        print("CLOSURE CHECK:")
+        print("REGISTER:", repr(reg))
+        print("ASSESSMENT:", repr(ass))
+        print("BOOKING STATUS:", repr(status))
+        print("CAN CLOSE:", can_close_course)
 
     ctx["can_close_course"] = can_close_course
     ctx["closure_day_delegate_counts"] = closure_day_delegate_counts
@@ -2534,6 +2597,7 @@ def instructor_booking_detail(request, pk):
             "id": d.pk,
             "date": d.date,
             "start_time": d.start_time,
+            "end_time": d.end_time,
             "n": n,
             "warn": warn_count > 0,
             "warn_count": warn_count,
@@ -2586,16 +2650,9 @@ def instructor_booking_detail(request, pk):
         ctx["selected_day"] = None
         ctx["selected_day_rows"] = []
 
-    # For dummy booking quick-test links: pair each exam with its matching day
-    if booking.is_dummy_business and booking.course_type.has_exam:
-        exams_list = list(Exam.objects.filter(course_type=booking.course_type).order_by("sequence"))
-        days_list = list(days)
-        ctx["dummy_exam_day_pairs"] = [
-            (exams_list[i], days_list[i] if i < len(days_list) else None)
-            for i in range(len(exams_list))
-        ]
-    else:
-        ctx["dummy_exam_day_pairs"] = []
+    # For Quick test links (dummy bookings always; all bookings when DEBUG)
+    from .utils.quick_test_links import attach_quick_test_links_context
+    attach_quick_test_links_context(ctx, booking, days=days)
 
     # -------------------------------------------------------
     # Build unified event description for Google & ICS
@@ -3933,9 +3990,12 @@ def instructor_feedback_poll(request, booking_id):
         .select_related("instructor")
         .order_by("-date", "-created_at")
     )
+    rows = fb_qs.count()
+    ref = getattr(booking, "course_reference", None) or booking.pk
+    print(f"*** [Feedback] poll — {ref} — {rows} response(s) ***", flush=True)
 
     html = render_to_string("instructor/_booking_feedback_rows.html", {"fb_qs": fb_qs}, request=request)
-    return JsonResponse({"ok": True, "booking_id": str(booking_id), "html": html, "rows": fb_qs.count()})
+    return JsonResponse({"ok": True, "booking_id": str(booking_id), "html": html, "rows": rows})
 
 
 def instructor_feedback_view(request, pk):

@@ -7,7 +7,7 @@
   {{ day.booking.course_type.name }} — {{ day.date|date:"j M Y" }}
 </p>
 
-<div class="d-flex gap-2 mb-2">
+<div class="d-flex flex-wrap gap-2 mb-2">
   <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_new' day.pk %}">
     <i class="bi bi-person-plus"></i> Add delegate
   </a>
@@ -25,7 +25,7 @@
 </div>
 {% endif %}
 
-<div class="alert alert-info py-2 mb-2 small d-flex justify-content-between align-items-center">
+<div class="alert alert-info py-2 mb-2 small d-flex flex-wrap justify-content-between align-items-center gap-2">
   <div>
     <i class="bi bi-arrow-repeat"></i>
     This page auto-refreshes every 5 seconds. Updates pause while your mouse is over the list.
@@ -43,7 +43,7 @@
         <th style="width:22%">Name</th>
         <th style="width:14%">Date of birth</th>
         <th style="width:18%">Job title</th>
-        <th style="width:32%">Notes</th>
+        <th style="width:32%" class="d-none d-md-table-cell">Notes</th>
         <th class="d-none d-lg-table-cell" style="width:8%">Employee ID</th>
         <th style="width:6%" class="text-center">Health</th>
         <th style="width:10%" class="text-end">Actions</th>
@@ -86,7 +86,7 @@
             </a>
           </td>
 
-          <td class="text-muted position-relative">
+          <td class="text-muted position-relative d-none d-md-table-cell">
             {% if r.obj.notes %}
               {{ r.obj.notes|truncatechars:140 }}
             {% else %}
@@ -126,7 +126,8 @@
             </a>
             <form method="post"
                   action="{% url 'instructor_delegate_delete' r.obj.pk %}"
-                  class="d-inline js-delete-form">
+                  class="d-inline js-delete-form"
+                  data-confirm-message="Delete this delegate? This cannot be undone.">
               {% csrf_token %}
               <button type="submit" class="btn btn-outline-danger btn-sm">
                 Delete
@@ -238,15 +239,6 @@
 </a>
 
 <script>
-  // Confirm before delete
-  document.querySelectorAll('.js-delete-form').forEach(function (form) {
-    form.addEventListener('submit', function (e) {
-      if (!confirm('Delete this delegate? This cannot be undone.')) {
-        e.preventDefault();
-      }
-    });
-  });
-
   // Email panel behaviour
   (function(){
     const form = document.getElementById('send-register-form');

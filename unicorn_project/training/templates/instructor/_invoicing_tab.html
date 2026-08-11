@@ -826,13 +826,16 @@
       }
     }
 
-    listEl.addEventListener('click', function(ev){
+    listEl.addEventListener('click', async function(ev){
       const btn = ev.target.closest('.rcpt-del');
       if (!btn) return;
       const li = btn.closest('li');
       const fileId = li && li.dataset.fileId;
       if (!fileId) return;
-      if (!confirm('Remove this receipt?')) return;
+      const ok = window.confirmAction
+        ? await window.confirmAction('Remove this receipt?', { confirmLabel: 'Remove' })
+        : confirm('Remove this receipt?');
+      if (!ok) return;
       deleteFile(fileId, li);
     });
 

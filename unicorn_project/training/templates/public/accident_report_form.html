@@ -17,7 +17,8 @@
   .ar-card {
     border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
     border-radius: 0.85rem;
-    background: #fff;
+    background: var(--app-surface, #fff);
+    color: inherit;
     box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
     overflow: hidden;
   }
@@ -40,6 +41,42 @@
     border-top: 1px solid var(--app-border, rgba(15, 23, 42, .08));
     background: var(--app-surface-2, #f8fafc);
   }
+  body.night-mode .ar-card {
+    background: #1c2838 !important;
+    border-color: #334155 !important;
+    color: #dbe5f0;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+  }
+  body.night-mode .ar-section + .ar-section,
+  body.night-mode .ar-footer {
+    border-color: #334155 !important;
+  }
+  body.night-mode .ar-footer {
+    background: #161d27 !important;
+  }
+  body.night-mode .ar-section-title {
+    color: #9fb0c5 !important;
+  }
+  body.night-mode .ar-card .form-label,
+  body.night-mode .ar-card .fw-semibold {
+    color: #e8eef7 !important;
+  }
+  body.night-mode .ar-card .form-text,
+  body.night-mode .ar-card .text-muted,
+  body.night-mode .ar-card .small {
+    color: #b3c0d1 !important;
+  }
+  body.night-mode .ar-card .form-control-plaintext,
+  body.night-mode #ar-reported-to-display {
+    background: #161d27 !important;
+    color: #dbe5f0 !important;
+    border-color: #334155 !important;
+  }
+  body.night-mode .ar-card .alert-warning {
+    background: #3d3200 !important;
+    color: #ffe082 !important;
+    border-color: #665500 !important;
+  }
 </style>
 
 <div class="ar-page">
@@ -52,26 +89,6 @@
     <div class="ar-card">
       {% if form.non_field_errors %}
         <div class="alert alert-danger m-3 mb-0">{{ form.non_field_errors }}</div>
-      {% endif %}
-
-      {% if form.course_type.is_hidden %}
-        {{ form.course_type }}
-        {% if course_type %}
-        <input type="hidden" id="ar-course-code" value="{{ course_type.code }}">
-        {% endif %}
-      {% else %}
-        <div class="d-none">
-          <div class="mb-3">
-            <label class="form-label fw-semibold" for="{{ form.course_type.id_for_label }}">Course</label>
-            <select name="course_type" class="form-select" id="ar-course-type" required>
-              <option value="">Select course…</option>
-              {% for ct in form.fields.course_type.queryset %}
-                <option value="{{ ct.pk }}" data-code="{{ ct.code }}" {% if form.course_type.value|stringformat:"s" == ct.pk|stringformat:"s" %}selected{% endif %}>{{ ct.name }}</option>
-              {% endfor %}
-            </select>
-            {% for e in form.course_type.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
-          </div>
-        </div>
       {% endif %}
 
       <div class="ar-section">
@@ -100,6 +117,11 @@
           </div>
         {% endif %}
       </div>
+
+      {# Course is never shown to delegates — set from booking/QR or date+instructor. #}
+      <input type="hidden" name="course_type" id="ar-course-type" value="{% if form.course_type.value %}{{ form.course_type.value }}{% elif course_type %}{{ course_type.pk }}{% endif %}">
+      <input type="hidden" id="ar-course-code" value="{% if course_type %}{{ course_type.code }}{% endif %}">
+      {% for e in form.course_type.errors %}<div class="alert alert-danger m-3 mb-0">{{ e }}</div>{% endfor %}
 
       <div class="ar-section">
         <div class="ar-section-title">Incident details</div>
@@ -160,7 +182,7 @@
           {% else %}
             <label class="form-label fw-semibold" for="{{ form.reported_to.id_for_label }}">Instructor</label>
             {{ form.reported_to }}
-            <div class="form-text" id="ar-reported-to-help">Only instructors teaching this course on the selected date are listed.</div>
+            <div class="form-text" id="ar-reported-to-help">Instructors teaching on the selected date.</div>
           {% endif %}
           <div class="alert alert-warning py-2 px-3 small mb-0 mt-2 {% if not instructors_unavailable %}d-none{% endif %}" id="ar-no-instructors-alert" role="alert">
             <i class="bi bi-exclamation-triangle"></i>
@@ -221,14 +243,20 @@
     } catch(e) {}
   }
 
+  var courseLocked = {{ booking_link_active|yesno:"true,false" }} || !!("{{ course_type.code|default:''|escapejs }}");
+
   function courseCode() {
-    var hidden = document.getElementById('ar-course-code');
-    if (hidden && hidden.value) return hidden.value.trim();
+    var codeEl = byId('ar-course-code');
+    if (codeEl && codeEl.value) return codeEl.value.trim();
+    return "{{ course_type.code|default:''|escapejs }}";
+  }
+
+  function setCourseValue(course) {
+    if (!course) return;
     var courseEl = byId('ar-course-type');
-    if (!courseEl) return "{{ course_type.code|default:''|escapejs }}";
-    var opt = courseEl.options[courseEl.selectedIndex];
-    if (!opt) return '';
-    return (opt.getAttribute('data-code') || '').trim();
+    var codeEl = byId('ar-course-code');
+    if (courseEl && course.id) courseEl.value = course.id;
+    if (codeEl) codeEl.value = course.code || '';
   }
 
   function setSingleInstructorDisplay(inst) {
@@ -236,6 +264,7 @@
     var field = byId('ar-reported-to');
     var display = byId('ar-reported-to-display');
     var help = byId('ar-reported-to-help');
+    var noAlert = byId('ar-no-instructors-alert');
     if (!wrap) return;
 
     if (field && field.tagName === 'SELECT') {
@@ -251,6 +280,7 @@
     }
 
     if (help) help.classList.add('d-none');
+    if (noAlert) noAlert.classList.add('d-none');
 
     if (!display) {
       display = document.createElement('p');
@@ -263,7 +293,8 @@
     display.classList.remove('d-none');
   }
 
-  function setMultiInstructorSelect(instructors, message) {
+  function setMultiInstructorSelect(instructors, message, opts) {
+    opts = opts || {};
     var wrap = byId('ar-reported-to-wrap');
     var field = byId('ar-reported-to');
     var display = byId('ar-reported-to-display');
@@ -294,29 +325,102 @@
       empty.value = '';
       empty.textContent = message || 'No instructors scheduled on this date';
       select.appendChild(empty);
-      if (noAlert) noAlert.classList.remove('d-none');
+      if (noAlert) {
+        noAlert.classList.remove('d-none');
+        if (message) noAlert.innerHTML = '<i class="bi bi-exclamation-triangle"></i> ' + message;
+      }
     } else {
       if (noAlert) noAlert.classList.add('d-none');
+      if (!opts.autoSelectFirst) {
+        var prompt = document.createElement('option');
+        prompt.value = '';
+        prompt.textContent = 'Select instructor…';
+        select.appendChild(prompt);
+      }
       instructors.forEach(function(item, idx){
         var opt = document.createElement('option');
         opt.value = item.id;
         opt.textContent = item.name;
-        if (item.id === current || (!current && idx === 0)) opt.selected = true;
+        if (item.course_id) opt.setAttribute('data-course-id', item.course_id);
+        if (item.course_code) opt.setAttribute('data-course-code', item.course_code);
+        if (item.course_name) opt.setAttribute('data-course-name', item.course_name);
+        if (item.id === current || (opts.autoSelectFirst && !current && idx === 0)) opt.selected = true;
         select.appendChild(opt);
       });
+      select.onchange = function() {
+        if (!opts.linkCourse) return;
+        var selected = select.options[select.selectedIndex];
+        if (!selected || !selected.value) return;
+        setCourseValue({
+          id: selected.getAttribute('data-course-id'),
+          code: selected.getAttribute('data-course-code'),
+          name: selected.getAttribute('data-course-name')
+        });
+      };
     }
     if (help) help.classList.remove('d-none');
   }
 
-  function refreshInstructors() {
+  function applyDayOptions(data) {
+    var noAlert = byId('ar-no-instructors-alert');
+    if (!data || data.mode === 'none') {
+      setCourseValue({ id: '', code: '' });
+      setMultiInstructorSelect([], (data && data.message) || 'No courses with accident reports on this date.');
+      return;
+    }
+
+    if (data.mode === 'single_course') {
+      setCourseValue((data.courses || [])[0]);
+      if ((data.instructors || []).length === 1) {
+        setSingleInstructorDisplay(data.instructors[0]);
+      } else {
+        setMultiInstructorSelect(data.instructors || [], data.message, { autoSelectFirst: false, linkCourse: false });
+      }
+      return;
+    }
+
+    // multi_course: choose instructor; course follows quietly.
+    if ((data.instructors || []).length === 1) {
+      setCourseValue({
+        id: data.instructors[0].course_id,
+        code: data.instructors[0].course_code,
+        name: data.instructors[0].course_name
+      });
+      setSingleInstructorDisplay(data.instructors[0]);
+    } else {
+      setCourseValue({ id: '', code: '' });
+      setMultiInstructorSelect(data.instructors || [], data.message, { autoSelectFirst: false, linkCourse: true });
+      if (noAlert) noAlert.classList.add('d-none');
+    }
+  }
+
+  function refreshFromDate() {
+    var dateEl = byId('ar-date');
+    var dateVal = dateEl ? dateEl.value : '';
+    if (courseLocked) {
+      refreshInstructorsForLockedCourse();
+      return;
+    }
+    var url = new URL("{% url 'accident_report_day_options_api' %}", window.location.origin);
+    if (dateVal) url.searchParams.set('date', dateVal);
+    fetch(url, { credentials: 'same-origin' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){ if (data) applyDayOptions(data); })
+      .catch(function(){});
+  }
+
+  function refreshInstructorsForLockedCourse() {
     var dateEl = byId('ar-date');
     var dateVal = dateEl ? dateEl.value : '';
     var code = courseCode();
+    var noAlert = byId('ar-no-instructors-alert');
     if (!code) return;
 
     var url = new URL("{% url 'accident_report_instructors_api' %}", window.location.origin);
     if (dateVal) url.searchParams.set('date', dateVal);
     url.searchParams.set('course', code);
+    var refEl = document.querySelector('input[name="ref"]');
+    if (refEl && refEl.value) url.searchParams.set('ref', refEl.value);
 
     fetch(url, { credentials: 'same-origin' })
       .then(function(r){ return r.ok ? r.json() : null; })
@@ -324,10 +428,12 @@
         if (!data || !Array.isArray(data.instructors)) return;
         if (data.instructors.length === 1) {
           setSingleInstructorDisplay(data.instructors[0]);
-          var noAlert = byId('ar-no-instructors-alert');
-          if (noAlert) noAlert.classList.add('d-none');
         } else {
-          setMultiInstructorSelect(data.instructors, data.message);
+          setMultiInstructorSelect(data.instructors, data.message, { autoSelectFirst: data.instructors.length > 0, linkCourse: false });
+        }
+        if (noAlert && data.message && !data.instructors.length) {
+          noAlert.classList.remove('d-none');
+          noAlert.innerHTML = '<i class="bi bi-exclamation-triangle"></i> ' + data.message;
         }
       })
       .catch(function(){});
@@ -339,14 +445,9 @@
     document.addEventListener('gmaps:ready', initPlaces);
     if (window.google && google.maps && google.maps.places) initPlaces();
 
-    var courseEl = byId('ar-course-type');
     var dateEl = byId('ar-date');
-    if (courseEl) courseEl.addEventListener('change', refreshInstructors);
-    if (dateEl) dateEl.addEventListener('change', refreshInstructors);
-    // Server may already have resolved the instructor; do not wipe on load.
-    if (!byId('ar-reported-to-display') && (byId('ar-course-code') || courseEl)) {
-      refreshInstructors();
-    }
+    if (dateEl) dateEl.addEventListener('change', refreshFromDate);
+    refreshFromDate();
   });
 })();
 </script>

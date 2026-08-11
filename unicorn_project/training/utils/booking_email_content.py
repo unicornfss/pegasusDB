@@ -93,6 +93,11 @@ def format_booking_email_plain(
     buffer_minutes=None,
     morning_today=False,
 ) -> str:
+    if notification_type == "booking_cancellation":
+        from .booking_details import format_simple_cancellation_message
+
+        return format_simple_cancellation_message(booking, html=False)
+
     if notification_type == "departure_reminder" and on_date:
         if morning_today:
             body = format_morning_today_reminder_message(booking, on_date)
@@ -172,6 +177,16 @@ def format_booking_email_html(
     buffer_minutes=None,
     morning_today=False,
 ) -> str:
+    if notification_type == "booking_cancellation":
+        from .booking_details import format_simple_cancellation_message
+
+        body = format_simple_cancellation_message(booking, html=True).replace("\n", "<br>")
+        return (
+            "<div style='font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#1f2937;'>"
+            f"{body}"
+            "</div>"
+        )
+
     pack = build_booking_pack_context(booking, on_date=on_date or first_date)
     heading = booking_email_subject(notification_type, booking).split(" — ", 1)[0]
 

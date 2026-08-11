@@ -11,6 +11,8 @@
             class="btn btn-warning btn-sm js-accident-report-bulk"
             data-action="{{ accident_report_anonymise_url }}"
             data-confirm="Anonymise the selected reports now? This cannot be undone."
+            data-confirm-label="Anonymise"
+            data-confirm-danger="0"
             data-require-selection="1">
       <i class="bi bi-shield-lock"></i> Anonymise selected
     </button>
@@ -76,25 +78,38 @@
     return el ? el.value : '';
   }
 
-  function submitBulkAction(btn) {
+  async function submitBulkAction(btn) {
     const requireSelection = btn.dataset.requireSelection === '1';
     const selected = getSelectedIds();
     if (requireSelection && !selected.length) {
       alert('Select at least one report.');
       return;
     }
+
+    let message = null;
+    let confirmLabel = 'Confirm';
+    let danger = true;
     if (btn.dataset.confirmDelete === '1') {
-      if (!confirm('Delete ' + selected.length + ' selected report' + (selected.length > 1 ? 's' : '') + '? This cannot be undone.')) {
-        return;
-      }
-    } else if (btn.dataset.confirm && !window.confirm(btn.dataset.confirm)) {
-      return;
+      message = 'Delete ' + selected.length + ' selected report' + (selected.length > 1 ? 's' : '') + '? This cannot be undone.';
+      confirmLabel = 'Delete';
+    } else if (btn.dataset.confirm) {
+      message = btn.dataset.confirm;
+      confirmLabel = btn.dataset.confirmLabel || 'Confirm';
+      danger = btn.dataset.confirmDanger !== '0';
+    }
+
+    if (message) {
+      const ok = window.confirmAction
+        ? await window.confirmAction(message, { confirmLabel: confirmLabel, danger: danger })
+        : window.confirm(message);
+      if (!ok) return;
     }
 
     const form = document.createElement('form');
     form.method = 'post';
     form.action = btn.dataset.action || '';
     form.style.display = 'none';
+    form.dataset.confirmSkip = '1';
 
     const csrf = document.createElement('input');
     csrf.type = 'hidden';
@@ -143,7 +158,20 @@
     if (tr && tr.dataset.href) window.location = tr.dataset.href;
   });
 
+  const pane = document.getElementById('accident-reports-pane');
+  const tabBtn = document.getElementById('accident-reports-tab');
+  let timer = null;
+  const POLL_MS = 10000;
+
+  function isAccidentReportsVisible() {
+    if (document.hidden) return false;
+    const tabActive = tabBtn ? tabBtn.classList.contains('active') : false;
+    const paneActive = pane ? pane.classList.contains('active') : false;
+    return tabActive || paneActive;
+  }
+
   async function refresh() {
+    if (!isAccidentReportsVisible()) return;
     try {
       const selected = getSelectedIds();
       const resp = await fetch(pollUrl, { credentials: 'same-origin' });
@@ -157,7 +185,34 @@
     } catch (e) {}
   }
 
-  refresh();
-  setInterval(refresh, 10000);
+  function start() {
+    if (timer) return;
+    timer = setInterval(refresh, POLL_MS);
+  }
+
+  function stop() {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = null;
+  }
+
+  function syncPolling() {
+    if (isAccidentReportsVisible()) {
+      start();
+      refresh();
+    } else {
+      stop();
+    }
+  }
+
+  document.addEventListener('shown.bs.tab', function (e) {
+    if (e.target && e.target.id === 'accident-reports-tab') {
+      syncPolling();
+    } else {
+      stop();
+    }
+  });
+  document.addEventListener('visibilitychange', syncPolling);
+  syncPolling();
 })();
 </script>

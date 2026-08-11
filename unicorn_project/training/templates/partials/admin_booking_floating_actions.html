@@ -1,32 +1,40 @@
 <div class="booking-floating-actions" role="toolbar" aria-label="Booking actions">
   <div class="booking-floating-actions__inner d-flex flex-wrap align-items-center gap-2">
-    <button type="submit" class="btn btn-primary" name="save_continue" value="1">
-      <i class="bi bi-check2"></i> Save and continue editing
+    <button type="submit" class="btn btn-primary btn-sm" name="save_continue" value="1">
+      <i class="bi bi-check2"></i>
+      <span class="d-none d-sm-inline">Save and continue editing</span>
+      <span class="d-sm-none">Save</span>
     </button>
 
-    <button type="submit" class="btn btn-success" name="save_return" value="1">
-      <i class="bi bi-check2-circle"></i> Save and return
+    <button type="submit" class="btn btn-success btn-sm" name="save_return" value="1">
+      <i class="bi bi-check2-circle"></i>
+      <span class="d-none d-sm-inline">Save and return</span>
+      <span class="d-sm-none">Save &amp; exit</span>
     </button>
 
-    <a class="btn btn-secondary" href="{{ back_url }}">
-      <i class="bi bi-x-circle"></i> Discard changes and go back
+    <a class="btn btn-secondary btn-sm" href="{{ back_url }}">
+      <i class="bi bi-x-circle"></i>
+      <span class="d-none d-sm-inline">Discard changes and go back</span>
+      <span class="d-sm-none">Discard</span>
     </a>
 
     <div class="ms-lg-auto d-flex flex-wrap gap-2">
       {% if booking %}
         {% if booking.status == 'cancelled' %}
-          <a class="btn btn-warning" href="{% url 'admin_booking_reinstate' booking.id %}">
+          <a class="btn btn-warning btn-sm" href="{% url 'admin_booking_reinstate' booking.id %}">
             <i class="bi bi-arrow-counterclockwise"></i> Reinstate
           </a>
         {% else %}
-          <a class="btn btn-outline-danger" href="{% url 'admin_booking_cancel' booking.id %}">
-            <i class="bi bi-slash-circle"></i> Cancel booking
+          <a class="btn btn-outline-danger btn-sm" href="{% url 'admin_booking_cancel' booking.id %}">
+            <i class="bi bi-slash-circle"></i>
+            <span class="d-none d-sm-inline">Cancel booking</span>
+            <span class="d-sm-none">Cancel</span>
           </a>
         {% endif %}
       {% endif %}
 
       {% if delete_url %}
-        <a class="btn btn-outline-danger" href="{{ delete_url }}">
+        <a class="btn btn-outline-danger btn-sm" href="{{ delete_url }}">
           <i class="bi bi-trash"></i> Delete
         </a>
       {% endif %}

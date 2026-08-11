@@ -60,7 +60,7 @@
                 <strong>{{ swap.booking.course_reference|default:"—" }}</strong><br>
                 <span class="small text-muted">{{ swap.booking.course_type.name }} · {{ swap.booking.business.name }}</span>
               </td>
-              <td class="nowrap">{{ swap.booking.course_date|date:"d M Y" }}</td>
+              <td>{% include "partials/booking_dates_cell.html" with dates_display=swap.booking.dates_display dates_nonconsecutive=swap.booking.dates_nonconsecutive %}</td>
               <td>{{ swap.from_instructor.name }}</td>
               <td class="small text-muted">{{ swap.message|default:"—" }}</td>
               <td class="text-end nowrap">
@@ -106,7 +106,7 @@
                 <strong>{{ swap.booking.course_reference|default:"—" }}</strong><br>
                 <span class="small text-muted">{{ swap.booking.course_type.name }}</span>
               </td>
-              <td class="nowrap">{{ swap.booking.course_date|date:"d M Y" }}</td>
+              <td>{% include "partials/booking_dates_cell.html" with dates_display=swap.booking.dates_display dates_nonconsecutive=swap.booking.dates_nonconsecutive %}</td>
               <td>{{ swap.to_instructor.name }}</td>
               <td class="small text-muted">{{ swap.message|default:"—" }}</td>
               <td class="text-end">
@@ -139,7 +139,7 @@
               <option value="">Select a booking…</option>
               {% for b in swappable_bookings %}
                 <option value="{{ b.id }}">
-                  {{ b.course_reference|default:b.id }} · {{ b.course_date|date:"d M Y" }} · {{ b.course_type.name }}
+                  {{ b.course_reference|default:b.id }} · {{ b.dates_display }}{% if b.dates_nonconsecutive %} (split days){% endif %} · {{ b.course_type.name }}
                 </option>
               {% endfor %}
             </select>

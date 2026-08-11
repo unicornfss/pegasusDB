@@ -36,7 +36,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#days-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.first_day_date|date:"j M Y" }}
+                                            · {% include "partials/booking_dates_cell.html" with dates_display=booking.dates_display dates_nonconsecutive=booking.dates_nonconsecutive %}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -57,7 +57,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#assessments-tab"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.first_day_date|date:"j M Y" }}
+                                            · {% include "partials/booking_dates_cell.html" with dates_display=booking.dates_display dates_nonconsecutive=booking.dates_nonconsecutive %}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -78,7 +78,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#feedback-tab"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.first_day_date|date:"j M Y" }}
+                                            · {% include "partials/booking_dates_cell.html" with dates_display=booking.dates_display dates_nonconsecutive=booking.dates_nonconsecutive %}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -99,7 +99,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}#closure-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.first_day_date|date:"j M Y" }}
+                                            · {% include "partials/booking_dates_cell.html" with dates_display=booking.dates_display dates_nonconsecutive=booking.dates_nonconsecutive %}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>
@@ -120,7 +120,7 @@
                                         <a href="{% url 'instructor_booking_detail' booking.pk %}?tab=invoicing#invoicing-pane"
                                            class="text-decoration-none d-block ps-2">
                                             {{ booking.course_type.name }}
-                                            · {{ booking.first_day_date|date:"j M Y" }}
+                                            · {% include "partials/booking_dates_cell.html" with dates_display=booking.dates_display dates_nonconsecutive=booking.dates_nonconsecutive %}
                                             · {{ booking.business.name }}
                                         </a>
                                     </li>

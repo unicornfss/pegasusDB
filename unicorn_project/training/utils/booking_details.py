@@ -196,23 +196,117 @@ def format_booking_course_day_lines(booking):
     return _format_course_day_lines(booking)
 
 
-def format_booking_dates_compact(booking):
-    """Short date text for lists: one day, or a first–last range when multi-day."""
-    day_lines = _format_course_day_lines(booking)
-    if not day_lines:
-        return "—"
-    if len(day_lines) == 1:
-        line = day_lines[0]
-        if line.startswith("Day 1: "):
-            return line[7:]
-        return line
+def booking_schedule_dates(booking):
+    """Sorted unique course dates for a booking (BookingDay, else course_date)."""
+    dates = []
+    seen = set()
+    try:
+        day_iter = booking.days.all()
+        # Prefer already-prefetched/ordered days when available
+        for day in day_iter:
+            d = getattr(day, "date", None)
+            if d and d not in seen:
+                seen.add(d)
+                dates.append(d)
+    except Exception:
+        dates = []
 
-    days = list(booking.days.all().order_by("date"))
-    if len(days) >= 2:
-        first = days[0].date.strftime("%a %d %b %Y")
-        last = days[-1].date.strftime("%a %d %b %Y")
-        return f"{first} – {last}"
-    return day_lines[0]
+    if dates:
+        dates.sort()
+        return dates
+    if getattr(booking, "course_date", None):
+        return [booking.course_date]
+    return []
+
+
+def dates_are_consecutive(dates):
+    if len(dates) <= 1:
+        return True
+    for earlier, later in zip(dates, dates[1:]):
+        if (later - earlier).days != 1:
+            return False
+    return True
+
+
+def format_dates_list(dates):
+    """
+    Compact list label for booking schedules.
+
+    - 1 day: 26 Aug 2026
+    - consecutive: 26–28 Aug 2026  (or 26 Aug – 3 Sep 2026)
+    - non-consecutive: 26 Aug, 3 Sep, 10 Sep 2026
+    """
+    if not dates:
+        return "—"
+    dates = list(dates)
+    if len(dates) == 1:
+        return dates[0].strftime("%d %b %Y")
+
+    if dates_are_consecutive(dates):
+        first, last = dates[0], dates[-1]
+        if first.year == last.year and first.month == last.month:
+            return f"{first.strftime('%d')}–{last.strftime('%d %b %Y')}"
+        if first.year == last.year:
+            return f"{first.strftime('%d %b')} – {last.strftime('%d %b %Y')}"
+        return f"{first.strftime('%d %b %Y')} – {last.strftime('%d %b %Y')}"
+
+    years = {d.year for d in dates}
+    if len(years) == 1:
+        return f"{', '.join(d.strftime('%d %b') for d in dates)} {dates[-1].year}"
+    return ", ".join(d.strftime("%d %b %Y") for d in dates)
+
+
+def format_booking_dates_compact(booking):
+    """Short date text for lists, with non-consecutive days enumerated."""
+    return format_dates_list(booking_schedule_dates(booking))
+
+
+def booking_dates_are_nonconsecutive(booking):
+    dates = booking_schedule_dates(booking)
+    return len(dates) > 1 and not dates_are_consecutive(dates)
+
+
+def attach_booking_schedule_labels(bookings):
+    """
+    Annotate bookings with:
+      - schedule_dates (list[date])
+      - dates_display (str)
+      - dates_nonconsecutive (bool)
+      - first_day_date (date|None)
+    """
+    from collections import defaultdict
+
+    from ..models import BookingDay
+
+    booking_list = list(bookings)
+    if not booking_list:
+        return booking_list
+
+    days_by_booking = defaultdict(list)
+    booking_ids = [b.pk for b in booking_list if b.pk]
+    if booking_ids:
+        for day in (
+            BookingDay.objects
+            .filter(booking_id__in=booking_ids)
+            .order_by("booking_id", "date", "id")
+            .only("booking_id", "date")
+        ):
+            if not day.date:
+                continue
+            bucket = days_by_booking[day.booking_id]
+            if not bucket or bucket[-1] != day.date:
+                bucket.append(day.date)
+
+    for booking in booking_list:
+        dates = days_by_booking.get(booking.pk) or (
+            [booking.course_date] if getattr(booking, "course_date", None) else []
+        )
+        booking.schedule_dates = dates
+        booking.dates_display = format_dates_list(dates)
+        booking.dates_nonconsecutive = len(dates) > 1 and not dates_are_consecutive(dates)
+        booking.first_day_date = dates[0] if dates else getattr(booking, "course_date", None)
+
+    return booking_list
 
 
 def _format_booking_details_block(booking, *, highlight=None):
@@ -324,6 +418,74 @@ def _format_notified_change_message(booking, *, heading_key, intro, changed_area
     return "\n".join(lines)
 
 
+def format_simple_cancellation_message(booking, *, html=True):
+    """Short cancellation notice — no full course pack / details dump."""
+    first_name = _instructor_first_name(booking)
+    ref = booking.course_reference or "—"
+    course_name = getattr(booking.course_type, "name", "") or "Course"
+    business_name = getattr(booking.business, "name", "") or ""
+    reason = (getattr(booking, "cancel_reason", None) or "").strip()
+
+    days = list(booking.days.all().order_by("date", "start_time"))
+    if days:
+        first = days[0].date
+        last = days[-1].date
+        if first == last:
+            when = first.strftime("%a %d %b %Y")
+        else:
+            when = f"{first.strftime('%a %d %b %Y')} – {last.strftime('%a %d %b %Y')}"
+    elif booking.course_date:
+        when = booking.course_date.strftime("%a %d %b %Y")
+    else:
+        when = "Dates TBC"
+
+    if html:
+        lines = [
+            f"<b>{escape(NOTIFICATION_HEADINGS['booking_cancellation'])}</b>",
+            "",
+            f"Dear {escape(first_name)}, the following booking has been cancelled.",
+            "",
+            f"🔖 <b>Ref:</b> {escape(ref)}",
+            f"📚 <b>Course:</b> {escape(course_name)}",
+        ]
+        if business_name:
+            lines.append(f"🏢 <b>Business:</b> {escape(business_name)}")
+        lines.append(f"📅 <b>Dates:</b> {escape(when)}")
+        if reason:
+            lines.extend(["", f"<b>Reason:</b> {escape(reason)}"])
+        if booking.pk:
+            url = absolute_url_for_booking(booking)
+            if url:
+                lines.extend(["", f'<a href="{escape(url)}">Open in Pegasus</a>'])
+        return prepend_notification_disclaimer("\n".join(lines), booking)
+
+    lines = [
+        NOTIFICATION_HEADINGS["booking_cancellation"],
+        "",
+        f"Dear {first_name}, the following booking has been cancelled.",
+        "",
+        f"Reference: {ref}",
+        f"Course: {course_name}",
+    ]
+    if business_name:
+        lines.append(f"Business: {business_name}")
+    lines.append(f"Dates: {when}")
+    if reason:
+        lines.extend(["", f"Reason: {reason}"])
+    if booking.pk:
+        url = absolute_url_for_booking(booking)
+        if url:
+            lines.extend(["", f"Open in Pegasus: {url}"])
+    return prepend_notification_disclaimer("\n".join(lines), booking, html=False)
+
+
+def absolute_url_for_booking(booking):
+    try:
+        return f"{public_site_url().rstrip('/')}{reverse('instructor_booking_detail', args=[booking.pk])}"
+    except Exception:
+        return None
+
+
 def format_booking_resend_telegram_message(booking):
     return format_booking_telegram_message(booking, notification_type="resend")
 
@@ -354,15 +516,7 @@ def format_booking_telegram_message(booking, *, notification_type, intro=None, c
         return prepend_notification_disclaimer(body, booking)
 
     if notification_type == "booking_cancellation":
-        if intro is None:
-            intro = "A booking assigned to you has been cancelled."
-        body = _format_notified_change_message(
-            booking,
-            heading_key="booking_cancellation",
-            intro=intro,
-            changed_areas=changed_areas or [CHANGE_CANCELLATION],
-        )
-        return prepend_notification_disclaimer(body, booking)
+        return format_simple_cancellation_message(booking, html=True)
 
     heading = NOTIFICATION_HEADINGS.get(notification_type, "Booking notification")
     lines = [f"<b>{escape(heading)}</b>"]

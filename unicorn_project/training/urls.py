@@ -274,6 +274,7 @@ urlpatterns = [
     path("exam/finish/", views_public.delegate_exam_finish, name="delegate_exam_finish"),
     path("privacy/", views_public.privacy_notices, name="privacy_notices"),
     path("accident-report/", views.accident_report_public, name="accident_report_public"),
+    path("accident-report/day-options/", views.accident_report_day_options_api, name="accident_report_day_options_api"),
     path("accident-report/instructors/", views.accident_report_instructors_api, name="accident_report_instructors_api"),
     path("accident-report/thanks/", views.accident_report_thanks, name="accident_report_thanks"),
 

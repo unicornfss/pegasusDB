@@ -90,7 +90,7 @@
   {% for row in rows %}
     <tr class="booking-row" data-href="{{ row.edit_url }}">
       <!-- 1: Date -->
-      <td>{{ row.date }}</td>
+      <td>{% include "partials/booking_dates_cell.html" with dates_display=row.dates_display dates_nonconsecutive=row.dates_nonconsecutive %}</td>
 
       <!-- 2: Course type -->
       <td>{{ row.course }}</td>

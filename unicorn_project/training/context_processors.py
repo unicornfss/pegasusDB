@@ -53,6 +53,7 @@ def globals(request):
         "ADMIN_INBOX_EMAIL": getattr(settings, "ADMIN_INBOX_EMAIL", ""),
         "OFFICE_PHONE": getattr(settings, "OFFICE_PHONE", ""),
         "APP_VERSION": getattr(settings, "APP_VERSION", ""),
+        "DEBUG": bool(settings.DEBUG),
         "REGISTER_SHOW_DATE": getattr(settings, "REGISTER_SHOW_DATE", settings.DEBUG),
         "INBOX_NOTIFY_POLL_MS": max(15, int(poll_seconds)) * 1000,
     }

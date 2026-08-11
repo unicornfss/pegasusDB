@@ -17,14 +17,16 @@
     <button type="submit"
             class="btn btn-warning"
             formaction="{% url 'accident_report_anonymise' %}"
-            onclick="return confirm('Anonymise the selected reports now? This cannot be undone.');">
+            data-confirm="Anonymise the selected reports now? This cannot be undone."
+            data-confirm-label="Anonymise"
+            data-confirm-danger="0">
       <i class="bi bi-shield-lock"></i> Anonymise selected
     </button>
 
     <button type="submit"
             class="btn btn-danger"
             formaction="{% url 'accident_report_delete' %}"
-            onclick="return confirmDeleteSelected();">
+            data-confirm-dynamic-delete="1">
       <i class="bi bi-trash"></i> Delete selected
     </button>
   </div>
@@ -68,16 +70,6 @@
       });
     });
   })();
-
-  // Confirm deletion; also guard against empty selection
-  function confirmDeleteSelected(){
-    const checked = document.querySelectorAll('input[name="ids"]:checked').length;
-    if (!checked) {
-      alert('Select at least one report to delete.');
-      return false;
-    }
-    return confirm(`Delete ${checked} selected report${checked > 1 ? 's' : ''}? This cannot be undone.`);
-  }
 </script>
 
 <script>
@@ -99,6 +91,7 @@
     }
 
     async function refresh() {
+      if (document.hidden) return;
       try {
         const selected = getSelectedIds();
         const resp = await fetch(POLL_URL, { credentials: 'same-origin' });
@@ -119,6 +112,9 @@
     // initial + interval
     refresh();
     setInterval(refresh, POLL_MS);
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) refresh();
+    });
 
     // Keep "select all" checkbox working after refreshes
     const selectAll = document.getElementById('select-all');

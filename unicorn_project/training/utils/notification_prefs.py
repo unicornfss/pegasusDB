@@ -7,8 +7,14 @@ def should_notify_booking(booking) -> bool:
 
 
 def should_notify_booking_detail_changes(booking) -> bool:
-    """Suppress detail-change alerts while a course is in progress."""
-    return getattr(booking, "status", None) != "in_progress"
+    """
+    Suppress detail-change alerts once a course is underway or finished.
+
+    Still allow cancellation / new-booking / reminder channels separately.
+    """
+    status = getattr(booking, "status", None)
+    return status not in {"in_progress", "awaiting_closure", "completed"}
+
 
 
 def personnel_wants_notification(personnel, notification_type: str, *, channel: str = "telegram") -> bool:

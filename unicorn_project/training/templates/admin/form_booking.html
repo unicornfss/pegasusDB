@@ -46,7 +46,7 @@
 
 {% if unlock_url and booking %}
   {% if booking.status == "completed" %}
-    <div class="alert alert-info d-flex justify-content-between align-items-center">
+    <div class="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
         <strong>Booking is completed.</strong> Instructors cannot edit registers/assessments.
         You can unlock it to return the status to <em>Awaiting instructor closure</em>.
@@ -56,6 +56,24 @@
       </a>
     </div>
   {% endif %}
+{% endif %}
+
+{% if booking and booking.is_dummy_business %}
+  <div class="alert alert-info mb-3">
+    <div class="mb-2">
+      <strong>Practice / familiarisation booking.</strong>
+      Public form shortcuts for testing registers, exams, feedback, and accident reports.
+    </div>
+    {% include "partials/booking_quick_test_links.html" %}
+  </div>
+{% elif show_dev_quick_test %}
+  <div class="alert alert-warning mb-3">
+    <div class="mb-2">
+      <strong>Dev only — public form shortcuts.</strong>
+      These open the live register / exam / feedback / accident forms prefilled for this booking. Not shown in production.
+    </div>
+    {% include "partials/booking_quick_test_links.html" %}
+  </div>
 {% endif %}
 
 <form id="booking-form" method="post">
@@ -180,8 +198,8 @@
                 <tr>
                   <th style="width:110px">Day #</th>
                   <th style="width:220px">Date</th>
-                  <th style="width:160px">Start</th>
-                  <th style="width:160px">End</th>
+                  <th style="width:160px" class="d-none d-md-table-cell">Start</th>
+                  <th style="width:160px" class="d-none d-md-table-cell">End</th>
                   <th style="width:200px">Instructor</th>
                   <th>Notes</th>
                 </tr>
@@ -266,7 +284,7 @@
       id="assessments-pane"
       role="tabpanel" aria-labelledby="assessments-tab" tabindex="0">
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
       <h5 class="mb-0">Assessment matrix</h5>
       {% if booking %}
         <a href="{% url 'instructor_assessment_pdf' booking.id %}"
@@ -525,9 +543,9 @@
           {% else %}
             <!-- Submitted invoice summary (read-only) -->
             <div class="card mb-3">
-              <div class="card-header d-flex justify-content-between align-items-center">
+              <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <span>Submitted invoice</span>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex flex-wrap align-items-center gap-2">
                   <span class="badge bg-secondary">
                     {% if status == "awaiting_review" %}
                       Send back to instructor
@@ -777,8 +795,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 <tr>
                   <th style="width:110px">Day #</th>
                   <th style="width:220px">Date</th>
-                  <th style="width:160px">Start</th>
-                  <th style="width:160px">End</th>
+                  <th style="width:160px" class="d-none d-md-table-cell">Start</th>
+                  <th style="width:160px" class="d-none d-md-table-cell">End</th>
                   <th style="width:200px">Instructor</th>
                   <th>Notes</th>
                 </tr>
@@ -1307,8 +1325,8 @@ function sortBusinessDropdownAndAddOption() {
 
       const td0 = document.createElement('td'); td0.textContent = `Day ${i}`;
       const td1 = document.createElement('td'); td1.appendChild(dateI);
-      const td2 = document.createElement('td'); td2.appendChild(stI);
-      const td3 = document.createElement('td'); td3.appendChild(enI);
+      const td2 = document.createElement('td'); td2.className = 'd-none d-md-table-cell'; td2.appendChild(stI);
+      const td3 = document.createElement('td'); td3.className = 'd-none d-md-table-cell'; td3.appendChild(enI);
 
       const tdInstructor = document.createElement('td');
       tdInstructor.appendChild(instSel);
@@ -1428,8 +1446,8 @@ function sortBusinessDropdownAndAddOption() {
 
         const td0 = document.createElement('td'); td0.textContent = `Day ${i}`;
         const td1 = document.createElement('td'); td1.appendChild(dateI);
-        const td2 = document.createElement('td'); td2.appendChild(stI);
-        const td3 = document.createElement('td'); td3.appendChild(enI);
+        const td2 = document.createElement('td'); td2.className = 'd-none d-md-table-cell'; td2.appendChild(stI);
+        const td3 = document.createElement('td'); td3.className = 'd-none d-md-table-cell'; td3.appendChild(enI);
 
         const tdInstructor = document.createElement('td');
         tdInstructor.appendChild(instSel);
@@ -1446,28 +1464,103 @@ function sortBusinessDropdownAndAddOption() {
     highlightInstructorDifferences();
 }
 
-  function populateFromHeader(){
-    const tb=$tbody(); if(!tb) return; const rows=tb.children.length; if(!rows) return;
-    const baseStr = byName('course_date')?.value || '';
-    const startStr= parseTime(byName('start_time')?.value || '');
-    if(!baseStr) return;
+  function parseISODate(str){
+    if (!str) return null;
+    const parts = String(str).split('-').map(n => parseInt(n, 10));
+    if (parts.length < 3 || parts.some(n => !n && n !== 0)) return null;
+    const [Y, M, D] = parts;
+    if (!Y || !M || !D) return null;
+    return new Date(Y, M - 1, D);
+  }
 
-    const [Y,M,D] = baseStr.split('-').map(n=>parseInt(n,10));
-    const base = new Date(Y, M-1, D);
+  // Remembers the last course start date used for day shifting
+  let trackedCourseDate = null;
 
-    for(let i=1;i<=rows;i++){
-      const d = new Date(base); d.setDate(base.getDate()+(i-1));
-      const dEl=document.getElementById(`day-${i}-date`);
-      const sEl=document.getElementById(`day-${i}-start`);
-      const eEl=document.getElementById(`day-${i}-end`);
+  function syncTimesFromHeader(){
+    const tb = $tbody(); if (!tb) return;
+    const rows = tb.children.length; if (!rows) return;
+    const startStr = parseTime(byName('start_time')?.value || '');
 
-      if (i === 1) { if (dEl) dEl.value = toISO(d); if (sEl) sEl.value = startStr; }
-      else { if(dEl && !dEl.value) dEl.value = toISO(d); if(sEl && !sEl.dataset.userEdited) sEl.value = startStr; }
+    for (let i = 1; i <= rows; i++) {
+      const sEl = document.getElementById(`day-${i}-start`);
+      const eEl = document.getElementById(`day-${i}-end`);
+
+      if (i === 1) {
+        if (sEl && startStr) sEl.value = startStr;
+      } else if (sEl && !sEl.dataset.userEdited && startStr) {
+        sEl.value = startStr;
+      }
 
       const durHours = durHoursForIndex(i, rows);
-      const srcStart = sEl?.value || startStr || "";
+      const srcStart = sEl?.value || startStr || '';
       if (eEl && !eEl.dataset.userEdited) eEl.value = addHoursToHHMM(srcStart, durHours);
     }
+  }
+
+  function populateFromHeader(mode){
+    // mode:
+    //   'init-new'       — brand-new empty rows: fill consecutive dates from start
+    //   'init-existing'  — loaded booking: keep saved dates, only sync times
+    //   'date'           — start date changed: shift every day by the same delta (keeps gaps)
+    //   'time'           — start time changed: sync times only
+    //   (default/legacy) — treat like init-new if day1 empty, else times-only
+    const tb = $tbody(); if (!tb) return;
+    const rows = tb.children.length; if (!rows) return;
+    const baseStr = byName('course_date')?.value || '';
+    if (!baseStr) return;
+
+    const base = parseISODate(baseStr);
+    if (!base) return;
+
+    if (!mode) {
+      const d1 = document.getElementById('day-1-date');
+      mode = (d1 && d1.value) ? 'init-existing' : 'init-new';
+    }
+
+    if (mode === 'time' || mode === 'init-existing') {
+      syncTimesFromHeader();
+      if (!trackedCourseDate) trackedCourseDate = baseStr;
+      return;
+    }
+
+    if (mode === 'date') {
+      const anchorStr = trackedCourseDate || document.getElementById('day-1-date')?.value || '';
+      const anchor = parseISODate(anchorStr);
+      if (anchor) {
+        const deltaDays = Math.round((base.getTime() - anchor.getTime()) / 86400000);
+        if (deltaDays !== 0) {
+          for (let i = 1; i <= rows; i++) {
+            const dEl = document.getElementById(`day-${i}-date`);
+            if (!dEl || !dEl.value) continue;
+            const cur = parseISODate(dEl.value);
+            if (!cur) continue;
+            cur.setDate(cur.getDate() + deltaDays);
+            dEl.value = toISO(cur);
+          }
+        }
+      } else {
+        // No previous dates — fall back to consecutive fill
+        for (let i = 1; i <= rows; i++) {
+          const d = new Date(base);
+          d.setDate(base.getDate() + (i - 1));
+          const dEl = document.getElementById(`day-${i}-date`);
+          if (dEl) dEl.value = toISO(d);
+        }
+      }
+      trackedCourseDate = baseStr;
+      syncTimesFromHeader();
+      return;
+    }
+
+    // init-new / course-type rebuild: consecutive dates from start
+    for (let i = 1; i <= rows; i++) {
+      const d = new Date(base);
+      d.setDate(base.getDate() + (i - 1));
+      const dEl = document.getElementById(`day-${i}-date`);
+      if (dEl) dEl.value = toISO(d);
+    }
+    trackedCourseDate = baseStr;
+    syncTimesFromHeader();
   }
 
   document.addEventListener('input', (e)=>{
@@ -1565,15 +1658,15 @@ function sortBusinessDropdownAndAddOption() {
   }
 
   function handleCourseChanged(){
-    rebuildDaysUI();
-    populateFromHeader();
+    // Changing course type rebuilds the day grid for the new duration
+    rebuildDaysUI({ fromCourseType: true });
     applyCourseFeesFromType(true);
-    // Only (maybe) regenerate reference when CT actually changes
     maybeGenerateReferenceOnCTChange();
   }
 
-  function rebuildDaysUI(){
-    if (Array.isArray(EXISTING_DAYS) && EXISTING_DAYS.length > 0) {
+  function rebuildDaysUI(opts){
+    opts = opts || {};
+    if (!opts.fromCourseType && Array.isArray(EXISTING_DAYS) && EXISTING_DAYS.length > 0) {
       buildFromExisting(EXISTING_DAYS);
       const d1 = EXISTING_DAYS[0];
       const topDate = byName('course_date');
@@ -1582,7 +1675,10 @@ function sortBusinessDropdownAndAddOption() {
         if (topDate  && !topDate.value  && d1.day_date)    topDate.value  = d1.day_date;
         if (topStart && !topStart.value && d1.start_time)  topStart.value = d1.start_time;
       }
-      populateFromHeader();
+      trackedCourseDate = (topDate && topDate.value) || (d1 && d1.day_date) || null;
+      // Keep the saved (possibly non-consecutive) dates — only sync times
+      populateFromHeader('init-existing');
+      highlightInstructorDifferences();
       return;
     }
     const total = getTotalDurationDays();
@@ -1590,7 +1686,7 @@ function sortBusinessDropdownAndAddOption() {
     const tb = $tbody(); if (!tb) return;
     tb.innerHTML = '';
     if (n > 0) buildRows(n);
-    populateFromHeader();
+    populateFromHeader('init-new');
     applyCourseFeesFromType();
     // NOTE: DO NOT auto-generate reference here; we only do it on CT change when safe.
 
@@ -1624,8 +1720,8 @@ function sortBusinessDropdownAndAddOption() {
       onLocationChange();
     }
     if (e.target.name === 'course_type')        handleCourseChanged();
-    if (e.target.name === 'course_date')        populateFromHeader();
-    if (e.target.name === 'start_time')         populateFromHeader();
+    if (e.target.name === 'course_date')        populateFromHeader('date');
+    if (e.target.name === 'start_time')         populateFromHeader('time');
 });
 
   function highlightInstructorDifferences() {
@@ -1690,7 +1786,6 @@ function sortBusinessDropdownAndAddOption() {
 
     // Initial build; DO NOT regenerate course reference here
     rebuildDaysUI();
-    populateFromHeader();
     applyCourseFeesFromType();
     highlightInstructorDifferences();
 

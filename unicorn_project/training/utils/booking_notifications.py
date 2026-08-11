@@ -109,11 +109,13 @@ def notify_booking_cancellation(booking, *, intro=None):
         intro=intro,
         changed_areas=[CHANGE_CANCELLATION],
     )
+    # Simple notice only — no full course pack PDF
     email = notify_instructor_via_email(
         booking,
         "booking_cancellation",
         intro=intro,
         changed_areas=[CHANGE_CANCELLATION],
+        attach_pdf=False,
     )
     return telegram or email
 

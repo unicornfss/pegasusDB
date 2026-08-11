@@ -95,7 +95,6 @@ html[data-color-scheme="night"] #bookingTabsContent .fw-bold {
 }
 
 .form-control,
-.form-select,
 .form-control-color,
 .input-group-text,
 textarea {
@@ -104,10 +103,16 @@ textarea {
   border-color: var(--app-input-border);
 }
 
+.form-select {
+  background-color: var(--app-input-bg);
+  color: var(--app-input-text);
+  border-color: var(--app-input-border);
+}
+
 .form-control:focus,
 .form-select:focus,
 textarea:focus {
-  background: var(--app-input-bg);
+  background-color: var(--app-input-bg);
   color: var(--app-input-text);
 }
 
@@ -585,4 +590,147 @@ html[data-sidebar-theme="charcoal"] {
   .profile-choice-grid--icons {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+/* ===== Mobile / overflow safety ===== */
+html {
+  overflow-x: clip;
+}
+
+body {
+  overflow-x: clip;
+  max-width: 100vw;
+}
+
+/* Prevent flex children from forcing page-wide horizontal scroll */
+.d-flex.flex-grow-1,
+.flex-grow-1.d-flex.flex-column,
+main.flex-grow-1 {
+  min-width: 0;
+  max-width: 100%;
+}
+
+main.flex-grow-1 {
+  overflow-x: clip;
+}
+
+/* Content media only — do NOT override fixed brand/header logos */
+main img,
+main svg,
+main canvas,
+main video,
+.card img,
+.table img {
+  max-width: 100%;
+  height: auto;
+}
+
+.table-responsive {
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Keep the mobile top bar compact */
+header.d-lg-none.bg-unicorn {
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  min-height: 3rem;
+  max-height: 3.5rem;
+  overflow: hidden;
+}
+
+header.d-lg-none.bg-unicorn .brand-logo,
+header.d-lg-none.bg-unicorn img {
+  width: auto !important;
+  height: 36px !important;
+  max-height: 36px !important;
+  max-width: 72px !important;
+  object-fit: contain;
+}
+
+header.d-lg-none.bg-unicorn strong {
+  white-space: nowrap;
+  font-size: 1rem;
+}
+
+.sidebar .offcanvas-header img {
+  width: auto !important;
+  height: 36px !important;
+  max-height: 36px !important;
+  max-width: 72px !important;
+  object-fit: contain;
+}
+
+.inbox-action-panel {
+  min-width: 0;
+  width: 100%;
+  max-width: 280px;
+}
+
+@media (max-width: 575.98px) {
+  .inbox-action-panel {
+    max-width: 100%;
+  }
+
+  .table td.text-end .btn,
+  .table td.text-end form {
+    display: inline-block;
+    width: auto;
+    margin-bottom: 0.25rem;
+  }
+
+  main.flex-grow-1 {
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
+
+  .booking-detail-tabs-content {
+    padding: 0.75rem !important;
+  }
+
+  .booking-floating-actions__inner .btn {
+    flex: 1 1 calc(50% - 0.5rem);
+    font-size: 0.82rem;
+    padding: 0.4rem 0.55rem;
+  }
+
+  .booking-floating-actions__inner .ms-lg-auto {
+    width: 100%;
+  }
+
+  .booking-floating-actions__inner .ms-lg-auto .btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* Assessment matrices: scroll inside container, never widen the page */
+.matrix-wrap {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 575.98px) {
+  .matrix-table {
+    --delegate-col-width: 78px;
+    font-size: 0.8rem !important;
+  }
+
+  .matrix-table .col-comp,
+  .col-comp {
+    width: 150px !important;
+  }
+}
+
+/* Non-consecutive course days in list/dashboard views */
+.booking-dates-split {
+  white-space: normal;
+  line-height: 1.35;
+}
+.booking-dates-split-badge {
+  font-size: 0.65rem !important;
+  font-weight: 600;
+  vertical-align: middle;
 }
