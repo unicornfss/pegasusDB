@@ -3062,7 +3062,8 @@ def instructor_day_registers(request, pk: int):
 @transaction.atomic
 def instructor_delegate_edit(request, pk: int):
     """
-    Edit a single delegate row (instructor locked to the logged-in instructor).
+    Edit a single delegate row. Instructor FK is left unchanged on save
+    (access is gated by instructor_can_access_day).
     """
     instr = getattr(request.user, "personnel", None)
     reg = get_object_or_404(
@@ -3090,9 +3091,29 @@ def instructor_delegate_edit(request, pk: int):
             request.POST, instance=reg, current_instructor=instr
         )
         if form.is_valid():
-            form.save()
+            old_name = (reg.name or "").strip()
+            old_dob = reg.date_of_birth
+            obj = form.save()
+
+            # Keep multi-day identity in sync (same person on other days of this booking)
+            if old_name:
+                booking = reg.booking_day.booking
+                siblings = DelegateRegister.objects.filter(
+                    booking_day__booking=booking,
+                    name__iexact=old_name,
+                ).exclude(pk=obj.pk)
+                if old_dob:
+                    siblings = siblings.filter(date_of_birth=old_dob)
+                siblings.update(
+                    name=obj.name,
+                    date_of_birth=obj.date_of_birth,
+                    job_title=obj.job_title,
+                    employee_id=obj.employee_id,
+                )
+
             messages.success(request, "Delegate updated.")
             return redirect(next_url)
+        messages.error(request, "Please correct the errors below.")
     else:
         form = DelegateRegisterInstructorForm(
             instance=reg, current_instructor=instr
@@ -3203,11 +3224,13 @@ def instructor_delegate_new(request, day_pk: int):
         if form.is_valid():
             obj = form.save(commit=False)
             obj.booking_day = day
+            obj.instructor = instr
             if not obj.date:
-                obj.date = timezone.localdate()
+                obj.date = day.date or timezone.localdate()
             obj.save()
             messages.success(request, "Delegate added.")
             return redirect(next_url)
+        messages.error(request, "Please correct the errors below.")
     else:
         form = DelegateRegisterInstructorForm(current_instructor=instr)
 
@@ -3239,9 +3262,7 @@ def instructor_register_edit(request, pk: int):
     if request.method == "POST":
         form = DelegateRegisterInstructorForm(request.POST, instance=reg, current_instructor=instr)
         if form.is_valid():
-            obj = form.save(commit=False)
-            obj.instructor = instr
-            obj.save()
+            form.save()
             messages.success(request, "Delegate updated.")
             return redirect(next_url)
         else:

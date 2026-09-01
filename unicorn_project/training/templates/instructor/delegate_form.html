@@ -48,12 +48,10 @@
       <div class="form-control-plaintext">{{ day.date|date:"j M Y" }}</div>
     </div>
 
-    <!-- Read-only instructor (hidden field still submitted) -->
+    <!-- Read-only instructor -->
     <div class="col-md-6">
       <label class="form-label">Instructor</label>
-      {{ form.instructor }} {# hidden input (widget is HiddenInput) #}
       <div class="form-control-plaintext">{{ day.booking.instructor.name }}</div>
-      {% for err in form.instructor.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>
 
     <!-- Health declaration radios -->

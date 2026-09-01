@@ -885,20 +885,18 @@ class DelegateRegisterInstructorForm(forms.ModelForm):
 
     class Meta:
         model = DelegateRegister
-        fields = ["name", "date_of_birth", "job_title", "employee_id", "instructor", "health_status", "notes"]  # + notes
+        # instructor is set in the view — including it as HiddenInput broke edits when
+        # the register belonged to a different instructor (day lead / pre-swap).
+        fields = ["name", "date_of_birth", "job_title", "employee_id", "health_status", "notes"]
         widgets = {
             # IMPORTANT: include format so HTML5 date shows the saved value
             "date_of_birth": forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"),
-            "instructor": forms.HiddenInput(),
-            "notes": forms.Textarea(attrs={"rows": 1, "placeholder": "Optional notes…"}),  # tidy inline
+            "notes": forms.Textarea(attrs={"rows": 1, "placeholder": "Optional notes…"}),
         }
 
     def __init__(self, *args, **kwargs):
-        current_instructor = kwargs.pop("current_instructor", None)
+        kwargs.pop("current_instructor", None)  # accepted for call-site compatibility
         super().__init__(*args, **kwargs)
-        if current_instructor:
-            self.fields["instructor"].queryset = Personnel.objects.filter(pk=current_instructor.pk)
-            self.fields["instructor"].initial = current_instructor.pk
 
         # sensible default for new rows
         if not self.is_bound and not self.initial.get("health_status"):
