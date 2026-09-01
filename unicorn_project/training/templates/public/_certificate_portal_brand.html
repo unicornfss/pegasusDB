@@ -1,0 +1,16 @@
+{% load static %}
+<div class="d-flex align-items-center gap-3">
+  <img src="{% static 'training/img/logo.png' %}"
+       alt="Unicorn Fire and Safety Solutions"
+       class="cert-logo">
+  <div>
+    <div class="cert-brand-name">Unicorn Fire &amp; Safety Solutions</div>
+    <div class="cert-brand-subtitle">
+      {% if brand_subtitle %}
+        {{ brand_subtitle }}
+      {% else %}
+        Certificate portal
+      {% endif %}
+    </div>
+  </div>
+</div>

@@ -1,0 +1,36 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}Choose a business{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_business_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_business_portal_brand.html" with brand_subtitle="Choose a business" %}
+{% endblock %}
+
+{% block content %}
+<div class="bp-page bp-page--narrow">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="small text-muted">Signed in as {{ email }}</div>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'business_portal_logout' %}">Sign out</a>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-ribbon"></div>
+    <div class="bp-card-body pb-0">
+      <div class="bp-section-title">Your businesses</div>
+    </div>
+    {% for b in businesses %}
+      <a class="bp-pick-item" href="{% url 'business_portal_business' b.pk %}">
+        <div class="fw-semibold">{{ b.name }}</div>
+        {% if b.town or b.postcode %}
+          <div class="small text-muted">{{ b.town }}{% if b.town and b.postcode %}, {% endif %}{{ b.postcode }}</div>
+        {% endif %}
+      </a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

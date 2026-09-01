@@ -1230,6 +1230,10 @@ def instructor_dummy_booking_new(request, business_id):
                 email=training_location.email or business.email or "",
             )
 
+            if booking.email:
+                from .utils.business_portal import add_portal_email
+                add_portal_email(business, booking.email)
+
             duration_days = float(course_type.duration_days or 1.0)
             rows = max(1, int(duration_days) if duration_days.is_integer() else int(duration_days) + 1)
 

@@ -24,6 +24,8 @@ from .views_public import (
 )
 
 from . import views_certificates
+from . import views_certificate_portal as cert_portal
+from . import views_business_portal as biz_portal
 
 from .views_admin import (
     site_settings,
@@ -101,6 +103,24 @@ urlpatterns = [
     path("register/instructors/", views.public_delegate_instructors_api, name="public_delegate_instructors_api"),
     path("register/sessions/", views.public_delegate_sessions_api, name="public_delegate_sessions_api"),
 
+    # Delegate certificate portal
+    path("c/", cert_portal.certificate_portal_login, name="certificate_portal_short"),
+    path("certificates/", cert_portal.certificate_portal_login, name="certificate_portal_login"),
+    path("certificates/portal/", cert_portal.certificate_portal_home, name="certificate_portal_home"),
+    path("certificates/awaiting/", cert_portal.certificate_portal_awaiting, name="certificate_portal_awaiting"),
+    path("certificates/pdf/", cert_portal.certificate_portal_pdf, name="certificate_portal_pdf"),
+    path("certificates/logout/", cert_portal.certificate_portal_logout, name="certificate_portal_logout"),
+
+    # Business portal (magic-link login)
+    path("b/", biz_portal.business_portal_login, name="business_portal_short"),
+    path("business-portal/", biz_portal.business_portal_login, name="business_portal_login"),
+    path("business-portal/link/<path:token>/", biz_portal.business_portal_consume, name="business_portal_consume"),
+    path("business-portal/home/", biz_portal.business_portal_home, name="business_portal_home"),
+    path("business-portal/logout/", biz_portal.business_portal_logout, name="business_portal_logout"),
+    path("business-portal/business/<uuid:pk>/", biz_portal.business_portal_business, name="business_portal_business"),
+    path("business-portal/booking/<uuid:pk>/", biz_portal.business_portal_booking, name="business_portal_booking"),
+    path("business-portal/booking/<uuid:pk>/certificates.pdf", biz_portal.business_portal_certificates_pdf, name="business_portal_certificates_pdf"),
+
     # ---------- Public/API helpers ----------
     path("public/attendance/<int:booking_day_id>/", views.public_attendance, name="public_attendance"),
     path("api/locations/", views.api_locations_by_business, name="api_locations_by_business"),
@@ -176,6 +196,7 @@ urlpatterns = [
     path("app/admin/bookings/<uuid:pk>/", app_admin.booking_form, name="admin_booking_edit"),
     path("admin/bookings/<uuid:pk>/invoice-pdf/", views_admin.admin_invoice_pdf, name="admin_invoice_pdf"),
     path("app/admin/bookings/<uuid:pk>/certificates/", app_admin.admin_booking_certificates_selected, name="admin_booking_certificates_selected"),
+    path("app/admin/bookings/<uuid:pk>/certificates/release/", app_admin.admin_booking_certificates_release, name="admin_booking_certificates_release"),
     path("app/admin/registers/<int:reg_pk>/certificate-name/", app_admin.admin_certificate_name_edit, name="admin_certificate_name_edit"),
 
 

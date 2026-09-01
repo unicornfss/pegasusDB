@@ -1,0 +1,157 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}Your certificate — {{ booking.course_type.name }}{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_certificate_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_certificate_portal_brand.html" with brand_subtitle=booking.course_type.name %}
+{% endblock %}
+
+{% block content %}
+<div class="cert-portal-page">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <div class="text-muted small mb-1">Signed in as</div>
+      <div class="fw-semibold">{{ register.name }}</div>
+    </div>
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'certificate_portal_logout' %}">Sign out</a>
+  </div>
+
+  <div class="cert-course-pill">
+    <div class="course-icon"><i class="bi bi-mortarboard"></i></div>
+    <div>
+      <div class="course-name">{{ booking.course_type.name }}</div>
+      <div class="course-meta">
+        {% if booking.course_reference %}{{ booking.course_reference }} · {% endif %}
+        {{ dates_display }}
+        {% if booking.business %} · {{ booking.business.name }}{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="cert-portal-card">
+    <div class="cert-ribbon"></div>
+    {% if passed %}
+      <div class="cert-hero">
+        <div class="cert-hero-kicker"><i class="bi bi-award-fill me-1"></i> Certificate of competence</div>
+        <h1 class="cert-hero-name">{{ certificate_name }}</h1>
+        <div class="cert-hero-meta">
+          Successfully completed {{ booking.course_type.name }}
+          {% if expiry_date %} · Valid until {{ expiry_date|date:"j M Y" }}{% endif %}
+        </div>
+      </div>
+      <div class="cert-portal-card-body">
+        <dl class="cert-summary-grid mb-3">
+          <div>
+            <dt>Outcome</dt>
+            <dd><span class="badge text-bg-success">Pass</span></dd>
+          </div>
+          <div>
+            <dt>Course date</dt>
+            <dd>{{ booking.course_date|date:"j M Y" }}</dd>
+          </div>
+          <div>
+            <dt>Valid until</dt>
+            <dd>{% if expiry_date %}{{ expiry_date|date:"j M Y" }}{% else %}—{% endif %}</dd>
+          </div>
+          <div>
+            <dt>Instructor</dt>
+            <dd>{% if booking.instructor %}{{ booking.instructor.name }}{% else %}—{% endif %}</dd>
+          </div>
+        </dl>
+        <a class="btn btn-primary" href="{% url 'certificate_portal_pdf' %}" target="_blank" rel="noopener">
+          <i class="bi bi-download me-1"></i> Download certificate (PDF)
+        </a>
+      </div>
+    {% else %}
+      <div class="cert-portal-card-body">
+        <div class="cert-section-title"><i class="bi bi-award"></i> Certificate</div>
+        <p class="mb-1">
+          No certificate is available for your course outcome
+          <strong>{{ outcome_label }}</strong>.
+        </p>
+        <p class="text-muted small mb-0">
+          You can still review the topics covered and any exam results below.
+        </p>
+      </div>
+    {% endif %}
+  </div>
+
+  <div class="cert-portal-card">
+    <div class="cert-portal-card-body">
+      <div class="cert-section-title"><i class="bi bi-list-check"></i> Topics covered</div>
+      {% if topics %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th class="text-end">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for t in topics %}
+                <tr>
+                  <td>
+                    {% if t.code %}<span class="text-muted me-1">{{ t.code }}</span>{% endif %}
+                    {{ t.name }}
+                    {% if t.optional %}<span class="badge text-bg-light text-muted ms-1">Optional</span>{% endif %}
+                  </td>
+                  <td class="text-end topic-level">{{ t.level_label }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">No topic list is available for this course.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="cert-portal-card">
+    <div class="cert-portal-card-body">
+      <div class="cert-section-title"><i class="bi bi-pencil-square"></i> Exam results</div>
+      {% if exam_results %}
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Exam</th>
+                <th>Date</th>
+                <th class="text-end">Score</th>
+                <th class="text-end">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ex in exam_results %}
+                <tr>
+                  <td>
+                    {{ ex.title }}
+                    {% if ex.exam_code %}<div class="small text-muted">{{ ex.exam_code }}</div>{% endif %}
+                  </td>
+                  <td>{{ ex.exam_date|date:"j M Y" }}</td>
+                  <td class="text-end">{{ ex.percent }}% <span class="text-muted small">({{ ex.score_correct }}/{{ ex.total_questions }})</span></td>
+                  <td class="text-end">
+                    {% if ex.passed %}
+                      <span class="badge text-bg-success">Pass</span>
+                    {% else %}
+                      <span class="badge text-bg-secondary">Fail</span>
+                    {% endif %}
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <p class="text-muted mb-0">No exam results were recorded for this course.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

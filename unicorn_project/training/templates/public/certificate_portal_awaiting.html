@@ -1,0 +1,41 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}Awaiting authorisation{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_certificate_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_certificate_portal_brand.html" with brand_subtitle="Certificate portal" %}
+{% endblock %}
+
+{% block content %}
+<div class="cert-portal-page cert-portal-page--narrow">
+  <div class="cert-portal-card">
+    <div class="cert-ribbon"></div>
+    <div class="cert-portal-card-body cert-portal-card-body--center">
+      <div class="cert-awaiting-icon" aria-hidden="true">
+        <i class="bi bi-hourglass-split"></i>
+      </div>
+      <h1 class="h4 mb-3">Awaiting authorisation</h1>
+      <p class="mb-2">
+        We found your record for
+        <strong>{{ booking.course_type.name }}</strong>
+        {% if dates_display %}({{ dates_display }}){% endif %}.
+      </p>
+      <p class="mb-0">
+        Certificates and course details are not available to view yet.
+        Please check back later, or contact your employer / training provider.
+      </p>
+      <div class="mt-4 d-flex flex-wrap gap-2 justify-content-center">
+        <a class="btn btn-outline-secondary" href="{% url 'certificate_portal_awaiting' %}">
+          <i class="bi bi-arrow-clockwise me-1"></i> Refresh
+        </a>
+        <a class="btn btn-primary" href="{% url 'certificate_portal_logout' %}">Sign out</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

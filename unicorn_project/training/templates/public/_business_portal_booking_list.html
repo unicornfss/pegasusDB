@@ -1,0 +1,30 @@
+<div class="bp-card">
+  <div class="bp-card-body">
+    <div class="bp-section-title">{{ title }}</div>
+    {% if bookings %}
+      {% for b in bookings %}
+        <div class="bp-course-row">
+          <div>
+            <div class="bp-course-name d-flex flex-wrap align-items-center gap-2">
+              <span>{{ b.course_type.name }}</span>
+              {% include "public/_business_portal_status.html" with status=b.status label=b.get_status_display %}
+            </div>
+            <div class="bp-course-meta">
+              {% if b.course_reference %}{{ b.course_reference }} · {% endif %}
+              {{ b.dates_display }}
+              {% if b.times_display %} · {{ b.times_display }}{% endif %}
+            </div>
+          </div>
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if b.certs_available %}
+              <span class="badge text-bg-success">Certificates released</span>
+            {% endif %}
+            <a class="btn btn-outline-primary btn-sm" href="{% url 'business_portal_booking' b.pk %}">View</a>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted mb-0">{{ empty }}</p>
+    {% endif %}
+  </div>
+</div>

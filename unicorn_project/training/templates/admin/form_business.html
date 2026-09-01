@@ -156,7 +156,28 @@
 
             {{ form.email }}
 
+            <div class="form-text">Primary contact — can always sign in to the business portal.</div>
+
             {% for err in form.email.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+          </div>
+
+
+
+          <div class="col-12">
+
+            <label class="form-label" for="{{ form.portal_login_emails.id_for_label }}">{{ form.portal_login_emails.label }}</label>
+
+            {{ form.portal_login_emails }}
+
+            {% if form.portal_login_emails.help_text %}<div class="form-text">{{ form.portal_login_emails.help_text }}</div>{% endif %}
+
+            {% for err in form.portal_login_emails.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+
+            <div class="form-text mt-1">
+              Portal login:
+              <a href="{% url 'business_portal_login' %}" target="_blank" rel="noopener"><code>/business-portal/</code></a>
+            </div>
 
           </div>
 

@@ -1227,6 +1227,10 @@ def booking_form(request, pk=None):
 
             booking.save()
 
+            if booking.business_id and (booking.email or "").strip():
+                from .utils.business_portal import add_portal_email
+                add_portal_email(booking.business, booking.email)
+
             if booking.precise_lat is not None and booking.precise_lng is not None:
                 booking.admin_precise_lat = booking.precise_lat
                 booking.admin_precise_lng = booking.precise_lng
@@ -1659,6 +1663,24 @@ def admin_invoice_pdf(request, pk):
     # Reuse the instructor PDF view (this already generates the nice invoice)
     return redirect("instructor_invoice_preview", pk=pk)
 
+
+
+@admin_required
+@require_http_methods(["POST"])
+def admin_booking_certificates_release(request, pk):
+    """
+    Toggle whether delegates can view certificates / course details
+    via the public certificate portal for this booking.
+    """
+    booking = get_admin_booking_or_404(request.user, pk)
+    released = request.POST.get("certificates_released") in ("1", "on", "true", "yes")
+    booking.certificates_released = released
+    booking.save(update_fields=["certificates_released"])
+    if released:
+        messages.success(request, "Certificates released for delegate viewing.")
+    else:
+        messages.success(request, "Certificate portal access withdrawn for this booking.")
+    return redirect(f"{reverse('admin_booking_edit', args=[booking.pk])}?tab=certificates")
 
 
 @admin_required

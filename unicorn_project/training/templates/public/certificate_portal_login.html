@@ -1,0 +1,69 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}View your certificate{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_certificate_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_certificate_portal_brand.html" with brand_subtitle="Certificate portal" %}
+{% endblock %}
+
+{% block content %}
+<div class="cert-portal-page cert-portal-page--narrow">
+  <div class="cert-portal-intro">
+    <p>Enter the details from your training course to view your certificate and results.</p>
+  </div>
+
+  <div class="cert-portal-card">
+    <div class="cert-ribbon"></div>
+    <div class="cert-portal-card-body">
+      {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+      {% endif %}
+
+      <form method="post" novalidate>
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.course_type.id_for_label }}">{{ form.course_type.label }}</label>
+          {{ form.course_type }}
+          {% for e in form.course_type.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.course_date.id_for_label }}">{{ form.course_date.label }}</label>
+          {{ form.course_date }}
+          {% if form.course_date.help_text %}<div class="form-text">{{ form.course_date.help_text }}</div>{% endif %}
+          {% for e in form.course_date.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <div class="row g-3 mb-3">
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}</label>
+            {{ form.first_name }}
+            {% for e in form.first_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="{{ form.surname.id_for_label }}">{{ form.surname.label }}</label>
+            {{ form.surname }}
+            {% for e in form.surname.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
+
+        <div class="mb-4">
+          <label class="form-label" for="{{ form.date_of_birth.id_for_label }}">{{ form.date_of_birth.label }}</label>
+          {{ form.date_of_birth }}
+          {% for e in form.date_of_birth.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">
+          <i class="bi bi-award me-1"></i> Continue
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

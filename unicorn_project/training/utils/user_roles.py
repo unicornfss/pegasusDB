@@ -112,6 +112,7 @@ ADMIN_BOOKING_URL_NAMES = frozenset({
     "admin_booking_course_pack_pdf",
     "admin_booking_unlock",
     "admin_booking_certificates_selected",
+    "admin_booking_certificates_release",
     "admin_certificate_name_edit",
     "admin_booking_day_registers",
     "admin_register_delete",

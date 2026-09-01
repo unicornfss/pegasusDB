@@ -263,6 +263,20 @@ class BusinessForm(forms.ModelForm):
             'dummy_course_type': forms.Select(attrs={'class': 'form-select'}),
         }
 
+    portal_login_emails = forms.CharField(
+        required=False,
+        label="Additional portal login emails",
+        widget=forms.Textarea(attrs={
+            "class": "form-control",
+            "rows": 3,
+            "placeholder": "one@example.com\nanother@example.com",
+        }),
+        help_text=(
+            "Extra addresses that can sign in to the business portal (one per line). "
+            "The main email above can always log in. Booking contact emails are added automatically."
+        ),
+    )
+
     def __init__(self, *args, **kwargs):
         self.allow_dummy_configuration = kwargs.pop('allow_dummy_configuration', False)
         super().__init__(*args, **kwargs)
@@ -273,6 +287,8 @@ class BusinessForm(forms.ModelForm):
                 name=self.instance.name
             ).exists()
             self.fields['add_as_training_location'].initial = exists
+            extras = self.instance.portal_emails.order_by("email").values_list("email", flat=True)
+            self.fields["portal_login_emails"].initial = "\n".join(extras)
 
         if self.allow_dummy_configuration:
             self.fields['dummy_course_type'].queryset = CourseType.objects.order_by('name')
@@ -338,6 +354,10 @@ class BusinessForm(forms.ModelForm):
                 business=biz,
                 name=biz.name
             ).delete()
+
+        if commit and biz.pk:
+            from .utils.business_portal import sync_portal_emails_from_text
+            sync_portal_emails_from_text(biz, self.cleaned_data.get("portal_login_emails") or "")
 
         return biz
 
@@ -1402,3 +1422,74 @@ class LogoOverrideForm(forms.ModelForm):
                 if dt:
                     local_dt = timezone.localtime(dt)
                     self.initial[field_name] = local_dt.strftime("%Y-%m-%dT%H:%M")
+
+
+class CertificatePortalLoginForm(forms.Form):
+    """Public lookup for the delegate certificate portal."""
+
+    course_date = forms.DateField(
+        label="Course date",
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
+        input_formats=["%Y-%m-%d"],
+        help_text="Any date from a multi-day course is fine.",
+    )
+    first_name = forms.CharField(
+        label="First name",
+        max_length=60,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "given-name"}),
+    )
+    surname = forms.CharField(
+        label="Surname",
+        max_length=60,
+        widget=forms.TextInput(attrs={"class": "form-control", "autocomplete": "family-name"}),
+    )
+    date_of_birth = forms.DateField(
+        label="Date of birth",
+        widget=forms.DateInput(attrs={"type": "date", "class": "form-control"}, format="%Y-%m-%d"),
+        input_formats=["%Y-%m-%d"],
+    )
+    course_type = forms.ModelChoiceField(
+        label="Course type",
+        queryset=CourseType.objects.none(),
+        widget=forms.Select(attrs={"class": "form-select"}),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        qs = CourseType.objects.filter(is_suspended=False).order_by("name")
+        self.fields["course_type"].queryset = qs
+        self.fields["course_type"].empty_label = "Select course type"
+
+    def cleaned_full_name(self) -> str:
+        first = (self.cleaned_data.get("first_name") or "").strip()
+        surname = (self.cleaned_data.get("surname") or "").strip()
+        parts = [p for p in (first + " " + surname).split() if p]
+        return " ".join(p.capitalize() for p in parts)
+
+class BusinessPortalLoginForm(forms.Form):
+    email = forms.EmailField(
+        label="Work email",
+        widget=forms.EmailInput(attrs={
+            "class": "form-control",
+            "autocomplete": "email",
+            "placeholder": "name@company.com",
+        }),
+    )
+
+
+class BusinessPortalContactForm(forms.ModelForm):
+    """Allow businesses to update booking contact details while still scheduled."""
+
+    class Meta:
+        model = Booking
+        fields = ["contact_name", "telephone", "email"]
+        widgets = {
+            "contact_name": forms.TextInput(attrs={"class": "form-control"}),
+            "telephone": forms.TextInput(attrs={"class": "form-control"}),
+            "email": forms.EmailInput(attrs={"class": "form-control"}),
+        }
+        labels = {
+            "contact_name": "Contact name",
+            "telephone": "Telephone",
+            "email": "Email",
+        }

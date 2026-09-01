@@ -1,0 +1,35 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}{{ business.name }} — courses{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_business_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_business_portal_brand.html" with brand_subtitle=business.name %}
+{% endblock %}
+
+{% block content %}
+<div class="bp-page">
+  <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+    <div>
+      <div class="small text-muted">Signed in as {{ email }}</div>
+      <h1 class="h4 mb-0">{{ business.name }}</h1>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      {% if show_business_switcher %}
+        <a class="btn btn-outline-secondary btn-sm" href="{% url 'business_portal_home' %}">Switch business</a>
+      {% endif %}
+      <a class="btn btn-outline-secondary btn-sm" href="{% url 'business_portal_logout' %}">Sign out</a>
+    </div>
+  </div>
+
+  {% include "public/_business_portal_booking_list.html" with title="Booked / upcoming" bookings=upcoming empty="No upcoming courses." %}
+  {% include "public/_business_portal_booking_list.html" with title="Completed" bookings=completed empty="No completed courses yet." %}
+  {% if other %}
+    {% include "public/_business_portal_booking_list.html" with title="Other" bookings=other empty="" %}
+  {% endif %}
+</div>
+{% endblock %}

@@ -434,6 +434,39 @@
        role="tabpanel" aria-labelledby="certificates-tab" tabindex="0">
 
     {% if booking %}
+      <div class="card border mb-3">
+        <div class="card-body py-3">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-0">
+            <div>
+              <div class="fw-semibold">Delegate certificate portal</div>
+              <div class="form-text mb-0">
+                Release certificates for delegates to view online once the company invoice has been paid.
+                When off, matched delegates see “Awaiting authorisation”.
+              </div>
+              <div class="form-text mb-0">
+                Portal login: <code>/certificates/</code>
+                <a class="ms-1" href="{% url 'certificate_portal_login' %}" target="_blank" rel="noopener">Open</a>
+              </div>
+            </div>
+            <div class="form-check form-switch m-0">
+              {# Owned by #cert-release-form (outside booking-form) — nested forms are invalid HTML #}
+              <input class="form-check-input"
+                     type="checkbox"
+                     role="switch"
+                     id="certificates_released"
+                     name="certificates_released"
+                     value="1"
+                     form="cert-release-form"
+                     {% if booking.certificates_released %}checked{% endif %}
+                     onchange="document.getElementById('cert-release-form').submit()">
+              <label class="form-check-label" for="certificates_released">
+                {% if booking.certificates_released %}Released{% else %}Not released{% endif %}
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {% if cert_delegates %}
         <div class="d-flex justify-content-between align-items-center mb-2">
           <h5 class="mb-0">Certificates</h5>
@@ -797,6 +830,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
   {% include "partials/admin_booking_floating_actions.html" %}
 </form>
+
+{% if booking %}
+<form id="cert-release-form"
+      method="post"
+      action="{% url 'admin_booking_certificates_release' booking.id %}"
+      class="d-none"
+      aria-hidden="true">
+  {% csrf_token %}
+</form>
+{% endif %}
 
 {% include "partials/admin_location_modal.html" %}
 

@@ -48,6 +48,38 @@ class Business(models.Model):
         return self.name
 
 
+class BusinessPortalEmail(models.Model):
+    """
+    Extra email addresses allowed to access the business portal for a company.
+    The Business.email field is always allowed and does not need a row here.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    business = models.ForeignKey(
+        Business,
+        on_delete=models.CASCADE,
+        related_name="portal_emails",
+    )
+    email = models.EmailField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["email"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["business", "email"],
+                name="uniq_business_portal_email",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.email} → {self.business}"
+
+
 class TrainingLocation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     business = models.ForeignKey(Business, on_delete=models.CASCADE, related_name="training_locations")
@@ -619,6 +651,12 @@ class Booking(models.Model):
 
     # ✅ Final closure timestamp
     date_completed = models.DateTimeField(null=True, blank=True)
+
+    # Delegate certificate portal — admin releases when invoice/payment allows
+    certificates_released = models.BooleanField(
+        default=False,
+        help_text="When enabled, delegates can view certificates (and course details) via the public portal.",
+    )
 
     # -------------------------------
     # MISC

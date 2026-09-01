@@ -235,7 +235,12 @@ LOGIN_REDIRECT_URL = "/post-login/"
 LOGOUT_REDIRECT_URL = "/accounts/login/"
 
 # Feature flags
-BOOKING_AUTO_UPDATE_ON_PAGE = False
+# Local/dev: refresh booking statuses when opening admin list/edit.
+# Production: leave off by default and rely on the scheduler/cron unless overridden.
+BOOKING_AUTO_UPDATE_ON_PAGE = os.getenv(
+    "BOOKING_AUTO_UPDATE_ON_PAGE",
+    "true" if DEBUG else "false",
+).lower() == "true"
 BOOKING_TEST_INTERVAL_MIN = 0
 # Background scheduler runs in-process only when explicitly enabled.
 # On Render, use cron jobs instead so the web worker stays responsive.

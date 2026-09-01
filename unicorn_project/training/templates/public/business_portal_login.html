@@ -1,0 +1,44 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}Business portal{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_business_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_business_portal_brand.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="bp-page bp-page--narrow">
+  <div class="bp-intro">
+    <p>Enter your work email and we’ll send you a one-time login link. No password needed.</p>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-ribbon"></div>
+    <div class="bp-card-body">
+      {% if sent %}
+        <div class="alert alert-success mb-0">
+          If that email is registered with us, a login link is on its way.
+          Please check your inbox (and spam folder). The link expires in one hour.
+        </div>
+      {% else %}
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+            {{ form.email }}
+            {% for e in form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-envelope me-1"></i> Email me a login link
+          </button>
+        </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,129 @@
+{% extends "public/base_public.html" %}
+{% load static %}
+
+{% block title %}{{ booking.course_type.name }}{% endblock %}
+
+{% block extra_head %}
+  {% include "public/_business_portal_styles.html" %}
+{% endblock %}
+
+{% block header %}
+  {% include "public/_business_portal_brand.html" with brand_subtitle=business.name %}
+{% endblock %}
+
+{% block content %}
+<div class="bp-page">
+  <div class="mb-3">
+    <a class="btn btn-outline-secondary btn-sm" href="{% url 'business_portal_business' business.pk %}">
+      <i class="bi bi-arrow-left me-1"></i> Back to courses
+    </a>
+  </div>
+
+  <div class="bp-card">
+    <div class="bp-ribbon"></div>
+    <div class="bp-card-body">
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+        <h1 class="h4 mb-0">{{ booking.course_type.name }}</h1>
+        {% include "public/_business_portal_status.html" with status=booking.status label=booking.get_status_display %}
+      </div>
+      <div class="text-muted small mb-3">
+        {% if booking.course_reference %}{{ booking.course_reference }} · {% endif %}
+        {{ dates_display }}
+      </div>
+
+      <dl class="row mb-0">
+        <dt class="col-sm-4">Instructor</dt>
+        <dd class="col-sm-8">{% if booking.instructor %}{{ booking.instructor.name }}{% else %}—{% endif %}</dd>
+        <dt class="col-sm-4">Location</dt>
+        <dd class="col-sm-8">{% if booking.training_location %}{{ booking.training_location.name }}{% else %}—{% endif %}</dd>
+        <dt class="col-sm-4">Schedule</dt>
+        <dd class="col-sm-8">
+          {% if day_schedule %}
+            <ul class="list-unstyled mb-0">
+              {% for day in day_schedule %}
+                <li>
+                  {{ day.date|date:"D j M Y" }}
+                  · {{ day.start_display }} – {{ day.end_display }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            —
+          {% endif %}
+        </dd>
+        {% if not can_edit_contact %}
+        <dt class="col-sm-4">Contact</dt>
+        <dd class="col-sm-8">
+          {{ booking.contact_name|default:"—" }}
+          {% if booking.telephone %}<div class="small text-muted">{{ booking.telephone }}</div>{% endif %}
+          {% if booking.email %}<div class="small text-muted">{{ booking.email }}</div>{% endif %}
+        </dd>
+        {% endif %}
+      </dl>
+    </div>
+  </div>
+
+  {% if can_edit_contact and contact_form %}
+  <div class="bp-card">
+    <div class="bp-card-body">
+      <div class="bp-section-title">Contact details</div>
+      <p class="text-muted small mb-3">
+        You can update the contact for this course while it is still scheduled.
+      </p>
+      <form method="post" novalidate>
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label" for="{{ contact_form.contact_name.id_for_label }}">{{ contact_form.contact_name.label }}</label>
+            {{ contact_form.contact_name }}
+            {% for e in contact_form.contact_name.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ contact_form.telephone.id_for_label }}">{{ contact_form.telephone.label }}</label>
+            {{ contact_form.telephone }}
+            {% for e in contact_form.telephone.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="{{ contact_form.email.id_for_label }}">{{ contact_form.email.label }}</label>
+            {{ contact_form.email }}
+            {% for e in contact_form.email.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+          </div>
+        </div>
+        <div class="mt-3">
+          <button type="submit" class="btn btn-primary">Save contact details</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="bp-card">
+    <div class="bp-card-body">
+      <div class="bp-section-title">Certificates</div>
+      {% if certificates_released %}
+        {% if cert_delegates %}
+          <p class="mb-3">
+            Certificates are released for this course
+            ({{ cert_delegates|length }} delegate{{ cert_delegates|length|pluralize }}).
+          </p>
+          <ul class="mb-3">
+            {% for reg in cert_delegates %}
+              <li>{{ reg.certificate_display_name }}</li>
+            {% endfor %}
+          </ul>
+          <a class="btn btn-primary" href="{% url 'business_portal_certificates_pdf' booking.pk %}" target="_blank" rel="noopener">
+            <i class="bi bi-download me-1"></i> Download certificates (PDF)
+          </a>
+        {% else %}
+          <p class="text-muted mb-0">Certificates are released, but no passed delegates are available yet.</p>
+        {% endif %}
+      {% else %}
+        <p class="mb-0">
+          Certificates for this course are <strong>awaiting authorisation</strong>.
+          They will appear here once Unicorn has released them.
+        </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

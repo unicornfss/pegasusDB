@@ -1,0 +1,201 @@
+{% load static %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+<style>
+  .cert-portal-page {
+    max-width: 44rem;
+    margin-inline: auto;
+  }
+  .cert-portal-page--narrow {
+    max-width: 32rem;
+  }
+
+  .cert-brand-name {
+    font-size: clamp(1rem, 3vw, 1.15rem);
+    font-weight: 600;
+    line-height: 1.25;
+  }
+  .cert-brand-subtitle {
+    font-size: clamp(0.85rem, 2.5vw, 0.95rem);
+    line-height: 1.35;
+    margin-top: 0.15rem;
+    color: var(--app-muted, #6b7280);
+  }
+  .cert-logo {
+    height: clamp(56px, 14vw, 80px);
+    width: auto;
+  }
+
+  .cert-portal-intro {
+    text-align: center;
+    margin-bottom: 1.25rem;
+  }
+  .cert-portal-intro p {
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 0;
+    font-size: 0.95rem;
+  }
+
+  .cert-portal-card {
+    border: 1px solid var(--app-border, rgba(15, 23, 42, .10));
+    border-radius: 1rem;
+    background: var(--app-surface, #fff);
+    box-shadow: 0 10px 30px rgba(15, 23, 42, .06);
+    overflow: hidden;
+    margin-bottom: 1rem;
+  }
+  .cert-portal-card-body {
+    padding: 1.35rem 1.5rem;
+  }
+  .cert-portal-card-body--center {
+    text-align: center;
+    padding: 2rem 1.5rem;
+  }
+  .cert-portal-card h2,
+  .cert-section-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--unicorn-red, #8B0000);
+    margin-bottom: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .cert-section-title i {
+    font-size: 1rem;
+  }
+
+  .cert-hero {
+    background:
+      linear-gradient(135deg, rgba(139, 0, 0, 0.08), rgba(139, 0, 0, 0.02) 55%, transparent),
+      var(--app-surface, #fff);
+    border-bottom: 1px solid var(--app-border, rgba(15, 23, 42, .08));
+    padding: 1.25rem 1.5rem;
+  }
+  .cert-hero-kicker {
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--unicorn-red, #8B0000);
+    margin-bottom: 0.35rem;
+  }
+  .cert-hero-name {
+    font-size: clamp(1.35rem, 3.5vw, 1.75rem);
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0 0 0.35rem;
+  }
+  .cert-hero-meta {
+    color: var(--app-muted, #6b7280);
+    font-size: 0.92rem;
+  }
+
+  .cert-ribbon {
+    height: 4px;
+    background: linear-gradient(90deg, var(--unicorn-red, #8B0000), #c43c3c 55%, #8B0000);
+  }
+
+  .cert-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.65rem 1.25rem;
+  }
+  @media (min-width: 576px) {
+    .cert-summary-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .cert-summary-grid dt {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--app-muted, #6b7280);
+    margin-bottom: 0.1rem;
+  }
+  .cert-summary-grid dd {
+    margin: 0 0 0.35rem;
+    font-weight: 600;
+  }
+
+  .cert-course-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-radius: 0.85rem;
+    background: rgba(139, 0, 0, 0.05);
+    border: 1px solid rgba(139, 0, 0, 0.12);
+    margin-bottom: 1rem;
+  }
+  .cert-course-pill .course-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    display: grid;
+    place-items: center;
+    background: var(--unicorn-red, #8B0000);
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .cert-course-pill .course-name {
+    font-weight: 650;
+    line-height: 1.25;
+  }
+  .cert-course-pill .course-meta {
+    font-size: 0.85rem;
+    color: var(--app-muted, #6b7280);
+  }
+
+  .cert-portal-card .form-label {
+    font-weight: 600;
+    color: #344054;
+  }
+  .cert-portal-card .btn-primary {
+    background: var(--unicorn-red, #8B0000);
+    border-color: var(--unicorn-red, #8B0000);
+  }
+  .cert-portal-card .btn-primary:hover,
+  .cert-portal-card .btn-primary:focus {
+    background: #6e0000;
+    border-color: #6e0000;
+  }
+
+  .topic-level { font-size: 0.85rem; white-space: nowrap; }
+
+  .cert-awaiting-icon {
+    width: 3.5rem;
+    height: 3.5rem;
+    margin: 0 auto 1rem;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(139, 0, 0, 0.08);
+    color: var(--unicorn-red, #8B0000);
+    font-size: 1.5rem;
+  }
+
+  body.night-mode .cert-portal-card,
+  body.night-mode .cert-hero {
+    background: #1c2838 !important;
+    border-color: #334155 !important;
+    color: #dbe5f0 !important;
+  }
+  body.night-mode .cert-brand-subtitle,
+  body.night-mode .cert-portal-intro p,
+  body.night-mode .cert-hero-meta,
+  body.night-mode .cert-course-pill .course-meta,
+  body.night-mode .cert-summary-grid dt {
+    color: #b3c0d1 !important;
+  }
+  body.night-mode .cert-course-pill {
+    background: rgba(139, 0, 0, 0.18);
+    border-color: rgba(196, 60, 60, 0.35);
+  }
+  body.night-mode .cert-portal-card .form-label {
+    color: #e7effb;
+  }
+  body.night-mode .cert-section-title,
+  body.night-mode .cert-hero-kicker {
+    color: #f0a0a0;
+  }
+</style>
