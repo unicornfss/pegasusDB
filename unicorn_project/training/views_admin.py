@@ -1516,6 +1516,8 @@ def booking_form(request, pk=None):
     if obj and obj.pk and obj.course_type_id:
         # All outcomes so admin sees live competency ticks before Pass
         assessment_delegates = _unique_assessment_delegates_for_booking(obj)
+        from .services.prior_completion import annotate_registers_prior_pass
+        annotate_registers_prior_pass(obj, assessment_delegates)
         selection_ctx = _assessment_selection_context(obj, assessment_delegates)
         assessment_competencies = selection_ctx["mandatory_competencies"]
         assessment_optional_slots = selection_ctx["optional_slots"]
@@ -2513,11 +2515,13 @@ def booking_day_registers(request, pk: int):
         ),
     )
 
-    registers = (
+    registers = list(
         DelegateRegister.objects.filter(booking_day=day)
         .select_related("instructor")
         .order_by("id")
     )
+    from .services.prior_completion import annotate_registers_prior_pass
+    annotate_registers_prior_pass(day.booking, registers)
 
     # Inline / AJAX request → return only the table fragment
     if (

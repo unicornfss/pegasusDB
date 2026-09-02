@@ -1,6 +1,9 @@
 {% for r in rows %}
 <tr>
-  <td>{{ r.obj.name }}</td>
+  <td>
+    {{ r.obj.name }}
+    {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date %}
+  </td>
   <td>
     {{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}
     {% if r.dob_mismatch %}

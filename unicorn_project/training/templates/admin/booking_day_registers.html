@@ -29,7 +29,10 @@
       <tbody>
         {% for reg in registers %}
           <tr>
-            <td>{{ reg.name }}</td>
+            <td>
+              {{ reg.name }}
+              {% include "partials/prior_pass_badge.html" with prior_pass=reg.prior_pass prior_pass_date=reg.prior_pass_date %}
+            </td>
             <td>{{ reg.date_of_birth|date:"d/m/Y" }}</td>
             <td>{{ reg.job_title }}</td>
             <td>{{ reg.employee_id }}</td>

@@ -1,0 +1,6 @@
+{% if prior_pass %}
+<span class="badge text-bg-secondary{% if badge_class %} {{ badge_class }}{% else %} ms-1{% endif %}"
+      title="Previously completed this course{% if prior_pass_date %} on {{ prior_pass_date|date:'j M Y' }}{% endif %}">
+  Prior
+</span>
+{% endif %}

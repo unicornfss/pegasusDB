@@ -56,6 +56,7 @@
         <tr class="js-row-link">
           <td class="position-relative">
             {{ r.obj.name }}
+            {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date %}
             <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
               class="stretched-link"
               aria-label="Edit {{ r.obj.name }}">

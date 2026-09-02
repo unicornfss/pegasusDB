@@ -26,6 +26,7 @@
                   <span class="last">{{ parts.1 }}</span>
                 </div>
               {% endwith %}
+              {% include "partials/prior_pass_badge.html" with prior_pass=d.prior_pass prior_pass_date=d.prior_pass_date badge_class="prior-pass-matrix" %}
             </th>
           {% endfor %}
         </tr>
@@ -260,6 +261,12 @@
     }
     .name-rotator .first { font-weight: 600; }
     .name-rotator .last  { color: #6c757d; font-size: .9em; }
+    .prior-pass-matrix {
+      display: inline-block;
+      margin-top: .2rem;
+      font-size: .65rem;
+      transform: none;
+    }
 
     /* checkboxes */
     .cell .lv-chk {

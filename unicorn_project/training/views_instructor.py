@@ -1502,6 +1502,8 @@ def _assessment_context(booking, user):
 
     # --- Delegates: unique by (name + DOB) for the whole booking ---
     delegates = _unique_delegates_for_booking(booking)
+    from .services.prior_completion import annotate_registers_prior_pass
+    annotate_registers_prior_pass(booking, delegates)
 
     selection_ctx = _assessment_selection_context(booking, delegates)
     competencies = selection_ctx["mandatory_competencies"]
@@ -2639,6 +2641,8 @@ def instructor_booking_detail(request, pk):
                 "health_title": title,
                 "edit_url": reverse("instructor_delegate_edit", args=[reg.pk]) + "?" + urlencode({"next": selected_day_back_url}),
             })
+        from .services.prior_completion import annotate_registers_prior_pass
+        annotate_registers_prior_pass(booking, selected_day_rows)
 
         ctx["selected_day"] = selected_day
         ctx["selected_day_rows"] = selected_day_rows
@@ -2958,6 +2962,8 @@ def instructor_day_registers_poll(request, pk: int):
             "dob_mismatch": False,
             "dob_expected": None,
         })
+    from .services.prior_completion import annotate_registers_prior_pass
+    annotate_registers_prior_pass(day.booking, rows)
 
     html = render_to_string("instructor/_day_register_rows.html", {"rows": rows}, request=request)
     return JsonResponse({"ok": True, "day_id": pk, "html": html, "rows": len(rows)})
@@ -3043,6 +3049,8 @@ def instructor_day_registers(request, pk: int):
             "health_class": cls,
             "health_title": title,
         })
+    from .services.prior_completion import annotate_registers_prior_pass
+    annotate_registers_prior_pass(day.booking, rows)
 
     return render(request, "instructor/day_registers.html", {
         "title": f"Registers — {day.booking.course_type.name} — {date_format(day.date, 'j M Y')}",

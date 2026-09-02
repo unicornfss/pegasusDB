@@ -561,7 +561,10 @@
               <tbody id="selected-day-register-body">
                 {% for r in selected_day_rows %}
                   <tr>
-                    <td>{{ r.obj.name }}</td>
+                    <td>
+                      {{ r.obj.name }}
+                      {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date %}
+                    </td>
                     <td>{{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}</td>
                     <td>{{ r.obj.job_title|default:"—" }}</td>
                     <td class="text-muted d-none d-md-table-cell">{% if r.obj.notes %}{{ r.obj.notes|truncatechars:100 }}{% else %}—{% endif %}</td>
