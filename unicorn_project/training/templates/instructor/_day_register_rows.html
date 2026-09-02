@@ -2,7 +2,7 @@
 <tr>
   <td>
     {{ r.obj.name }}
-    {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date %}
+    {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date prior_fail=r.prior_fail prior_fail_date=r.prior_fail_date prior_dnf=r.prior_dnf prior_dnf_date=r.prior_dnf_date %}
   </td>
   <td>
     {{ r.obj.date_of_birth|date:"d/m/Y"|default:"—" }}
@@ -23,7 +23,7 @@
   <td class="d-none d-lg-table-cell">{{ r.obj.employee_id|default:"—" }}</td>
 
   <td class="text-center">
-    <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">{{ r.health_symbol }}</span>
+    <span class="badge {{ r.health_class }}" title="{{ r.health_title }}" data-bs-toggle="tooltip" data-bs-title="{{ r.health_title }}">{{ r.health_symbol }}</span>
   </td>
   <td class="text-end">
     <a class="btn btn-outline-primary btn-sm" href="{% url 'instructor_delegate_edit' r.obj.pk %}">Edit</a>

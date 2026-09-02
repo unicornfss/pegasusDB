@@ -1,6 +1,19 @@
 {% if prior_pass %}
-<span class="badge text-bg-secondary{% if badge_class %} {{ badge_class }}{% else %} ms-1{% endif %}"
-      title="Previously completed this course{% if prior_pass_date %} on {{ prior_pass_date|date:'j M Y' }}{% endif %}">
-  Prior
+<span class="badge text-bg-success{% if badge_class %} {{ badge_class }}{% else %} ms-1{% endif %}"
+      title="Previously passed this course{% if prior_pass_date %} on {{ prior_pass_date|date:'j M Y' }}{% endif %}">
+  Prior Pass
 </span>
+{% else %}
+  {% if prior_fail %}
+  <span class="badge text-bg-danger{% if badge_class %} {{ badge_class }}{% else %} ms-1{% endif %}"
+        title="Previously failed this course{% if prior_fail_date %} on {{ prior_fail_date|date:'j M Y' }}{% endif %}">
+    Previous Fail
+  </span>
+  {% endif %}
+  {% if prior_dnf %}
+  <span class="badge text-bg-warning text-dark{% if badge_class %} {{ badge_class }}{% else %} ms-1{% endif %}"
+        title="Did not finish this course previously{% if prior_dnf_date %} on {{ prior_dnf_date|date:'j M Y' }}{% endif %}">
+    Previous DNF
+  </span>
+  {% endif %}
 {% endif %}

@@ -42,9 +42,35 @@
       window.location = tr.dataset.href;
     }
   });
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.getElementById('instructor-status-filter');
+    if (!form) return;
+    form.querySelectorAll('input[type="checkbox"]').forEach(function (el) {
+      el.addEventListener('change', function () { form.submit(); });
+    });
+  });
 </script>
 
+<form method="get" id="instructor-status-filter" class="card p-3 mb-3">
+  <div class="d-flex flex-wrap align-items-center gap-3">
+    <strong class="me-1">Show statuses:</strong>
+    {% for val, label in status_filter_choices %}
+      <div class="form-check form-check-inline m-0">
+        <input class="form-check-input" type="checkbox" name="status" value="{{ val }}"
+               id="inst_status_{{ val }}"
+               {% if val in selected_statuses %}checked{% endif %}>
+        <label class="form-check-label" for="inst_status_{{ val }}">{{ label }}</label>
+      </div>
+    {% endfor %}
+    {% if selected_statuses %}
+      <a class="btn btn-sm btn-outline-secondary" href="{% url 'instructor_bookings' %}">Clear</a>
+    {% endif %}
+  </div>
+  <div class="form-text mt-1">Select one or more. Leave all unchecked to show every section.</div>
+</form>
+
 {# ---------------- IN PROGRESS ---------------- #}
+{% if show_in_progress %}
 <div class="card">
   <div class="card-header">
     <span>In progress</span>
@@ -84,8 +110,10 @@
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 {# ---------------- AWAITING CLOSURE ---------------- #}
+{% if show_awaiting %}
 <div class="card">
   <div class="card-header">
     <span>Awaiting instructor closure</span>
@@ -126,8 +154,10 @@
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 {# ---------------- SCHEDULED ---------------- #}
+{% if show_scheduled %}
 <div class="card">
   <div class="card-header">
     <span>Scheduled (next up to 10)</span>
@@ -168,8 +198,10 @@
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 {# ---------------- CLOSED ---------------- #}
+{% if show_closed %}
 <div class="card">
   <div class="card-header">
     <span>Closed</span>
@@ -225,7 +257,7 @@
         <ul class="pagination pagination-sm mb-0">
           {% if closed_page.has_previous %}
             <li class="page-item">
-              <a class="page-link" href="?closed_page={{ closed_page.previous_page_number }}">«</a>
+              <a class="page-link" href="?{% if status_query %}{{ status_query }}&{% endif %}closed_page={{ closed_page.previous_page_number }}">«</a>
             </li>
           {% else %}
             <li class="page-item disabled"><span class="page-link">«</span></li>
@@ -237,7 +269,7 @@
 
           {% if closed_page.has_next %}
             <li class="page-item">
-              <a class="page-link" href="?closed_page={{ closed_page.next_page_number }}">»</a>
+              <a class="page-link" href="?{% if status_query %}{{ status_query }}&{% endif %}closed_page={{ closed_page.next_page_number }}">»</a>
             </li>
           {% else %}
             <li class="page-item disabled"><span class="page-link">»</span></li>
@@ -249,6 +281,7 @@
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 {% if dummy_businesses or practice_bookings %}
 <div class="card">

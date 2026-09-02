@@ -1,6 +1,6 @@
 # unicorn_project/training/context_processors.py
 from django.conf import settings
-from .services.logos import get_current_logo
+from .services.logos import get_current_logo_info
 from .utils.user_roles import (
     ADMIN_BOOKING_URL_NAMES,
     get_user_roles,
@@ -59,8 +59,10 @@ def globals(request):
     }
 
 def logo_context(request):
+    info = get_current_logo_info()
     return {
-        "current_logo": get_current_logo()
+        "current_logo": info["file"],
+        "current_logo_label": info.get("label") or "",
     }
 
 from .models import Personnel

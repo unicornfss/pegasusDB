@@ -56,7 +56,7 @@
         <tr class="js-row-link">
           <td class="position-relative">
             {{ r.obj.name }}
-            {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date %}
+            {% include "partials/prior_pass_badge.html" with prior_pass=r.prior_pass prior_pass_date=r.prior_pass_date prior_fail=r.prior_fail prior_fail_date=r.prior_fail_date prior_dnf=r.prior_dnf prior_dnf_date=r.prior_dnf_date %}
             <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"
               class="stretched-link"
               aria-label="Edit {{ r.obj.name }}">
@@ -110,7 +110,10 @@
           </td>
 
           <td class="text-center position-relative">
-            <span class="badge {{ r.health_class }}" title="{{ r.health_title }}">
+            <span class="badge {{ r.health_class }}"
+                  title="{{ r.health_title }}"
+                  data-bs-toggle="tooltip"
+                  data-bs-title="{{ r.health_title }}">
               {{ r.health_symbol }}
             </span>
             <a href="{% url 'instructor_delegate_edit' r.obj.pk %}"

@@ -29,7 +29,7 @@
                   <span class="last">{{ parts.1 }}</span>
                 </div>
               {% endwith %}
-              {% include "partials/prior_pass_badge.html" with prior_pass=d.prior_pass prior_pass_date=d.prior_pass_date badge_class="prior-pass-matrix" %}
+              {% include "partials/prior_pass_badge.html" with prior_pass=d.prior_pass prior_pass_date=d.prior_pass_date prior_fail=d.prior_fail prior_fail_date=d.prior_fail_date prior_dnf=d.prior_dnf prior_dnf_date=d.prior_dnf_date badge_class="prior-pass-matrix" %}
             </th>
           {% endfor %}
         </tr>
@@ -737,7 +737,9 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     const outInp = outTd?.querySelector('.outcome-input');
     const manual = outSel ? outSel.value : 'pending';
 
-    const outcome = (allChecked && canAutoPassColumn(colIndex)) ? 'pass' : (manual === 'dnf' || manual === 'fail' ? manual : 'pending');
+    const outcome = (manual === 'dnf' || manual === 'fail')
+      ? manual
+      : ((allChecked && canAutoPassColumn(colIndex)) ? 'pass' : 'pending');
 
     // capture previous BEFORE UI apply
     const prev = (outInp && outInp.value) ? outInp.value : 'pending';
@@ -888,7 +890,9 @@ html[data-color-scheme="night"] .matrix-table tr.outcome-row .outcome-cell {
     const outInp = outTd?.querySelector('.outcome-input');
     const manual = outSel ? outSel.value : 'pending';
 
-    const outcome = (allChecked && canAutoPassColumn(colIndex)) ? 'pass' : ((manual === 'dnf' || manual === 'fail') ? manual : 'pending');
+    const outcome = (manual === 'dnf' || manual === 'fail')
+      ? manual
+      : ((allChecked && canAutoPassColumn(colIndex)) ? 'pass' : 'pending');
 
     // ✅ NEW: always mirror the computed outcome into the hidden input immediately
     if (outInp) outInp.value = outcome;

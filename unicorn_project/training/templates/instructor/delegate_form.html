@@ -11,15 +11,16 @@
   {% csrf_token %}
   {% if back_url %}<input type="hidden" name="next" value="{{ back_url }}">{% endif %}
 
-  {% if form.non_field_errors %}
+  {% if form.non_field_errors or form.name.errors %}
     <div class="alert alert-danger">
       {% for e in form.non_field_errors %}<div>{{ e }}</div>{% endfor %}
+      {% for e in form.name.errors %}<div>{{ e }}</div>{% endfor %}
     </div>
   {% endif %}
 
   <div class="row g-3">
     <div class="col-md-6">
-      <label class="form-label">Name</label>
+      <label class="form-label">Full name (first name and surname)</label>
       {{ form.name }}
       {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
     </div>

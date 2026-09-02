@@ -31,7 +31,7 @@
           <tr>
             <td>
               {{ reg.name }}
-              {% include "partials/prior_pass_badge.html" with prior_pass=reg.prior_pass prior_pass_date=reg.prior_pass_date %}
+              {% include "partials/prior_pass_badge.html" with prior_pass=reg.prior_pass prior_pass_date=reg.prior_pass_date prior_fail=reg.prior_fail prior_fail_date=reg.prior_fail_date prior_dnf=reg.prior_dnf prior_dnf_date=reg.prior_dnf_date %}
             </td>
             <td>{{ reg.date_of_birth|date:"d/m/Y" }}</td>
             <td>{{ reg.job_title }}</td>

@@ -412,10 +412,10 @@ c = canvas.Canvas(buffer, pagesize=landscape(A4))
 W, H = landscape(A4)   # use these for your coordinates
 
 HEALTH_BADGE = {
-    "fit":            ("✔", "bg-success", "Fit to take part"),
-    "agreed_adjust":  ("■", "bg-warning text-dark", "Impairment – agreed adjustments"),
-    "will_discuss":   ("▲", "bg-orange text-dark" if False else "bg-warning", "Impairment – will discuss"),
-    "not_fit":        ("✖", "bg-danger", "Not fit to take part"),
+    "fit":                 ("✔", "bg-success", "Fit to take part"),
+    "agreed_adjustments":  ("■", "bg-warning text-dark", "Impairment – agreed adjustments"),
+    "will_discuss":        ("▲", "bg-warning", "Impairment – will discuss"),
+    "not_fit":             ("✖", "bg-danger", "Not fit to take part"),
 }
 # Note: Bootstrap has no orange by default; we re-use warning (yellow).
 
@@ -723,6 +723,20 @@ def instructor_bookings(request):
 
     today = timezone.localdate()
 
+    status_filter_choices = [
+        ("in_progress", "In progress"),
+        ("awaiting_closure", "Awaiting closure"),
+        ("scheduled", "Scheduled"),
+        ("completed", "Closed"),
+    ]
+    allowed_status_filters = {c[0] for c in status_filter_choices}
+    selected_statuses = [
+        s.strip() for s in request.GET.getlist("status")
+        if s and s.strip() in allowed_status_filters
+    ]
+    # Empty selection = show all sections (default)
+    show_all_statuses = not selected_statuses
+
     base_qs = (
         instructor_bookings_queryset(inst)
         .select_related("course_type", "business", "training_location")
@@ -738,38 +752,48 @@ def instructor_bookings(request):
         .order_by("-course_date", "-id")
     )
 
-    in_progress = list(
-        base_qs.filter(status="in_progress").order_by("course_date", "start_time")
-    )
+    in_progress = []
+    if show_all_statuses or "in_progress" in selected_statuses:
+        in_progress = list(
+            base_qs.filter(status="in_progress").order_by("course_date", "start_time")
+        )
 
-    awaiting = list(
-        base_qs.filter(status="awaiting_closure").order_by("course_date", "start_time")
-    )
+    awaiting = []
+    if show_all_statuses or "awaiting_closure" in selected_statuses:
+        awaiting = list(
+            base_qs.filter(status="awaiting_closure").order_by("course_date", "start_time")
+        )
 
-    scheduled = list(
-        base_qs.filter(status="scheduled", course_date__gte=today).order_by(
-            "course_date", "start_time"
-        )[:10]
-    )
+    scheduled = []
+    if show_all_statuses or "scheduled" in selected_statuses:
+        scheduled = list(
+            base_qs.filter(status="scheduled", course_date__gte=today).order_by(
+                "course_date", "start_time"
+            )[:10]
+        )
 
     # --- CLOSED (completed/closed) ---
-    closed_qs = (
-        base_qs.filter(status__in=["completed", "closed"])
-        .order_by("-course_date", "-id")
-    )
-    closed_total = closed_qs.count()
+    closed_rows = []
+    closed_page = None
+    closed_total = 0
+    if show_all_statuses or "completed" in selected_statuses:
+        closed_qs = (
+            base_qs.filter(status__in=["completed", "closed"])
+            .order_by("-course_date", "-id")
+        )
+        closed_total = closed_qs.count()
 
-    p = Paginator(closed_qs, 10)
-    closed_page = p.get_page(request.GET.get("closed_page") or 1)
+        p = Paginator(closed_qs, 10)
+        closed_page = p.get_page(request.GET.get("closed_page") or 1)
 
-    # Copy the page’s rows so we can annotate them
-    closed_rows = list(closed_page.object_list)
+        # Copy the page’s rows so we can annotate them
+        closed_rows = list(closed_page.object_list)
 
-    inv_map = lead_invoice_status_map(closed_rows, instructor_id=inst.pk)
+        inv_map = lead_invoice_status_map(closed_rows, instructor_id=inst.pk)
 
-    # Attach invoice_status directly to each booking row
-    for b in closed_rows:
-        b.invoice_status = inv_map.get(b.id, "")
+        # Attach invoice_status directly to each booking row
+        for b in closed_rows:
+            b.invoice_status = inv_map.get(b.id, "")
 
     # Add first register-day id and schedule labels for list rows.
     visible_bookings = in_progress + awaiting + scheduled + closed_rows + practice_bookings
@@ -799,6 +823,9 @@ def instructor_bookings(request):
         .order_by("name")
     )
 
+    from urllib.parse import urlencode
+    status_query = urlencode([("status", s) for s in selected_statuses])
+
     return render(request, "instructor/bookings.html", {
         "title": "My bookings",
         "instructor": inst,
@@ -810,6 +837,13 @@ def instructor_bookings(request):
         "closed_total": closed_total,
         "dummy_businesses": dummy_businesses,
         "practice_bookings": practice_bookings,
+        "status_filter_choices": status_filter_choices,
+        "selected_statuses": selected_statuses,
+        "show_in_progress": show_all_statuses or "in_progress" in selected_statuses,
+        "show_awaiting": show_all_statuses or "awaiting_closure" in selected_statuses,
+        "show_scheduled": show_all_statuses or "scheduled" in selected_statuses,
+        "show_closed": show_all_statuses or "completed" in selected_statuses,
+        "status_query": status_query,
     })
 
 

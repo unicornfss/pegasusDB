@@ -249,11 +249,29 @@
     This course is not available for new registrations. It may have been suspended or removed.
   </div>
   {% else %}
-  <form method="post" class="register-card">
+  <form method="post" class="register-card" id="delegate-register-form" novalidate>
     {% csrf_token %}
     {% if day_code %}
       <input type="hidden" name="day_code" value="{{ day_code }}">
     {% endif %}
+
+    <div id="register-name-error" class="alert alert-danger{% if not form.errors %} d-none{% endif %}" role="alert">
+      {% if form.non_field_errors %}
+        {% for err in form.non_field_errors %}
+          <div>{{ err }}</div>
+        {% endfor %}
+      {% elif form.errors %}
+        <div>Please fix the highlighted fields below and try again.</div>
+      {% else %}
+        <div>Please enter both a first name and a surname.</div>
+      {% endif %}
+      {% if form.first_name.errors or form.surname.errors %}
+        <ul class="mb-0 mt-2">
+          {% for err in form.first_name.errors %}<li>{{ err }}</li>{% endfor %}
+          {% for err in form.surname.errors %}<li>{{ err }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+    </div>
 
     {% if course %}
       <input type="hidden" name="course_id" value="{{ course.id }}">
@@ -319,10 +337,21 @@
       <div class="register-section-title">Your details</div>
       <div class="row g-3">
         <div class="col-12 col-sm-6 register-field">
-          <label class="form-label" for="id_name">Full name</label>
-          {{ form.name }}
-          {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+          <label class="form-label" for="id_first_name">First name</label>
+          <input type="text" name="{{ form.first_name.html_name }}" value="{{ form.first_name.value|default_if_none:'' }}"
+                 class="form-control{% if form.first_name.errors %} is-invalid{% endif %}"
+                 autocomplete="given-name" id="id_first_name">
+          {% for err in form.first_name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
         </div>
+        <div class="col-12 col-sm-6 register-field">
+          <label class="form-label" for="id_surname">Surname</label>
+          <input type="text" name="{{ form.surname.html_name }}" value="{{ form.surname.value|default_if_none:'' }}"
+                 class="form-control{% if form.surname.errors %} is-invalid{% endif %}"
+                 autocomplete="family-name" id="id_surname">
+          {% for err in form.surname.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
+        </div>
+        {{ form.name }}
+        {% for err in form.name.errors %}<div class="text-danger small">{{ err }}</div>{% endfor %}
 
         <div class="col-12 col-sm-6 register-field">
           <label class="form-label" for="id_job_title">Job title</label>
@@ -435,6 +464,44 @@
 </div>
 
 <script>
+  (function () {
+    const form = document.getElementById('delegate-register-form');
+    if (!form) return;
+
+    const errorBox = document.getElementById('register-name-error');
+    const firstInput = document.getElementById('id_first_name');
+    const surnameInput = document.getElementById('id_surname');
+
+    function showNameError(message, focusEl) {
+      if (!errorBox) return;
+      errorBox.innerHTML = '<div>' + message + '</div>';
+      errorBox.classList.remove('d-none');
+      errorBox.removeAttribute('hidden');
+      if (firstInput) firstInput.classList.toggle('is-invalid', !(firstInput.value || '').trim());
+      if (surnameInput) surnameInput.classList.toggle('is-invalid', !(surnameInput.value || '').trim());
+      errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (focusEl) focusEl.focus();
+    }
+
+    form.addEventListener('submit', function (e) {
+      const first = (firstInput && firstInput.value || '').trim();
+      const surname = (surnameInput && surnameInput.value || '').trim();
+      if (first && surname) return;
+
+      e.preventDefault();
+      let message = 'Registration could not be submitted because both first name and surname are required.';
+      let focusEl = firstInput;
+      if (first && !surname) {
+        message = 'Registration could not be submitted because your surname is required.';
+        focusEl = surnameInput;
+      } else if (!first && surname) {
+        message = 'Registration could not be submitted because your first name is required.';
+        focusEl = firstInput;
+      }
+      showNameError(message, focusEl);
+    });
+  })();
+
   const showRegisterDate = {{ show_register_date|yesno:"true,false" }} || {{ REGISTER_SHOW_DATE|yesno:"true,false" }};
   const boundDayCode = "{{ day_code|escapejs }}";
   const courseSelect = document.getElementById('courseSelect');

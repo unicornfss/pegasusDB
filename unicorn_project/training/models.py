@@ -588,6 +588,11 @@ class Booking(models.Model):
         db_index=True
     )
 
+    certificates_released = models.BooleanField(
+        default=False,
+        help_text="When enabled, delegates can view certificates (and course details) via the public portal.",
+    )
+
     last_notification_type = models.CharField(
     max_length=32,
     default="system",

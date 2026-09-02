@@ -1210,7 +1210,24 @@ def public_feedback_form(request):
             )
 
             messages.success(request, "Thanks for your feedback!")
-            return redirect("public_feedback_thanks")
+            success_params = {}
+            if course and getattr(course, "code", None):
+                success_params["course"] = course.code
+            if the_date:
+                success_params["date"] = the_date.isoformat()
+            if inst:
+                success_params["instructor"] = str(inst.pk)
+            day_for_redirect = (
+                (request.POST.get("day_code") or "").strip()
+                or day_code
+                or ""
+            )
+            if day_for_redirect:
+                success_params["day"] = day_for_redirect
+            success_url = reverse("public_feedback_thanks")
+            if success_params:
+                success_url = f"{success_url}?{urlencode(success_params)}"
+            return redirect(success_url)
 
     from .utils.course_types import bookable_course_types
 
@@ -1273,8 +1290,18 @@ def public_feedback_pdf(request, pk):
     return FileResponse(buf, as_attachment=True, filename=f"feedback_{fb.course_type.code}_{fb.date:%Y%m%d}.pdf")
 
 def public_feedback_thanks(request):
-    """Simple thank-you page after feedback submission."""
-    return render(request, "public/feedback_thanks.html")
+    """Thank-you page after feedback; offer another submission on the same device."""
+    params = {}
+    for key in ("course", "ct", "date", "day", "instructor"):
+        val = (request.GET.get(key) or "").strip()
+        if val:
+            params[key] = val
+    feedback_another_url = reverse("public_feedback_form")
+    if params:
+        feedback_another_url = f"{feedback_another_url}?{urlencode(params)}"
+    return render(request, "public/feedback_thanks.html", {
+        "feedback_another_url": feedback_another_url,
+    })
 
 def no_roles_assigned(request):
     return render(request, "no_roles.html")

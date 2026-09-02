@@ -263,24 +263,43 @@ def build_logo_catalog(spec: dict, *, current_logo: str | None = None) -> list[L
     return catalog
 
 
-def _pick_from_schedule(today: dt.date, spec: dict) -> str:
+def _logo_label_from_file(file_name: str) -> str:
+    """Human-readable label from a logo filename (e.g. logo_poppy.png → Poppy)."""
+    stem = (file_name or "").rsplit("/", 1)[-1]
+    if "." in stem:
+        stem = stem.rsplit(".", 1)[0]
+    if stem.lower().startswith("logo_"):
+        stem = stem[5:]
+    elif stem.lower() == "logo":
+        return ""
+    return stem.replace("_", " ").strip().title()
+
+
+def _schedule_match_label(rule: dict) -> str:
+    name = (rule.get("name") or "").strip()
+    if name:
+        return name
+    return _logo_label_from_file(rule.get("file") or "")
+
+
+def _pick_from_schedule(today: dt.date, spec: dict) -> tuple[str, str]:
+    default = spec.get("default", "logo.png")
     for rule in spec.get("rules", []):
         t = rule["type"]
+        matched = False
 
         # Single date (optionally with window)
         if t == "single":
             m, d = map(int, rule["date"].split("-"))
             anchor = dt.date(today.year, m, d)
             start, end = _apply_window(anchor, rule)
-            if start <= today <= end:
-                return rule["file"]
+            matched = start <= today <= end
 
         # Simple month-day range
         elif t == "range":
             sm, sd = map(int, rule["start"].split("-"))
             em, ed = map(int, rule["end"].split("-"))
-            if (today.month, today.day) >= (sm, sd) and (today.month, today.day) <= (em, ed):
-                return rule["file"]
+            matched = (today.month, today.day) >= (sm, sd) and (today.month, today.day) <= (em, ed)
 
         # Range that crosses New Year (e.g. Dec 31–Jan 2)
         elif t == "range_yearwrap":
@@ -288,8 +307,7 @@ def _pick_from_schedule(today: dt.date, spec: dict) -> str:
             em, ed = map(int, rule["end"].split("-"))
             after_start = (today.month, today.day) >= (sm, sd)
             before_end = (today.month, today.day) <= (em, ed)
-            if after_start or before_end:
-                return rule["file"]
+            matched = after_start or before_end
 
         # Dynamic rule: weekday occurrence in month (e.g. last Saturday in June)
         elif t == "weekday_in_month":
@@ -303,34 +321,39 @@ def _pick_from_schedule(today: dt.date, spec: dict) -> str:
                     anchor = None  # Extend later for nth weekday if needed
 
                 start, end = _apply_window(anchor, rule)
-
-                if start <= today <= end:
-                    return rule["file"]
+                matched = start <= today <= end
 
         # Fixed absolute date range
         elif t == "range_absolute":
             sm, sd = map(int, rule["start_abs"].split("-"))
             em, ed = map(int, rule["end_abs"].split("-"))
-            if (today.month, today.day) >= (sm, sd) and (today.month, today.day) <= (em, ed):
-                return rule["file"]
+            matched = (today.month, today.day) >= (sm, sd) and (today.month, today.day) <= (em, ed)
 
         # Easter-relative range
         elif t == "easter_range":
             e = easter_sunday(today.year)
             start = e - dt.timedelta(days=rule.get("days_before", 6))
             end = e + dt.timedelta(days=rule.get("days_after", 6))
-            if start <= today <= end:
-                return rule["file"]
+            matched = start <= today <= end
 
-    return spec.get("default", "logo.png")
+        if matched:
+            file_name = rule["file"]
+            return file_name, _schedule_match_label(rule)
+
+    return default, ""
 
 
 # ----------------------------
 #  MAIN ENTRY POINT
 # ----------------------------
 
-def get_current_logo(today: dt.date | None = None) -> str:
+def get_current_logo_info(today: dt.date | None = None) -> dict:
+    """
+    Return {"file": "...", "label": "..."}.
+    label is set only when a non-default logo is active (override reason or schedule name).
+    """
     today = today or dt.date.today()
+    default_file = "logo.png"
 
     if LogoOverride is not None:
         try:
@@ -343,16 +366,28 @@ def get_current_logo(today: dt.date | None = None) -> str:
                 .filter(Q(starts_at__isnull=True) | Q(starts_at__lte=now))
                 .filter(Q(ends_at__isnull=True) | Q(ends_at__gte=now))
                 .order_by("priority", "-id")
-                .values_list("file_name", flat=True)
+                .values("file_name", "reason")
                 .first()
             )
             if override:
-                return override
+                file_name = override["file_name"] or default_file
+                label = ""
+                if file_name != default_file:
+                    label = (override.get("reason") or "").strip() or _logo_label_from_file(file_name)
+                return {"file": file_name, "label": label}
         except Exception:
             pass
 
     try:
         spec = load_schedule_spec()
-        return _pick_from_schedule(today, spec)
+        default_file = spec.get("default", default_file)
+        file_name, label = _pick_from_schedule(today, spec)
+        if file_name == default_file:
+            return {"file": file_name, "label": ""}
+        return {"file": file_name, "label": label or _logo_label_from_file(file_name)}
     except (FileNotFoundError, json.JSONDecodeError, OSError):
-        return "logo.png"
+        return {"file": "logo.png", "label": ""}
+
+
+def get_current_logo(today: dt.date | None = None) -> str:
+    return get_current_logo_info(today)["file"]

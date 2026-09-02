@@ -665,6 +665,35 @@ class DelegateRegisterForm(forms.ModelForm):
 class PublicDelegateRegisterForm(DelegateRegisterForm):
     """Public register form: hidden course date (always today), split DOB entry."""
 
+    first_name = forms.CharField(
+        label="First name",
+        max_length=50,
+        error_messages={
+            "required": "Please enter your first name.",
+        },
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "given-name",
+                "id": "id_first_name",
+            }
+        ),
+    )
+    surname = forms.CharField(
+        label="Surname",
+        max_length=50,
+        error_messages={
+            "required": "Please enter your surname.",
+        },
+        widget=forms.TextInput(
+            attrs={
+                "class": "form-control",
+                "autocomplete": "family-name",
+                "id": "id_surname",
+            }
+        ),
+    )
+
     dob_day = forms.CharField(
         label="Day",
         max_length=2,
@@ -772,7 +801,11 @@ class PublicDelegateRegisterForm(DelegateRegisterForm):
         self.fields["date_of_birth"].widget = forms.HiddenInput()
         self.fields["date_of_birth"].required = False
 
-        for field_name in ("name", "job_title", "employee_id"):
+        # Combined name is built from first_name + surname in clean()
+        self.fields["name"].widget = forms.HiddenInput()
+        self.fields["name"].required = False
+
+        for field_name in ("first_name", "surname", "job_title", "employee_id"):
             self.fields[field_name].widget.attrs.setdefault("class", "form-control")
 
         today = timezone.localdate()
@@ -783,6 +816,12 @@ class PublicDelegateRegisterForm(DelegateRegisterForm):
             dob = self.initial.get("date_of_birth")
             if dob:
                 self._set_date_partials("dob", dob)
+            full_name = (self.initial.get("name") or "").strip()
+            if full_name and "first_name" not in self.initial:
+                parts = full_name.split(None, 1)
+                self.fields["first_name"].initial = parts[0]
+                if len(parts) > 1:
+                    self.fields["surname"].initial = parts[1]
 
         instructors = instructors or []
         if len(instructors) == 1:
@@ -837,6 +876,33 @@ class PublicDelegateRegisterForm(DelegateRegisterForm):
     def clean(self):
         cleaned_data = super().clean()
 
+        first = (cleaned_data.get("first_name") or "").strip()
+        surname = (cleaned_data.get("surname") or "").strip()
+        missing_name_parts = []
+        if not first:
+            missing_name_parts.append("first name")
+            if "first_name" not in self.errors:
+                self.add_error("first_name", "Please enter your first name.")
+        if not surname:
+            missing_name_parts.append("surname")
+            if "surname" not in self.errors:
+                self.add_error("surname", "Please enter your surname.")
+        if missing_name_parts:
+            if len(missing_name_parts) == 2:
+                self.add_error(
+                    None,
+                    "Registration could not be submitted because both first name and surname are required.",
+                )
+            else:
+                self.add_error(
+                    None,
+                    f"Registration could not be submitted because your {missing_name_parts[0]} is required.",
+                )
+        else:
+            cleaned_data["name"] = " ".join(
+                part.capitalize() for part in f"{first} {surname}".split()
+            )
+
         if self.show_register_date:
             self._combine_partial_date(
                 cleaned_data, "course_date", "date", required=True, label="course date"
@@ -873,7 +939,12 @@ class DelegateRegisterAdminForm(forms.ModelForm):
     def clean_name(self):
         # Title-case the name to tidy common variations
         name = (self.cleaned_data.get("name") or "").strip()
-        return " ".join(part.capitalize() for part in name.split())
+        parts = [p for p in name.split() if p]
+        if len(parts) < 2:
+            raise forms.ValidationError(
+                "Please enter both a first name and a surname."
+            )
+        return " ".join(part.capitalize() for part in parts)
 
 class DelegateRegisterInstructorForm(forms.ModelForm):
     # Keep radios – this guarantees the widget even if Meta changes
@@ -901,6 +972,15 @@ class DelegateRegisterInstructorForm(forms.ModelForm):
         # sensible default for new rows
         if not self.is_bound and not self.initial.get("health_status"):
             self.initial["health_status"] = DelegateRegister.HealthStatus.FIT
+
+    def clean_name(self):
+        name = (self.cleaned_data.get("name") or "").strip()
+        parts = [p for p in name.split() if p]
+        if len(parts) < 2:
+            raise forms.ValidationError(
+                "Please enter both a first name and a surname."
+            )
+        return " ".join(part.capitalize() for part in parts)
 
 class BookingNotesForm(forms.ModelForm):
     class Meta:

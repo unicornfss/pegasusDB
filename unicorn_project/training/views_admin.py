@@ -915,12 +915,17 @@ def booking_list(request):
 
     # ----- filters
     q           = (request.GET.get("q") or "").strip()
-    status      = (request.GET.get("status") or "").strip()
+    statuses    = [s.strip() for s in request.GET.getlist("status") if s and s.strip()]
     business_id = (request.GET.get("business") or "").strip()
     course_id   = (request.GET.get("course_type") or "").strip()
     inst_id     = (request.GET.get("instructor") or "").strip()
     date_from   = (request.GET.get("date_from") or "").strip()
     date_to     = (request.GET.get("date_to") or "").strip()
+
+    allowed_statuses = {
+        "scheduled", "in_progress", "awaiting_closure", "completed", "cancelled",
+    }
+    statuses = [s for s in statuses if s in allowed_statuses]
 
     if q:
         qs = qs.filter(
@@ -929,8 +934,8 @@ def booking_list(request):
             Q(course_type__name__icontains=q)|
             Q(training_location__name__icontains=q)
         )
-    if status:
-        qs = qs.filter(status=status)
+    if statuses:
+        qs = qs.filter(status__in=statuses)
     if business_id:
         qs = qs.filter(business_id=business_id)
     if course_id:
@@ -1052,17 +1057,29 @@ def booking_list(request):
 
     # ----- helper to build URLs preserving current filters
     def url_with(**overrides):
+        from urllib.parse import urlencode
         params = {
-            "q": q, "status": status, "business": business_id, "course_type": course_id,
+            "q": q, "business": business_id, "course_type": course_id,
             "instructor": inst_id, "date_from": date_from, "date_to": date_to,
             "o": sort_key, "dir": sort_dir, "page": page_obj.number if page_obj.number else 1,
         }
+        status_list = list(statuses)
+        if "status" in overrides:
+            status_override = overrides.pop("status")
+            if isinstance(status_override, (list, tuple)):
+                status_list = list(status_override)
+            elif status_override:
+                status_list = [status_override]
+            else:
+                status_list = []
         params.update(overrides)
         # drop page when changing sort to avoid empty pages
         if "o" in overrides or "dir" in overrides:
             params.pop("page", None)
-        from urllib.parse import urlencode
-        return f"{reverse('admin_booking_list')}?{urlencode({k: v for k, v in params.items() if v})}"
+        pairs = [(k, v) for k, v in params.items() if v]
+        for s in status_list:
+            pairs.append(("status", s))
+        return f"{reverse('admin_booking_list')}?{urlencode(pairs)}"
 
     # ----- build sort header links
     headers = []
@@ -1094,14 +1111,13 @@ def booking_list(request):
         "create_url": reverse("admin_booking_new"),
 
         "filter_initial": {
-            "q": q, "status": status, "business": business_id, "course_type": course_id,
+            "q": q, "statuses": statuses, "business": business_id, "course_type": course_id,
             "instructor": inst_id, "date_from": date_from, "date_to": date_to
         },
         "status_choices": [
-            ("", "All statuses"),
             ("scheduled", "Scheduled"),
             ("in_progress", "In progress"),
-            ("awaiting_closure", "Awaiting instructor closure"),
+            ("awaiting_closure", "Awaiting closure"),
             ("completed", "Completed"),
             ("cancelled", "Cancelled"),
         ],
