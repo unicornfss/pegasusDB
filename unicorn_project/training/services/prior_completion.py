@@ -47,14 +47,19 @@ def _mandatory_competencies_complete(booking, register) -> bool:
 
 def _counts_as_prior_pass(reg) -> bool:
     """
-    Prefer stored outcome=pass.
+    True only for a real pass.
 
-    Also accept completed bookings where mandatory competencies are achieved
-    even if the stored outcome is stale (e.g. still dnf/pending).
+    Explicit DNF / Fail are never reinterpreted as a pass, even if some
+    competencies were ticked before the course ended.
+
+    Soft fallback: completed booking with blank/pending outcome and all
+    mandatory competencies achieved (legacy incomplete outcome data).
     """
     outcome = (getattr(reg, "outcome", None) or "").strip().lower()
     if outcome == "pass":
         return True
+    if outcome in ("dnf", "fail"):
+        return False
 
     booking = getattr(getattr(reg, "booking_day", None), "booking", None)
     if not booking or getattr(booking, "status", "") != "completed":
