@@ -94,12 +94,13 @@ def prior_history_for_booking(booking, registers) -> dict[tuple, dict]:
       "dnf_date": date|None,
     }
 
+    Only earlier attendances count (never future courses relative to this booking).
+
     Rules:
     - Prior Pass: any earlier pass on this course type (wins; hides fail/dnf).
-    - Previous Fail: earlier fail with no pass since (no time limit).
-    - Previous DNF: earlier DNF within the last 12 months, with no pass since.
+    - Previous Fail: earlier fail with no earlier pass after it (no time limit).
+    - Previous DNF: earlier DNF within the 12 months before this booking, with no pass since.
     """
-    empty = {"pass_date": None, "fail_date": None, "dnf_date": None}
     if not booking or not booking.course_type_id:
         return {}
 
@@ -118,6 +119,7 @@ def prior_history_for_booking(booking, registers) -> dict[tuple, dict]:
         DelegateRegister.objects.filter(
             q,
             booking_day__booking__course_type_id=booking.course_type_id,
+            booking_day__date__lt=reference_date,
         )
         .exclude(booking_day__booking_id=booking.pk)
         .select_related("booking_day", "booking_day__booking")
@@ -133,11 +135,14 @@ def prior_history_for_booking(booking, registers) -> dict[tuple, dict]:
         result = _effective_prior_result(reg)
         if not result or not day_date:
             continue
+        # Defence in depth: never treat same-day/future attendances as prior.
+        if day_date >= reference_date:
+            continue
         events_by_key[key].append((day_date, result))
 
     out: dict[tuple, dict] = {}
     for key, events in events_by_key.items():
-        # events are newest-first
+        # events are newest-first, and all are strictly before this booking
         pass_date = next((d for d, r in events if r == "pass"), None)
         if pass_date:
             out[key] = {"pass_date": pass_date, "fail_date": None, "dnf_date": None}
